@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+out/
+*.tgz
+*.tsbuildinfo
+
+# Tests and local reports
+coverage/
+*.lcov
+PLAN.md
+RESEARCH.md
+handoff.md
+review.md
+
+# Local configuration and secrets
+.env
+.env.*.local
+
+# Logs and caches
+*.log
+.cache/
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
