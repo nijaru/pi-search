@@ -36,6 +36,48 @@ export type IsoTimestamp = string;
 export type RequestId = string;
 
 /**
+ * The narrow model-auth surface needed by model-mediated providers. Keeping
+ * this structural avoids coupling the contracts to Pi's runtime types while
+ * still making the auth boundary explicit at the tool adapter.
+ */
+export interface ProviderModelRegistry {
+	readonly getApiKeyAndHeaders: (model: string) => Promise<{
+		readonly apiKey?: string;
+		readonly headers?: Readonly<Record<string, string>>;
+	}>;
+}
+
+/**
+ * Runtime services supplied by the Pi tool boundary to a provider adapter.
+ * Direct HTTP providers may ignore this context; model-mediated providers
+ * must use `modelRegistry` rather than reading Pi credentials globally.
+ */
+export interface ProviderContext {
+	readonly model?: string;
+	readonly modelRegistry?: ProviderModelRegistry;
+}
+
+/**
+ * Operational information used by the router for bounded provider selection.
+ * Estimates are advisory; actual usage belongs in `SearchResponse.usage`.
+ */
+export interface ProviderProfile {
+	readonly typicalLatencyMs?: number;
+	readonly estimatedCostUsd?: number;
+	readonly costModel: "free" | "per-request" | "usage-based" | "unknown";
+	readonly auth: "none" | "environment" | "modelRegistry";
+}
+
+/**
+ * Provider-reported billing information when available.
+ */
+export interface ProviderUsage {
+	readonly costUsd?: number;
+	readonly billedUnits?: number;
+	readonly billedUnit?: string;
+}
+
+/**
  * Free-form capability flags describing what a provider can do. The router
  * (a later stage, not in this module) uses these to select a provider by
  * task rather than by a fixed vendor ranking (D3).
@@ -100,10 +142,9 @@ export interface DomainFilter {
  * Provider-neutral search request. Every field is optional except `query`
  * so that a caller can start with a bare string and refine as needed.
  *
- * Adapters map this to their provider-specific payload; unknown/unsupported
- * options are silently ignored (a provider that can't filter by date should
- * not reject a request that happens to ask for one — it should just return
- * its best results).
+ * Adapters map this to their provider-specific payload. Unsupported options
+ * must be surfaced in `SearchResponse.warnings`; hard constraints must never
+ * disappear silently.
  */
 export interface SearchRequest {
 	/** Natural-language or keyword query. Required. */
@@ -135,6 +176,23 @@ export interface SearchRequest {
 	 * supports them. Off by default; excerpts are returned regardless.
 	 */
 	readonly wantHighlights?: boolean;
+}
+
+/** Options whose handling must be visible in the normalized response. */
+export type SearchOption =
+	| "mode"
+	| "maxResults"
+	| "domains"
+	| "publishedAfter"
+	| "publishedBefore"
+	| "wantAnswer"
+	| "wantHighlights";
+
+/** A non-fatal limitation or partial-application notice. */
+export interface SearchWarning {
+	readonly code: "unsupported-option" | "partial-results";
+	readonly option?: SearchOption;
+	readonly message: string;
 }
 
 /**
@@ -190,10 +248,62 @@ export interface SearchResponse {
 	readonly answer?: string;
 	/** Which provider actually served the request. */
 	readonly provider: ProviderId;
+	/** Options the provider applied, including post-filtered constraints. */
+	readonly appliedOptions: readonly SearchOption[];
+	/** Explicit warnings for options that were unsupported or only partial. */
+	readonly warnings: readonly SearchWarning[];
 	/** Provider request id for debugging/attribution. */
 	readonly requestId?: RequestId;
 	/** Wall-clock latency in milliseconds. */
 	readonly latencyMs?: number;
+	/** Provider-reported billing information, when available. */
+	readonly usage?: ProviderUsage;
+}
+
+// ─── Research ──────────────────────────────────────────────────────────────
+
+/**
+ * Required limits for the multi-step research tool. The orchestrator must
+ * reject invalid budgets before making a provider call and stop at every
+ * limit, including the cost limit when usage is reported.
+ */
+export interface ResearchBudget {
+	readonly maxSteps: number;
+	readonly maxProviderCalls: number;
+	readonly timeoutMs: number;
+	readonly maxCostUsd?: number;
+}
+
+export interface ResearchRequest {
+	readonly query: string;
+	readonly budget: ResearchBudget;
+	/** Optional provider preferences; cross-provider use remains explicit. */
+	readonly providerHints?: readonly ProviderId[];
+}
+
+export interface ResearchResponse {
+	readonly query: string;
+	readonly results: readonly SearchResult[];
+	readonly stepsCompleted: number;
+	readonly providerCalls: number;
+	readonly usage?: ProviderUsage;
+	readonly warnings: readonly SearchWarning[];
+}
+
+/** Validate the hard limits before the research orchestrator starts. */
+export function validateResearchBudget(budget: ResearchBudget): void {
+	if (!Number.isInteger(budget.maxSteps) || budget.maxSteps < 1) {
+		throw new Error("Research budget maxSteps must be a positive integer");
+	}
+	if (!Number.isInteger(budget.maxProviderCalls) || budget.maxProviderCalls < 1) {
+		throw new Error("Research budget maxProviderCalls must be a positive integer");
+	}
+	if (!Number.isFinite(budget.timeoutMs) || budget.timeoutMs <= 0) {
+		throw new Error("Research budget timeoutMs must be positive");
+	}
+	if (budget.maxCostUsd !== undefined && (!Number.isFinite(budget.maxCostUsd) || budget.maxCostUsd < 0)) {
+		throw new Error("Research budget maxCostUsd must be non-negative");
+	}
 }
 
 // ─── Fetch ─────────────────────────────────────────────────────────────────
@@ -229,6 +339,8 @@ export interface FetchedContent {
 	readonly title?: string;
 	/** Extracted text/markdown/html body. */
 	readonly content: string;
+	/** Fetched content is data, never executable or trusted instructions. */
+	readonly contentTrust: "untrusted";
 	/** Content type as served. */
 	readonly contentType?: string;
 	/** When the content was fetched. */
@@ -277,7 +389,14 @@ export type ProviderId =
 export interface ProviderError extends Error {
 	readonly provider: ProviderId;
 	/** Network failure, auth failure, rate limit, bad request, etc. */
-	readonly kind: "network" | "auth" | "rateLimit" | "badRequest" | "http" | "unknown";
+	readonly kind:
+		| "network"
+		| "auth"
+		| "rateLimit"
+		| "badRequest"
+		| "unsupported"
+		| "http"
+		| "unknown";
 	/** HTTP status if applicable. */
 	readonly status?: number;
 	/** Whether retrying the same provider could help. */
@@ -296,14 +415,21 @@ export interface ProviderError extends Error {
 export interface Provider {
 	readonly id: ProviderId;
 	readonly capabilities: ProviderCapabilities;
+	readonly profile: ProviderProfile;
 	/**
 	 * Execute a search. Adapters must:
-	 * - ignore unsupported request options rather than throwing;
+	 * - apply supported options and list them in `appliedOptions`;
+	 * - report unsupported options in `warnings` or throw `ProviderError` with
+	 *   kind `unsupported`;
 	 * - normalize results to {@link SearchResult};
 	 * - preserve `url`, `excerpt`, `publishedAt`, `provider`, `searchQuery`;
 	 * - never synthesize an answer unless `request.wantAnswer` is set.
 	 */
-	readonly search: (request: SearchRequest, signal: AbortSignal) => Promise<SearchResponse>;
+	readonly search: (
+		request: SearchRequest,
+		signal: AbortSignal,
+		context: ProviderContext,
+	) => Promise<SearchResponse>;
 	/**
 	 * Optional page fetch. Most search providers do not implement this;
 	 * `web_fetch` uses a dedicated HTTP fetcher instead.

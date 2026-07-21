@@ -32,6 +32,11 @@ research workflow.
   than encoding a universal provider ranking.
 - Normalize results while preserving source URL, provider, dates, excerpts,
   request IDs, latency, and cost metadata where available.
+- Do not silently drop requested search constraints. Route around unsupported
+  hard filters, post-filter only when semantics remain correct, or report an
+  explicit warning/error.
+- Keep model-mediated providers behind an explicit execution context carrying
+  model selection and credential lookup; never read Pi auth state globally.
 - Keep provider-specific answer synthesis optional. The default path should
   give the calling model inspectable evidence.
 - Add timeouts, cancellation, redirect validation, response-size limits, and
@@ -41,6 +46,8 @@ research workflow.
   commit keys, cookies, or personal search history.
 - Prefer direct HTTP and lightweight extraction before adding heavyweight
   browser or crawling dependencies.
+- The first fetch path must stay direct and local to the extension. Any remote
+  extraction service needs a separate opt-in, privacy, cost, and SSRF review.
 - Keep benchmarking/evaluation code separate from the runtime extension; a
   future `pi-search-evals` project can test adapters without coupling research
   tooling to Pi.

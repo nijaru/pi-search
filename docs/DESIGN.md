@@ -1,0 +1,82 @@
+# pi-search design
+
+## Public boundary
+
+The extension exposes exactly three Pi tools:
+
+- `web_search` returns normalized search evidence and provenance.
+- `web_fetch` retrieves bounded content from a selected URL.
+- `web_research` runs an explicit, budgeted multi-step workflow.
+
+In-content matching is a reusable internal helper for fetched content and
+research. It is not a public `web_find` tool. Browser automation and remote
+extraction are deferred.
+
+## Provider boundary
+
+All providers implement the provider-neutral contract in
+`src/contracts.ts`. There are two implementation families:
+
+- Direct HTTP providers: Exa, Brave, and Parallel.
+- Model-mediated providers: Gemini and xAI, using the execution context's
+  model registry for credentials and model headers.
+
+The tool boundary supplies `ProviderContext`; adapters must not read Pi's
+model registry, credentials, or other runtime state through globals. Direct
+providers may ignore model context. The provider profile supplies advisory
+latency, cost, and authentication metadata for routing; actual usage is
+returned when the provider reports it.
+
+Normal search selects one provider. Cross-provider calls are permitted only
+inside an explicitly requested research workflow.
+
+## Constraint semantics
+
+Search options are observable. Providers list applied options in the response
+and report unsupported or partial options as warnings, or raise a normalized
+`unsupported` error. A hard domain/date constraint must be routed to a capable
+provider or applied by a semantically correct post-filter; it must never be
+silently discarded.
+
+## Fetch safety
+
+The first fetch implementation uses direct HTTP, manual redirect validation,
+DNS/IP SSRF checks, response-size limits, cancellation, and local extraction.
+Fetched content is untrusted data and is clearly fenced at the Pi tool
+boundary; `FetchedContent.contentTrust` is always `"untrusted"`. If local
+extraction fails, the fetcher may return bounded raw HTML with an explicit
+fallback marker.
+
+Remote extraction services such as Jina are not part of the default path. Any
+future remote extractor needs explicit opt-in plus a separate privacy, cost,
+redirect, and SSRF review because the extension cannot inspect a third-party
+fetcher's server-side redirects.
+
+## Research limits
+
+`web_research` requires a `ResearchBudget` before making a provider call:
+
+- positive `maxSteps`;
+- positive `maxProviderCalls`;
+- positive `timeoutMs`; and
+- optional non-negative `maxCostUsd`.
+
+The orchestrator validates the budget up front and stops at every limit. When a
+cost ceiling is set, every selected provider must have a cost estimate; the
+orchestrator reserves that estimate before a call and reconciles it with actual
+usage when available. It reports completed steps, provider calls, usage, and
+warnings. Provider fan-out is explicit and bounded; there are no hidden
+retries across paid providers.
+
+## Initial provider target
+
+The initial target set is deliberately limited to five niches:
+
+- Exa for semantic and technical retrieval;
+- Brave for independent keyword retrieval, freshness, and latency;
+- Gemini for Google-backed grounding;
+- Parallel for multi-hop research;
+- xAI for social/X retrieval.
+
+This is a target set, not a promise that all five ship before the first useful
+vertical slice. Providers without a distinct role remain deferred.

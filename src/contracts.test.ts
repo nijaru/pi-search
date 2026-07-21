@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 import {
 	SearchMode,
 	hasCapability,
+	validateResearchBudget,
 	type Provider,
+	type ProviderContext,
 	type SearchRequest,
 	type SearchResult,
 	type SearchResponse,
@@ -21,8 +23,15 @@ function makeProvider(over: Partial<Provider> = {}): Provider {
 	return {
 		id: "exa",
 		capabilities: { semantic: true, excerpts: true },
-		async search(_req: SearchRequest): Promise<SearchResponse> {
-			return { query: "query", results: [makeResult()], provider: "exa" };
+		profile: { auth: "environment", costModel: "per-request", estimatedCostUsd: 0.01 },
+		async search(_req: SearchRequest, _signal: AbortSignal, _context: ProviderContext): Promise<SearchResponse> {
+			return {
+				query: "query",
+				results: [makeResult()],
+				provider: "exa",
+				appliedOptions: [],
+				warnings: [],
+			};
 		},
 		...over,
 	};
@@ -53,9 +62,10 @@ describe("contracts", () => {
 		expect(r.excerpt).toBe("e");
 	});
 
-	it("SearchResponse defaults to no synthesized answer", () => {
-		const res = makeProvider().search({ query: "q" }, new AbortController().signal);
-		expect(res).toBeInstanceOf(Promise);
+	it("SearchResponse defaults to no synthesized answer", async () => {
+		const res = await makeProvider().search({ query: "q" }, new AbortController().signal, {});
+		expect(res).toMatchObject({ appliedOptions: [], warnings: [] });
+		expect(res.answer).toBeUndefined();
 	});
 
 	it("hasCapability reflects declared capabilities", () => {
@@ -72,5 +82,15 @@ describe("contracts", () => {
 	it("Provider.fetch is optional", () => {
 		const p = makeProvider();
 		expect(p.fetch).toBeUndefined();
+	});
+
+	it("research budgets reject unbounded or invalid values", () => {
+		validateResearchBudget({ maxSteps: 3, maxProviderCalls: 4, timeoutMs: 10_000, maxCostUsd: 1 });
+		expect(() => validateResearchBudget({ maxSteps: 0, maxProviderCalls: 1, timeoutMs: 10_000 })).toThrow(
+			"maxSteps",
+		);
+		expect(() => validateResearchBudget({ maxSteps: 1, maxProviderCalls: 1, timeoutMs: 0 })).toThrow(
+			"timeoutMs",
+		);
 	});
 });

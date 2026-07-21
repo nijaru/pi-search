@@ -6,18 +6,23 @@ A standalone, provider-neutral web search extension for Pi.
 
 ## Scope
 
-The eventual extension will provide three focused tools:
+The extension will provide three focused tools:
 
 - `web_search` — return structured search evidence and provenance.
 - `web_fetch` — retrieve and extract content from a selected URL safely.
 - `web_research` — an explicit, bounded multi-step workflow for difficult or
   multi-hop questions.
 
-Providers will be adapters behind a shared contract. Initial adapters may
-cover native model search, Brave, Exa, Parallel, Gemini, Tavily, xAI, and
-free/degraded fallbacks, but no provider will be treated as universally best.
-Routing will be based on the task profile and provider capabilities rather than
-an unconditional fan-out or a permanent vendor ranking.
+Providers will be adapters behind a shared contract. The initial target set is
+Exa, Brave, Gemini, Parallel, and xAI, each selected for a distinct retrieval
+niche. No provider will be treated as universally best. Routing will be based
+on the task profile, provider capabilities, operational estimates, and explicit
+cost/latency limits rather than an unconditional fan-out or a permanent vendor
+ranking.
+
+In-content matching is an internal fetch/research helper, not a fourth public
+tool. Browser automation and remote extraction services remain out of the
+first implementation.
 
 ## Design principles
 
@@ -28,7 +33,9 @@ an unconditional fan-out or a permanent vendor ranking.
 - **Role-aware routing:** general, fresh, technical, semantic, deep-research,
   social, and known-URL tasks can use different providers.
 - **Safe fetching:** enforce timeouts, redirect checks, response limits, and
-  SSRF protections; treat fetched pages as untrusted content.
+  SSRF protections; treat fetched pages as untrusted content. The first fetch
+  path uses direct HTTP and local extraction only; a remote extractor would
+  require a separate explicit opt-in contract.
 - **Small core:** provider adapters should not leak vendor-specific response
   shapes into the Pi tools.
 - **No telemetry:** credentials stay in the user's environment and the
@@ -36,10 +43,13 @@ an unconditional fan-out or a permanent vendor ranking.
 
 ## Delivery order
 
-1. Establish normalized contracts and a useful single-provider `web_search`.
-2. Add bounded direct URL fetching with safe extraction.
-3. Add capability-aware provider adapters and role-based routing.
-4. Add `web_research` only after the first two tools have stable contracts.
+1. Establish normalized contracts, execution context, hard-option reporting,
+   provider profiles, and research budgets.
+2. Add a useful single-provider `web_search` with the Exa adapter.
+3. Add bounded direct URL fetching with local safe extraction.
+4. Add capability-aware provider adapters and role-based routing.
+5. Add budget-enforced `web_research` only after the first two tools have
+   stable contracts.
 
 Cross-provider combination, caching, and specialized fetchers should be added
 only when a concrete task justifies them. An independent evaluation project can
@@ -60,9 +70,10 @@ bun install
 bun run check
 ```
 
-The first implementation should establish normalized request/result contracts,
-add one provider adapter and one fetch path, then grow only when a concrete
-agent task requires another capability.
+The implementation plan and design decisions are tracked in
+[`docs/implementation-plan.md`](docs/implementation-plan.md). The first vertical slice adds one provider
+adapter and one direct fetch path, then grows only when a concrete agent task
+requires another capability.
 
 ## License
 
