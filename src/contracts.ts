@@ -319,10 +319,22 @@ export interface FetchRequest {
 	readonly url: Url;
 	/** Hard cap on extracted text length, in characters. */
 	readonly maxLength?: number;
-	/** Format hint; fetcher may still pick based on content-type. */
+	/** Start offset into the produced content, in characters. */
+	readonly offset?: number;
+	/** Format hint; the response reports the produced format explicitly. */
 	readonly format?: "markdown" | "text" | "html";
 	/** Strip the page to its main readable content (Readability). Default true. */
 	readonly readable?: boolean;
+	/** Permit bounded raw HTML when readable extraction fails. Default true. */
+	readonly allowRawHtmlFallback?: boolean;
+}
+
+export type FetchOutputFormat = "markdown" | "text" | "html";
+export type FetchExtraction = "readability" | "raw" | "plain-text";
+
+export interface FetchWarning {
+	readonly code: "truncated" | "raw-fallback";
+	readonly message: string;
 }
 
 /**
@@ -342,10 +354,28 @@ export interface FetchedContent {
 	readonly contentTrust: "untrusted";
 	/** Content type as served. */
 	readonly contentType?: string;
+	/** Format actually returned, rather than only the requested hint. */
+	readonly outputFormat: FetchOutputFormat;
+	/** Extraction path used to produce `content`. */
+	readonly extraction: FetchExtraction;
 	/** When the content was fetched. */
 	readonly fetchedAt: IsoTimestamp;
 	/** Final HTTP status. */
 	readonly status: number;
+	/** Number of manually followed redirects. */
+	readonly redirectCount: number;
+	/** Body bytes consumed before decoding. */
+	readonly bytesRead: number;
+	/** Whether output was bounded to `maxLength`. */
+	readonly truncated: boolean;
+	/** Character offset used for this result. */
+	readonly offset: number;
+	/** Next offset when more produced content remains. */
+	readonly nextOffset?: number;
+	/** Total produced characters when known locally. */
+	readonly totalCharacters?: number;
+	/** Explicit extraction/truncation notices. */
+	readonly warnings: readonly FetchWarning[];
 	/** True if the readable-content extractor fell back to raw HTML. */
 	readonly fellBackToRaw?: boolean;
 }

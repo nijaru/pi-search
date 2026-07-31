@@ -49,6 +49,7 @@ interface ExaResultPayload {
 
 const capabilities: ProviderCapabilities = {
 	semantic: true,
+	keyword: true,
 	excerpts: true,
 	domainFilter: true,
 	dateFilter: true,
@@ -216,6 +217,9 @@ export function buildExaRequest(request: SearchRequest): ExaRequestPlan {
 	const body: ExaSearchPayload = {
 		query: normalized.query,
 		numResults: normalized.maxResults ?? 10,
+		// Exa's bare result shape may contain no excerpt. Request bounded
+		// highlights by default so the evidence-first contract has text to inspect.
+		contents: { highlights: true },
 	};
 
 	switch (normalized.mode) {
@@ -259,7 +263,6 @@ export function buildExaRequest(request: SearchRequest): ExaRequestPlan {
 		appliedOptions.push("publishedBefore");
 	}
 	if (normalized.wantHighlights === true) {
-		body.contents = { highlights: true };
 		appliedOptions.push("wantHighlights");
 	}
 	if (normalized.wantAnswer === true) {

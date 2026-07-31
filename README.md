@@ -2,7 +2,7 @@
 
 A standalone, provider-neutral web search extension for Pi.
 
-> **Status:** first vertical slice implemented. The extension currently registers `web_search` backed by Exa.
+> **Status:** search and direct fetch slices implemented. The extension registers `web_search` backed by Exa and a safe local `web_fetch` path.
 
 ## Scope
 
@@ -46,7 +46,7 @@ first implementation.
 1. Establish normalized contracts, execution context, hard-option reporting,
    provider profiles, and research budgets. **Complete.**
 2. Add a useful single-provider `web_search` with the Exa adapter. **Complete.**
-3. Add bounded direct URL fetching with local safe extraction.
+3. Add bounded direct URL fetching with local safe extraction. **Complete.**
 4. Add capability-aware provider adapters and role-based routing.
 5. Add budget-enforced `web_research` only after the first two tools have
    stable contracts.
@@ -71,7 +71,11 @@ bun run check
 ```
 
 The implementation plan and design decisions are tracked in
-[`docs/implementation-plan.md`](docs/implementation-plan.md). The first vertical slice uses one direct provider and grows only when a concrete agent task requires another capability.
+[`docs/implementation-plan.md`](docs/implementation-plan.md). Provider routing,
+billing policy, replacement scope, and specialty coverage are recorded in
+[`docs/provider-policy.md`](docs/provider-policy.md). The first vertical slice
+uses one direct provider and grows only when a concrete agent task requires
+another capability.
 
 ## License
 

@@ -15,7 +15,9 @@ extraction are deferred.
 ## Provider boundary
 
 All providers implement the provider-neutral contract in
-`src/contracts.ts`. There are two implementation families:
+`src/contracts.ts`. Provider routing, billing policy, provider comparison, and
+replacement scope are recorded in [`provider-policy.md`](provider-policy.md).
+There are two implementation families:
 
 - Direct HTTP providers: Exa, Brave, and Parallel.
 - Model-mediated providers: Gemini and xAI, using the execution context's
@@ -28,7 +30,10 @@ latency, cost, and authentication metadata for routing; actual usage is
 returned when the provider reports it.
 
 Normal search selects one provider. Cross-provider calls are permitted only
-inside an explicitly requested research workflow.
+inside an explicitly requested research workflow. The future default policy is
+free-capacity first, then explicitly allowed metered capacity; it never hides a
+paid fallback behind quota or transient errors. Gemini and xAI remain explicit
+model-mediated paths, while Brave, Exa, and Parallel are direct HTTP adapters.
 
 ## Constraint semantics
 
@@ -40,17 +45,27 @@ silently discarded.
 
 ## Fetch safety
 
-The first fetch implementation uses direct HTTP, manual redirect validation,
-DNS/IP SSRF checks, response-size limits, cancellation, and local extraction.
-Fetched content is untrusted data and is clearly fenced at the Pi tool
-boundary; `FetchedContent.contentTrust` is always `"untrusted"`. If local
-extraction fails, the fetcher may return bounded raw HTML with an explicit
-fallback marker.
+The first fetch implementation uses a pinned direct HTTP transport, manual
+redirect validation, DNS/IP SSRF checks, streamed response-size limits,
+one overall deadline, cancellation, and local extraction. It does not trust
+proxy resolution in the initial path. Fetched content is untrusted data and is
+clearly fenced at the Pi tool boundary; `FetchedContent.contentTrust` is always
+`"untrusted"`. Successful results report the produced format, extraction
+method, redirect count, bytes read, and truncation state. If local extraction
+fails, the fetcher may return bounded raw HTML only when the request permits
+that fallback and marks the produced format accordingly.
 
 Remote extraction services such as Jina are not part of the default path. Any
 future remote extractor needs explicit opt-in plus a separate privacy, cost,
 redirect, and SSRF review because the extension cannot inspect a third-party
 fetcher's server-side redirects.
+
+## Specialty coverage
+
+X/social search, YouTube transcripts, PDFs, and GitHub repository exploration
+are separate capability handlers, not hidden fallbacks from ordinary HTML
+fetching. See [`provider-policy.md`](provider-policy.md) for the replacement
+acceptance matrix and intentional non-goals.
 
 ## Research limits
 

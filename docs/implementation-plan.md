@@ -23,7 +23,7 @@ Implement the Pi registration and Exa adapter together.
 
 Acceptance criteria:
 
-- `src/index.ts` registers only `web_search`.
+- The initial Step 1 registration was only `web_search`; Step 2 now adds `web_fetch`.
 - The tool validates query and result limits, propagates cancellation, and
   applies a bounded timeout.
 - The adapter uses `EXA_API_KEY` supplied through its explicit construction
@@ -37,33 +37,51 @@ Acceptance criteria:
 - Offline fixture tests cover normalization and error mapping. Live tests are
   credential-gated and opt-in.
 
-## 2. Direct `web_fetch`
+## 2. Direct `web_fetch` — complete
 
-Implement direct HTTP fetching with the adapted SSRF and redirect guard from
-`pi-web-access`, after verifying the code can be vendored under its license.
-Add local readable extraction, content-type handling, response-size limits,
-timeouts, cancellation, and untrusted-content fencing.
+Implement direct HTTP fetching with a pinned transport and an adapted SSRF and
+redirect guard from `pi-web-access`, after preserving its MIT attribution in a
+third-party notice. Do not rely on ordinary `fetch()` performing the same DNS
+resolution that was validated. Resolve each hostname, reject mixed or
+non-global answers, and connect to the validated address while retaining the
+original host/SNI. Revalidate every redirect target.
+
+Add local Readability/Turndown extraction, content-type handling, streamed
+response-size limits, output truncation metadata, one overall timeout,
+cancellation, and untrusted-content fencing. Do not trust proxy resolution in
+the first implementation.
 
 Every successful result must mark `FetchedContent.contentTrust` as
-`"untrusted"` at the contract boundary.
+`"untrusted"` and report its produced format, extraction method, redirect
+count, bytes read, and truncation state at the contract boundary.
 
 If readable extraction fails, return bounded raw HTML with
-`fellBackToRaw: true`. Do not call a remote extraction service implicitly.
+`fellBackToRaw: true` and `outputFormat: "html"` when raw fallback is allowed.
+Otherwise return a stable extraction failure. Do not call a remote extraction
+service implicitly.
 
-Tests must cover private and link-local targets, IPv4/IPv6 and mapped IPv6,
-redirect revalidation, size limits, non-HTML responses, extraction fallback,
-and cancellation without requiring network access by default.
+Tests cover private and link-local targets, IPv4/IPv6 and mapped IPv6,
+mixed DNS answers, redirect revalidation and loops, size limits without a
+reliable `Content-Length`, non-HTML responses, extraction fallback, output
+truncation, cleanup, timeout, and cancellation without requiring network
+access by default.
 
 ## 3. Capability-aware routing and remaining adapters
 
 Add the router only after the first search and fetch paths have stable
-contracts. It must use capability and profile metadata, honor explicit
-latency/cost limits, and select one provider for ordinary search.
+contracts. It must use capability, billing-policy, quota, and profile metadata,
+honor explicit latency/cost limits, and select one provider for ordinary
+search. The default is free-capacity first, then explicitly allowed metered
+capacity. Quota and transient failures remain visible; hidden paid fallback is
+forbidden.
 
 Add Brave, Gemini, Parallel, and xAI one at a time. Each adapter gets offline
-fixtures, explicit auth/availability behavior, and a credential-gated live
-smoke test. Parallel belongs primarily in the research workflow; xAI and
-Gemini use the model-registry execution context.
+fixtures, explicit auth/availability behavior, rate-limit metadata, and a
+credential-gated live smoke test. Parallel belongs primarily in the research
+workflow; xAI and Gemini use the model-registry execution context. Start with
+zero automatic retries; later allow at most one bounded same-provider retry
+for typed transient failures when the deadline, budget, and billing policy
+permit it.
 
 ## 4. Budgeted `web_research`
 
@@ -78,6 +96,9 @@ cross-provider retries are not allowed.
 ## Deferred
 
 - Public `web_find` or `web_browse` tools.
-- Browser automation, crawling, video, and GitHub cloning.
-- Remote extraction services and provider fan-out for ordinary search.
+- Browser automation, crawling, remote extraction services, and provider
+  fan-out for ordinary search.
+- Local PDF and YouTube transcript handlers until the direct HTML/text fetch
+  path and replacement acceptance matrix are stable.
+- Video frames, visual analysis, OCR, and implicit GitHub cloning.
 - Benchmarking inside this runtime package; use a separate evaluation project.

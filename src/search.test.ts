@@ -42,7 +42,7 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "q", publishedAfter: "not-a-date" })).toThrow("ISO-8601");
 	});
 
-	it("propagates caller cancellation and returns a stable tool error", async () => {
+	it("propagates caller cancellation as a stable tool error", async () => {
 		const provider = makeProvider(
 			async (_request, signal) =>
 				new Promise<SearchResponse>((_resolve, reject) => {
@@ -52,7 +52,7 @@ describe("search boundary", () => {
 		const controller = new AbortController();
 		const pending = executeSearch(provider, { query: "q" }, { signal: controller.signal, timeoutMs: 1_000 });
 		controller.abort();
-		await expect(pending).rejects.toMatchObject({ code: "EXA_CANCELED" });
+		await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
 	});
 
 	it("enforces a bounded timeout and aborts the provider signal", async () => {
@@ -65,7 +65,7 @@ describe("search boundary", () => {
 					}, { once: true });
 				}),
 		);
-		await expect(executeSearch(provider, { query: "q" }, { timeoutMs: 10 })).rejects.toMatchObject({ code: "EXA_TIMEOUT" });
+		await expect(executeSearch(provider, { query: "q" }, { timeoutMs: 10 })).rejects.toMatchObject({ code: "WEB_SEARCH_TIMEOUT" });
 		expect(aborted).toBe(true);
 	});
 
@@ -80,12 +80,12 @@ describe("search boundary", () => {
 			});
 		});
 		await expect(executeSearch(provider, { query: "q" })).rejects.toMatchObject({
-			code: "EXA_RATE_LIMIT",
+			code: "WEB_SEARCH_RATE_LIMIT",
 			status: 429,
 		});
 	});
 
-	it("registers only web_search and returns structured evidence", async () => {
+	it("registers web_search and returns structured evidence", async () => {
 		const provider = makeProvider(async (request) => successResponse(request.query));
 		const registered: Array<{ name: string }> = [];
 		registerWebSearch(
@@ -105,16 +105,15 @@ describe("search boundary", () => {
 		expect(result.content[0]).toMatchObject({ type: "text" });
 	});
 
-	it("returns validation failures as unsuccessful tool results", async () => {
+	it("throws validation failures for Pi to mark as unsuccessful", async () => {
 		const tool = createWebSearchTool(makeProvider(async () => successResponse()));
-		const result = await tool.execute("call-1", { query: "   " }, undefined, undefined, {} as never);
-		expect((result as { isError?: boolean }).isError).toBe(true);
-		expect(result.details).toMatchObject({ code: "WEB_SEARCH_INVALID_REQUEST" });
-		expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("WEB_SEARCH_INVALID_REQUEST") });
+		await expect(tool.execute("call-1", { query: "   " }, undefined, undefined, {} as never)).rejects.toMatchObject({
+			code: "WEB_SEARCH_INVALID_REQUEST",
+		});
 	});
 
 	it("keeps SearchToolError instances stable when converting results", () => {
-		const error = new SearchToolError("EXA_TIMEOUT", "timed out", { provider: "exa", kind: "timeout" });
-		expect(error.code).toBe("EXA_TIMEOUT");
+		const error = new SearchToolError("WEB_SEARCH_TIMEOUT", "timed out", { provider: "exa", kind: "timeout" });
+		expect(error.code).toBe("WEB_SEARCH_TIMEOUT");
 	});
 });

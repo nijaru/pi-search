@@ -1,24 +1,20 @@
+import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Static, Type } from "typebox";
+import { Type, type Static, type TUnsafe } from "typebox";
 import type { Provider, SearchRequest, SearchResponse } from "./contracts";
-import { searchToolFailureDetails, toSearchToolError, type SearchToolFailureDetails } from "./errors";
+import { toSearchToolError } from "./errors";
 import { DEFAULT_SEARCH_TIMEOUT_MS, executeSearch, MAX_QUERY_LENGTH, MAX_RESULTS } from "./search";
+
+const SearchModeSchema = StringEnum(["auto", "semantic", "keyword", "fresh", "multiHop", "social"] as const) as TUnsafe<
+	"auto" | "semantic" | "keyword" | "fresh" | "multiHop" | "social"
+>;
 
 export const WebSearchParameters = Type.Object({
 	query: Type.String({ minLength: 1, maxLength: MAX_QUERY_LENGTH, description: "Natural-language or keyword search query" }),
 	maxResults: Type.Optional(
 		Type.Integer({ minimum: 1, maximum: MAX_RESULTS, description: `Maximum results to return (1-${MAX_RESULTS})` }),
 	),
-	mode: Type.Optional(
-		Type.Union([
-			Type.Literal("auto"),
-			Type.Literal("semantic"),
-			Type.Literal("keyword"),
-			Type.Literal("fresh"),
-			Type.Literal("multiHop"),
-			Type.Literal("social"),
-		]),
-	),
+	mode: Type.Optional(SearchModeSchema),
 	domains: Type.Optional(
 		Type.Object({
 			include: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
@@ -32,7 +28,7 @@ export const WebSearchParameters = Type.Object({
 });
 
 export type WebSearchParams = Static<typeof WebSearchParameters>;
-export type WebSearchDetails = SearchResponse | SearchToolFailureDetails;
+export type WebSearchDetails = SearchResponse;
 
 export interface WebSearchToolOptions {
 	readonly timeoutMs?: number;
@@ -73,12 +69,7 @@ export function createWebSearchTool(
 					details: response,
 				};
 			} catch (error) {
-				const toolError = toSearchToolError(error, provider.id);
-				return {
-					content: [{ type: "text", text: `${toolError.code}: ${toolError.message}` }],
-					details: searchToolFailureDetails(toolError),
-					isError: true,
-				};
+				throw toSearchToolError(error, provider.id);
 			}
 		},
 	});

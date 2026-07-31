@@ -112,7 +112,7 @@ describe("ExaProvider", () => {
 			{},
 		);
 
-		expect(seenBody).toEqual({ query: "new music", numResults: 10 });
+		expect(seenBody).toEqual({ query: "new music", numResults: 10, contents: { highlights: true } });
 		expect(result.warnings).toEqual([
 			{
 				code: "unsupported-option",

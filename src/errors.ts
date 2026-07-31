@@ -44,18 +44,18 @@ export function createProviderError(options: ProviderErrorOptions): SearchProvid
 
 export type SearchToolErrorCode =
 	| "WEB_SEARCH_INVALID_REQUEST"
-	| "EXA_AUTH"
-	| "EXA_RATE_LIMIT"
-	| "EXA_BAD_REQUEST"
-	| "EXA_MALFORMED_RESPONSE"
-	| "EXA_TIMEOUT"
-	| "EXA_CANCELED"
-	| "EXA_NETWORK"
-	| "EXA_HTTP"
-	| "EXA_UNSUPPORTED"
-	| "EXA_UNKNOWN";
+	| "WEB_SEARCH_AUTH"
+	| "WEB_SEARCH_RATE_LIMIT"
+	| "WEB_SEARCH_BAD_REQUEST"
+	| "WEB_SEARCH_MALFORMED_RESPONSE"
+	| "WEB_SEARCH_TIMEOUT"
+	| "WEB_SEARCH_CANCELED"
+	| "WEB_SEARCH_NETWORK"
+	| "WEB_SEARCH_HTTP"
+	| "WEB_SEARCH_UNSUPPORTED"
+	| "WEB_SEARCH_UNKNOWN";
 
-/** A stable error shape returned as an unsuccessful Pi tool result. */
+/** A stable error shape thrown so Pi records an unsuccessful tool call. */
 export class SearchToolError extends Error {
 	readonly code: SearchToolErrorCode;
 	readonly provider?: ProviderId;
@@ -73,7 +73,7 @@ export class SearchToolError extends Error {
 			readonly status?: number;
 		} = {},
 	) {
-		super(message);
+		super(`${code}: ${message}`);
 		this.name = "SearchToolError";
 		this.code = code;
 		this.provider = options.provider;
@@ -83,40 +83,33 @@ export class SearchToolError extends Error {
 	}
 }
 
-function providerCode(provider: ProviderId, suffix: string): SearchToolErrorCode {
-	if (provider === "exa") {
-		return `EXA_${suffix}` as SearchToolErrorCode;
-	}
-	return "EXA_UNKNOWN";
-}
-
 /** Convert an adapter failure into the stable shape exposed by web_search. */
 export function toSearchToolError(error: unknown, provider: ProviderId): SearchToolError {
 	if (error instanceof SearchToolError) {
 		return error;
 	}
 	if (isProviderError(error)) {
-		const suffix =
+		const code: SearchToolErrorCode =
 			error.kind === "auth"
-				? "AUTH"
+				? "WEB_SEARCH_AUTH"
 				: error.kind === "rateLimit"
-					? "RATE_LIMIT"
+					? "WEB_SEARCH_RATE_LIMIT"
 					: error.kind === "badRequest"
-						? "BAD_REQUEST"
+						? "WEB_SEARCH_BAD_REQUEST"
 						: error.kind === "malformed"
-							? "MALFORMED_RESPONSE"
+							? "WEB_SEARCH_MALFORMED_RESPONSE"
 							: error.kind === "timeout"
-								? "TIMEOUT"
+								? "WEB_SEARCH_TIMEOUT"
 									: error.kind === "canceled"
-										? "CANCELED"
+										? "WEB_SEARCH_CANCELED"
 											: error.kind === "network"
-												? "NETWORK"
+												? "WEB_SEARCH_NETWORK"
 													: error.kind === "unsupported"
-														? "UNSUPPORTED"
+														? "WEB_SEARCH_UNSUPPORTED"
 															: error.kind === "http"
-																? "HTTP"
-																	: "UNKNOWN";
-		return new SearchToolError(providerCode(error.provider, suffix), error.message, {
+																? "WEB_SEARCH_HTTP"
+																	: "WEB_SEARCH_UNKNOWN";
+		return new SearchToolError(code, error.message, {
 			provider: error.provider,
 			kind: error.kind,
 			retryable: error.retryable,
@@ -124,7 +117,7 @@ export function toSearchToolError(error: unknown, provider: ProviderId): SearchT
 		});
 	}
 	const message = error instanceof Error ? error.message : "Unknown search failure";
-	return new SearchToolError(providerCode(provider, "UNKNOWN"), message, { provider, kind: "unknown" });
+	return new SearchToolError("WEB_SEARCH_UNKNOWN", message, { provider, kind: "unknown" });
 }
 
 export interface SearchToolFailureDetails {
