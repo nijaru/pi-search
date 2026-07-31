@@ -20,8 +20,9 @@ replacement scope are recorded in [`provider-policy.md`](provider-policy.md).
 There are two implementation families:
 
 - Direct HTTP providers: Exa, Brave, and Parallel.
-- Model-mediated providers: Gemini and xAI, using the execution context's
-  model registry for credentials and model headers.
+- Model-mediated providers: OpenAI/Codex native Responses search, Gemini, and
+  xAI, using the execution context's model registry for credentials and model
+  headers.
 
 The tool boundary supplies `ProviderContext`; adapters must not read Pi's
 model registry, credentials, or other runtime state through globals. Direct
@@ -29,11 +30,14 @@ providers may ignore model context. The provider profile supplies advisory
 latency, cost, and authentication metadata for routing; actual usage is
 returned when the provider reports it.
 
-Normal search selects one provider. Cross-provider calls are permitted only
-inside an explicitly requested research workflow. The future default policy is
-free-capacity first, then explicitly allowed metered capacity; it never hides a
-paid fallback behind quota or transient errors. Gemini and xAI remain explicit
-model-mediated paths, while Brave, Exa, and Parallel are direct HTTP adapters.
+Normal search selects one provider. When the active Pi model is OpenAI or
+Codex, the custom tool uses that model's native Responses `web_search` first;
+a failure is visible and never falls back to Exa. For other models, the future
+policy is free-capacity first, then explicitly allowed metered capacity.
+Cross-provider calls are permitted only inside an explicitly requested research
+workflow. The policy never hides a paid fallback behind quota or transient
+errors. Gemini and xAI remain explicit model-mediated paths, while Brave, Exa,
+and Parallel are direct HTTP adapters.
 
 ## Constraint semantics
 
@@ -85,13 +89,14 @@ retries across paid providers.
 
 ## Initial provider target
 
-The initial target set is deliberately limited to five niches:
+The initial target set is deliberately limited to six niches:
 
+- OpenAI/Codex native search for the active model's subscription capability;
 - Exa for semantic and technical retrieval;
 - Brave for independent keyword retrieval, freshness, and latency;
 - Gemini for Google-backed grounding;
 - Parallel for multi-hop research;
 - xAI for social/X retrieval.
 
-This is a target set, not a promise that all five ship before the first useful
+This is a target set, not a promise that all six ship before the first useful
 vertical slice. Providers without a distinct role remain deferred.

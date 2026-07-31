@@ -35,15 +35,37 @@ export type IsoTimestamp = string;
 export type RequestId = string;
 
 /**
- * The narrow model-auth surface needed by model-mediated providers. Keeping
- * this structural avoids coupling the contracts to Pi's runtime types while
- * still making the auth boundary explicit at the tool adapter.
+ * The immutable subset of Pi's active model needed by model-mediated
+ * providers. Keeping this structural avoids coupling provider adapters to Pi's
+ * runtime types while still making the routing and auth boundary explicit.
+ */
+export interface ProviderModel {
+	readonly id: string;
+	readonly provider: string;
+	readonly api: string;
+	readonly baseUrl: string;
+	readonly headers?: Readonly<Record<string, string>>;
+}
+
+/** The result of resolving credentials through Pi's model registry. */
+export type ProviderAuthResult =
+	| {
+			readonly ok: true;
+			readonly apiKey?: string;
+			readonly headers?: Readonly<Record<string, string>>;
+		}
+	| {
+			readonly ok: false;
+			readonly error: string;
+		};
+
+/**
+ * The narrow model-auth surface needed by model-mediated providers. The tool
+ * boundary binds this function to the exact active Pi model, so adapters never
+ * read Pi auth state or environment credentials globally.
  */
 export interface ProviderModelRegistry {
-	readonly getApiKeyAndHeaders: (model: string) => Promise<{
-		readonly apiKey?: string;
-		readonly headers?: Readonly<Record<string, string>>;
-	}>;
+	readonly getApiKeyAndHeaders: (model: ProviderModel) => Promise<ProviderAuthResult>;
 }
 
 /**
@@ -52,7 +74,7 @@ export interface ProviderModelRegistry {
  * must use `modelRegistry` rather than reading Pi credentials globally.
  */
 export interface ProviderContext {
-	readonly model?: string;
+	readonly model?: ProviderModel;
 	readonly modelRegistry?: ProviderModelRegistry;
 }
 
@@ -404,6 +426,8 @@ export interface FindResult {
  * The concrete union grows as adapters land; string allows forward-compat.
  */
 export type ProviderId =
+	| "openai"
+	| "openai-codex"
 	| "exa"
 	| "brave"
 	| "parallel"

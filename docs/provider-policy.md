@@ -9,20 +9,24 @@ contracts.
 
 ### Ordinary search default
 
-The default policy is **free-capacity first, then explicitly allowed metered
-capacity**:
+The default policy is **native subscription capability first, then
+free-capacity, then explicitly allowed metered capacity**:
 
 1. Honor an explicit provider request strictly. Do not switch vendors behind
    `providerHint` or a future `provider` parameter.
-2. Satisfy hard capabilities and filters before considering cost.
-3. For `auto`, `keyword`, and `fresh`, prefer Brave when the caller has
-   configured it as free-capacity and its quota/rate headers permit a call.
-4. Use Exa for semantic or technical retrieval, and as a fallback only when
+2. When the active Pi model is `openai` or `openai-codex`, use that model's
+   native Responses `web_search` capability first. Do not fall back to Exa or
+   another paid provider when native search is unavailable or fails.
+3. Satisfy hard capabilities and filters before considering cost.
+4. For other models and `auto`, `keyword`, and `fresh`, prefer Brave when the
+   caller has configured it as free-capacity and its quota/rate headers permit
+   a call.
+5. Use Exa for semantic or technical retrieval, and as a fallback only when
    the caller's billing policy explicitly permits configured metered use.
-5. Use Parallel only for an explicit multi-hop/deep-research request.
-6. Use Gemini grounding only when a synthesized, Google-grounded answer is
+6. Use Parallel only for an explicit multi-hop/deep-research request.
+7. Use Gemini grounding only when a synthesized, Google-grounded answer is
    explicitly requested.
-7. Use xAI `x_search` only for an explicit social/X request.
+8. Use xAI `x_search` only for an explicit social/X request.
 
 The default billing policy is `prefer-free` rather than “free means every
 provider is free.” Introductory credits and subscription allowances are not
@@ -36,8 +40,11 @@ A quota or rate-limit failure is visible to the caller. It does not silently
 turn into a paid request. Cross-provider fallback requires an explicit
 policy, and every attempted call remains visible in usage and warnings.
 
-Step 1 intentionally has one explicit Exa adapter. The routing policy becomes
-active only when the capability-aware router lands.
+The first vertical slice now includes Exa plus native OpenAI/Codex routing.
+The selector runs at tool execution time so it sees the active Pi model. A
+native OpenAI/Codex failure is visible; it never spends Exa capacity as an
+implicit fallback. Full capability-aware routing for Brave and other adapters
+still belongs to Step 3.
 
 ### Transient failures
 
@@ -64,6 +71,7 @@ or structured details where the Pi runtime permits them.
 
 | Provider | Distinct role | Evidence and constraints | Cost / quota posture | Authentication |
 | --- | --- | --- | --- | --- |
+| OpenAI/Codex native search | First choice when the active Pi model is OpenAI or Codex | Responses `web_search` returns URL citations and optional source metadata. Include-domain filters are supported; excluded domains and publication-date bounds are rejected rather than approximated. Native response text is only returned when `wantAnswer` is requested. | Uses the active model's subscription or API billing. No Exa fallback is performed on failure. | Pi model registry execution context; never read auth globally |
 | Brave | Keyword, fresh, low-latency default when free capacity exists | Direct URLs, titles, snippets, freshness and domain filters; no provider answer required | The current official pricing page advertises $5/1,000 requests with $5 monthly credits and 50 req/s capacity. Official rate-limit docs still show plan-shaped headers such as `1 request/second` and a monthly window. The historical 2,000/month free plan is not safe to encode as the current universal plan; use account headers/dashboard. | `BRAVE_API_KEY` / explicit credential source |
 | Exa | Semantic and technical retrieval | Direct results, dates, IDs, scores, highlights/text, domain and date filters; request bounded highlights/text when evidence is required | Current docs price base Search per request/result tier and charge content fields per result. Requesting highlights improves evidence but has a measurable cost. | `EXA_API_KEY` through explicit adapter construction |
 | Parallel | Explicit multi-hop and deep research | Search modes are `turbo`, `basic`, and `advanced`; advanced is the documented default and is aimed at multi-hop quality. Source policy and date/domain controls must be mapped from current API fields, not guessed. | Official docs describe approximately 200ms/$1 per 1,000 for turbo, approximately 1s/$5 per 1,000 for basic, and approximately 3s/$5 per 1,000 for advanced. Treat prices as a live-provider value. | `PARALLEL_API_KEY` through explicit adapter construction |
@@ -106,8 +114,11 @@ The replacement acceptance matrix must pass for the workflows actually used:
 
 Keep `pi-web-access` installed during this rollout. Its current source supports
 `webSearch.enabled: false`, which disables its search/source-check registrations
-while retaining specialty fetch/storage tools. Verify that coexistence in a Pi
-runtime smoke test before changing global configuration.
+while retaining specialty fetch/storage tools. The active config is
+`$XDG_CONFIG_HOME/pi/web-search.json` when XDG is set (otherwise `~/.pi`); the
+current local config disables the incumbent search registrations. A coexistence
+smoke test must show only the custom `web_search` plus the incumbent specialty
+fetch/storage tools. Re-enable the incumbent search flag for rollback.
 
 ### Intentionally not reproduced
 

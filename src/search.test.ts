@@ -112,6 +112,46 @@ describe("search boundary", () => {
 		});
 	});
 
+	it("bounds model-visible output while preserving a truncation warning", async () => {
+		const provider = makeProvider(async () => ({
+			...successResponse(),
+			answer: "x".repeat(100_000),
+		}));
+		const tool = createWebSearchTool(provider);
+		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
+		const text = result.content[0];
+		expect(text.type).toBe("text");
+		if (text.type === "text") expect(text.text.length).toBeLessThanOrEqual(45_000);
+		expect(result.details?.warnings.at(-1)).toMatchObject({ code: "partial-results" });
+	});
+
+	it("selects a provider per active Pi model and passes model auth context", async () => {
+		let selected = false;
+		let authResult: unknown;
+		const provider = makeProvider(async (_request, _signal, context) => {
+			selected = context.model?.provider === "openai";
+			authResult = context.modelRegistry === undefined
+				? undefined
+				: await context.modelRegistry.getApiKeyAndHeaders(context.model!);
+			return successResponse();
+		});
+		const tool = createWebSearchTool(() => provider);
+		const context = {
+			model: {
+				id: "gpt-test",
+				provider: "openai",
+				api: "openai-responses",
+				baseUrl: "https://api.openai.com/v1",
+			},
+			modelRegistry: {
+				getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }),
+			},
+		} as never;
+		await tool.execute("call-1", { query: "q" }, undefined, undefined, context);
+		expect(selected).toBe(true);
+		expect(authResult).toEqual({ ok: true, apiKey: "test-key" });
+	});
+
 	it("keeps SearchToolError instances stable when converting results", () => {
 		const error = new SearchToolError("WEB_SEARCH_TIMEOUT", "timed out", { provider: "exa", kind: "timeout" });
 		expect(error.code).toBe("WEB_SEARCH_TIMEOUT");

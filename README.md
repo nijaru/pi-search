@@ -2,7 +2,7 @@
 
 A standalone, provider-neutral web search extension for Pi.
 
-> **Status:** search and direct fetch slices implemented. The extension registers `web_search` backed by Exa and a safe local `web_fetch` path.
+> **Status:** search and direct fetch slices implemented. The extension uses native OpenAI/Codex `web_search` for the active OpenAI model and Exa otherwise, plus a safe local `web_fetch` path.
 
 ## Scope
 
@@ -14,11 +14,12 @@ The extension will provide three focused tools:
   multi-hop questions.
 
 Providers will be adapters behind a shared contract. The initial target set is
-Exa, Brave, Gemini, Parallel, and xAI, each selected for a distinct retrieval
-niche. No provider will be treated as universally best. Routing will be based
-on the task profile, provider capabilities, operational estimates, and explicit
-cost/latency limits rather than an unconditional fan-out or a permanent vendor
-ranking.
+native OpenAI/Codex search, Exa, Brave, Gemini, Parallel, and xAI, each selected
+for a distinct retrieval niche. No provider will be treated as universally
+best. Routing will be based on the task profile, provider capabilities,
+operational estimates, and explicit cost/latency limits rather than an
+unconditional fan-out or a permanent vendor ranking. Native OpenAI/Codex
+failures never fall back to Exa implicitly.
 
 In-content matching is an internal fetch/research helper, not a fourth public
 tool. Browser automation and remote extraction services remain out of the
@@ -45,7 +46,8 @@ first implementation.
 
 1. Establish normalized contracts, execution context, hard-option reporting,
    provider profiles, and research budgets. **Complete.**
-2. Add a useful single-provider `web_search` with the Exa adapter. **Complete.**
+2. Add a useful `web_search` with native OpenAI/Codex routing and the Exa
+   adapter. **Complete.**
 3. Add bounded direct URL fetching with local safe extraction. **Complete.**
 4. Add capability-aware provider adapters and role-based routing.
 5. Add budget-enforced `web_research` only after the first two tools have

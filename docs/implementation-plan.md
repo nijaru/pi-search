@@ -17,25 +17,29 @@ ignored by git.
 Exit evidence: `src/contracts.ts` and deterministic tests cover these rules;
 `bun run check` passes. The tracked design is in `docs/DESIGN.md`.
 
-## 1. First vertical slice: `web_search` + Exa
+## 1. First vertical slice: `web_search` + native OpenAI/Codex + Exa
 
-Implement the Pi registration and Exa adapter together.
+Implement the Pi registration, native OpenAI/Codex Responses adapter, and Exa
+adapter together. When the active Pi model is OpenAI or Codex, native search is
+selected strictly and Exa is not an implicit fallback.
 
 Acceptance criteria:
 
 - The initial Step 1 registration was only `web_search`; Step 2 now adds `web_fetch`.
 - The tool validates query and result limits, propagates cancellation, and
   applies a bounded timeout.
-- The adapter uses `EXA_API_KEY` supplied through its explicit construction
+- The Exa adapter uses `EXA_API_KEY` supplied through its explicit construction
   path and never logs the key.
+- Native OpenAI/Codex search uses the active Pi model and model registry auth;
+  it never reads credentials globally or falls back to Exa after a failure.
 - Results are normalized to evidence fields and the provider-native answer is
   not requested by default.
 - Domain/date options are either applied, explicitly warned about, or rejected
   before a request can violate a hard constraint.
 - Auth, HTTP, rate-limit, malformed-payload, timeout, and cancellation errors
   map to stable tool-visible failures.
-- Offline fixture tests cover normalization and error mapping. Live tests are
-  credential-gated and opt-in.
+- Offline fixture tests cover normalization and error mapping for both
+  providers. Live tests are credential-gated and opt-in.
 
 ## 2. Direct `web_fetch` — complete
 
