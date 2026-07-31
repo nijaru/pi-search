@@ -3,8 +3,9 @@
  *
  * These types are the foundation of the extension. They are intentionally
  * agnostic of how a provider fulfills a request — whether by a direct HTTP
- * search endpoint (Brave) or by a model-mediated native call (OpenAI/Codex
- * `web_search`). See `docs/DESIGN.md` for the shipped boundary.
+ * search endpoint (Brave, Exa, or Parallel) or by a model-mediated grounding
+ * call (OpenAI/Codex, Gemini, or xAI). See `docs/DESIGN.md` for the shipped
+ * boundary.
  *
  * Nothing here performs I/O or depends on Pi runtime APIs, so it can be
  * unit-tested deterministically and offline. Provider adapters build on these
@@ -128,10 +129,16 @@ export interface ProviderCapabilities {
 	readonly keyword?: boolean;
 	/** Freshness-sensitive retrieval. */
 	readonly freshness?: boolean;
+	/** Semantic or natural-language retrieval. */
+	readonly semantic?: boolean;
 	/** Returns source excerpts alongside the URL. */
 	readonly excerpts?: boolean;
 	/** Supports domain include/exclude filters. */
 	readonly domainFilter?: boolean;
+	/** Searches social sources such as X. */
+	readonly social?: boolean;
+	/** Uses a model's native grounding/search tool. */
+	readonly nativeGrounding?: boolean;
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────
@@ -273,8 +280,8 @@ export interface ResearchRequest {
 	/** The caller supplies the query plan; defaults to [question]. */
 	readonly queries?: readonly string[];
 	readonly budget: ResearchBudget;
-	/** Select native search or Brave strictly for the whole invocation. */
-	readonly provider?: "native" | "brave";
+	/** Select one provider strictly for the whole invocation. */
+	readonly provider?: "native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "xai" | "xai-x";
 	/** Number of result URLs to fetch after search, bounded by budget.maxFetches. */
 	readonly fetchResults?: number;
 }
@@ -418,7 +425,17 @@ export interface FindResult {
  * Identifier for a provider. Used in results and capability descriptors.
  * The concrete union grows as adapters land; string allows forward-compat.
  */
-export type ProviderId = "native" | "openai" | "openai-codex" | "brave" | (string & {});
+export type ProviderId =
+	| "native"
+	| "openai"
+	| "openai-codex"
+	| "gemini"
+	| "brave"
+	| "exa"
+	| "parallel"
+	| "xai"
+	| "xai-x"
+	| (string & {});
 
 /**
  * A normalized error from a provider call. Carries enough to route retries

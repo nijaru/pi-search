@@ -1,122 +1,109 @@
 # Provider and replacement policy
 
-This document records the cost and ownership decisions for `pi-search`.
-Provider prices, quotas, and model capabilities change; they are not treated
-as permanent rankings.
+Provider capabilities, prices, quotas, and API schemas change. This document
+records current routing and spending policy, not a permanent provider ranking.
 
 ## Ordinary search
 
-The default is **native subscription first, then explicitly enabled Brave**:
+The extension selects exactly one provider:
 
-1. An active `openai` or `openai-codex` model uses its native Responses
-   `web_search` capability.
-2. Native failures are final. They never fall back to Brave or a paid service.
-3. Other models may use Brave only when `BRAVE_API_KEY` is configured and
-   `PI_SEARCH_BRAVE_FREE_ONLY=1` explicitly asserts that the account's free
-   capacity covers the call.
-4. `PI_SEARCH_ALLOW_METERED=1` explicitly permits configured metered Brave
-   calls. It is not set by the extension.
-5. If no eligible provider exists, the tool fails clearly. There are no
-   automatic retries or cross-provider fallbacks.
+1. Active OpenAI Responses and Codex Responses models use native OpenAI search.
+2. Active Google Gemini and xAI Responses models use native grounding only
+   when `PI_SEARCH_ALLOW_METERED=1` explicitly permits it. `xai-x` is explicit
+   for X-specific retrieval.
+3. Other/local models use Brave only with `BRAVE_API_KEY` and
+   `PI_SEARCH_BRAVE_FREE_ONLY=1`, which is a user assertion that free capacity
+   covers the call.
+4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa, and
+   Parallel only when Exa or Parallel is explicitly selected by provider hint.
+5. If nothing is eligible, search fails clearly.
 
-The free-capacity flag is a user assertion, not a provider guarantee. Brave's
-account headers remain authoritative for known rate windows. A quota failure
-is surfaced with reset metadata and never turns into another provider call.
-
-The public search surface is intentionally limited to query, up to 20 results,
-`auto`/`keyword`/`fresh` mode, domain include/exclude filters, and strict
-`native`/`brave` provider selection. Publication-date bounds, semantic search,
-provider answers, social search, and highlight spans are not shipped because
-the selected backends cannot enforce them consistently or they are not needed
-for the primary workflow.
+A provider error never starts a second provider call. There are no hidden
+retries, paid fallback chains, or automatic multi-provider searches.
 
 ## Shipped providers
 
-| Provider | Use | Cost and failure policy | Auth |
+| Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
-| OpenAI/Codex native | Default for the active OpenAI/Codex model | Uses the active model's subscription or API billing. One request, no fallback or retry. | Pi model registry execution context |
-| Brave | Optional keyword/fresh search for non-native models | Requires explicit free-capacity assertion or metered opt-in. Parses rate windows and stops on known exhaustion. | `BRAVE_API_KEY` |
+| OpenAI/Codex | Native default for compatible active model | One Responses call; no fallback | Pi model registry |
+| Gemini | Native Google Search grounding for active Gemini | One grounding call; no fallback | Pi model registry |
+| xAI | Native web grounding for active xAI Responses | One Responses call; no fallback | Pi model registry |
+| xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
+| Brave | Non-native/local fallback path | Free assertion or explicit metered opt-in; quota guarded | `BRAVE_API_KEY` |
+| Exa | Semantic retrieval and highlights | Explicit `exa` plus metered opt-in | `EXA_API_KEY` |
+| Parallel | Objective-oriented search and excerpts | Explicit `parallel` plus metered opt-in | `PARALLEL_API_KEY` |
 
-### Intentionally omitted
+The word “fallback” for Brave means fallback in model *selection* when no
+native provider applies. It does not mean fallback after a provider failure.
 
-Exa, Parallel, Gemini, and xAI are not implemented or selected. Their semantic,
-multi-hop, grounding, and social capabilities are not necessary for the user's
-normal GPT workflow, and their metered/model-mediated calls create cost and
-routing complexity. Add one only after a concrete workflow demonstrates that
-native search, Brave, direct fetch, or Bash cannot meet it.
+## Why both native and direct providers exist
+
+Native grounding is appropriate when the active model already owns a search
+capability, especially OpenAI/Codex, Gemini, and xAI. It avoids routing a local
+or unrelated model through a different model and preserves that provider's
+citation semantics.
+
+Brave is the cost-controlled general option for local and other models. Exa
+and Parallel are useful specialized, metered choices but are never silently
+used. Exa is strongest for semantic retrieval/highlights; Parallel is useful
+for objective-oriented research and excerpts. Neither provides a reliable
+fixed per-call estimate for a hard research cost ceiling, so a cost ceiling is
+rejected before calls to those providers.
+
+## Search constraints
+
+Unsupported hard constraints are rejected or surfaced:
+
+- OpenAI/Codex reject excluded-domain filters.
+- Gemini grounding has no hard domain-filter contract.
+- xAI web search supports allowed/excluded domains; xAI X search does not.
+- Parallel's stable Search API contract does not expose domain filters.
+- Exa and Brave apply domain filters and return normalized evidence.
+
+Freshness and keyword modes are retrieval hints for model-mediated or semantic
+providers. They produce an explicit warning when the provider cannot guarantee
+the requested ranking semantics.
 
 ## Transient failures
 
-There are zero automatic retries. A retry is another provider call and may be
-another charge. Authentication errors, invalid requests, unsupported filters,
-malformed responses, extraction failures, and cancellation are never retried.
-Network, 408, 425, 429, and 5xx failures remain visible with stable error
-codes, provider identity, retryability, request ID, and bounded rate metadata.
+There are zero automatic retries. Authentication, invalid requests,
+unsupported filters, malformed responses, and cancellation are not retried.
+Network, 408, 425, 429, and 5xx failures remain visible with stable provider,
+status, request ID, retry timing, and retryability fields. A caller may decide
+to retry as a new tool call.
 
-## What the extension owns
+## Extension ownership
 
-- **Search:** native OpenAI/Codex and optional Brave evidence normalization.
-- **HTML/text fetch:** pinned DNS transport, SSRF and redirect checks, MIME and
-  response-size limits, local Readability/Turndown extraction, cancellation,
-  timeout, and untrusted-content fencing.
-- **PDF URLs:** safe byte fetch, PDF magic validation, bounded local
-  `pdftotext`, bounded pages/text, and temporary-file cleanup. No OCR.
-- **YouTube URLs:** bounded local `yt-dlp` captions-only extraction with
-  `--ignore-config`, `--no-netrc`, `--no-playlist`, no cookies, language
-  selection, output bounds, and temporary-file cleanup. Only canonical HTTPS
-  YouTube hosts/video IDs are accepted. No media download, frames, or visual
-  analysis. Windows reports an unsupported-platform error because the hard
-  process-file bound is POSIX specific.
-- **Research:** explicit caller-supplied query plans with one selected
-  provider, bounded sequential calls/fetches, one deadline, partial results,
-  and no hidden synthesis or fan-out.
+The extension owns:
 
-## What stays outside the extension
+- provider-neutral search routing and evidence normalization;
+- model-registry authentication boundaries;
+- direct provider HTTP, bounded responses, cancellation, and error metadata;
+- safe direct HTML/text fetching;
+- remote PDF extraction through bounded local `pdftotext`;
+- remote YouTube caption extraction through bounded local `yt-dlp`; and
+- explicit bounded research orchestration.
 
-| Workflow | Use |
-| --- | --- |
-| Repository files and local PDFs | `read`, Bash, and `pdftotext` |
-| Git history, branches, issues, and PRs | Bash with `git`/`gh` |
-| Repository cloning or code search | Explicit Bash/git workflow; never implicit in URL fetch |
-| Video downloads, audio, frames, OCR, and visual analysis | Bash with `yt-dlp`/`ffmpeg` or a dedicated vision workflow |
-| Browser automation and JS-only pages | Explicit browser workflow; direct fetch reports failure |
-| X-specific retrieval | Native OpenAI search where sufficient; no xAI adapter |
+It does not own:
 
-## Replacement and cutover
+- local repository/filesystem operations (`read`, Bash, `git`, `gh`);
+- browser automation or JS-only page execution;
+- video downloads, frames, OCR, or visual analysis (`yt-dlp`, `ffmpeg`, vision
+  workflows); or
+- implicit cloning, persistent search storage, or provider answer synthesis.
 
-Keep `pi-web-access` installed during rollout. Its search registrations are
-disabled in the active config while its specialty tools remain available for
-rollback. The active config is `$XDG_CONFIG_HOME/pi/web-search.json` when XDG
-is set, otherwise `~/.pi/web-search.json`.
+## Coexistence and cutover
 
-The replacement acceptance matrix is:
+Keep `pi-web-access` installed during rollout. Its duplicate search
+registration is disabled in the active Pi configuration while specialty tools
+remain available for rollback. The config is `$XDG_CONFIG_HOME/pi/web-search.json`
+when XDG is set, otherwise `~/.pi/web-search.json`.
 
-1. Exactly `web_search`, `web_fetch`, and `web_research` register.
-2. Native search uses the exact active model and model-registry auth.
-3. Brave never runs from key presence alone and never causes hidden fallback.
-4. Direct HTML/text fetch passes SSRF, redirect, MIME, byte, deadline, and
-   cancellation tests.
-5. PDF and YouTube caption paths are bounded, local, and cleaned up.
-6. Research validates budgets before effects and reports partial completion.
-7. Deterministic offline tests pass; live tests are explicit and credential
-   gated.
-8. Re-enabling `pi-web-access` is the rollback; uninstall only after the
-   workflows above are exercised in the user's normal session.
+Acceptance gates:
 
-## Direct fetch invariants
-
-```text
-validate request
-  -> create one caller/deadline signal
-  -> resolve and reject non-global addresses
-  -> connect using the validated address while retaining host/SNI
-  -> follow only manually revalidated redirects
-  -> stream and bound response bytes
-  -> validate status and MIME
-  -> extract locally or return explicitly marked raw HTML
-  -> bound output and fence it as untrusted
-  -> close body/socket, child process, temporary files, and cancellation hooks
-```
-
-One overall deadline covers DNS, connect, redirects, body reads, extraction,
-and specialty subprocesses. No phase resets it.
+1. OpenAI/Codex fixture and live smoke paths remain green.
+2. Each added adapter has deterministic offline request/normalization/error
+   tests.
+3. No provider hint can silently select a different provider.
+4. `bun run check` and `git diff --check` pass.
+5. Live calls are credential-gated and run only as an explicit smoke test.

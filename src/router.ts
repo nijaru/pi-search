@@ -10,9 +10,16 @@ export type SearchBillingPolicy = "free-only" | "prefer-free" | "allow-configure
 export interface SearchRouterOptions {
 	readonly openai?: Provider;
 	readonly openaiCodex?: Provider;
+	readonly gemini?: Provider;
+	readonly xai?: Provider;
+	readonly xaiX?: Provider;
 	readonly brave?: Provider;
+	readonly exa?: Provider;
+	readonly parallel?: Provider;
 	/** Credential presence is supplied by the construction boundary. */
 	readonly braveConfigured?: boolean;
+	readonly exaConfigured?: boolean;
+	readonly parallelConfigured?: boolean;
 	/** Explicit user assertion that Brave calls are covered by free capacity. */
 	readonly braveFreeCapacityConfigured?: boolean;
 	readonly braveCapacity?: BraveCapacityTracker;
@@ -48,6 +55,8 @@ function nativeModelCompatible(provider: ProviderId, model: ExtensionContext["mo
 	if (model === undefined) return false;
 	if (provider === "openai") return model.provider === "openai" && model.api === "openai-responses";
 	if (provider === "openai-codex") return model.provider === "openai-codex" && model.api === "openai-codex-responses";
+	if (provider === "gemini") return model.provider === "google" && model.api === "google-generative-ai";
+	if (provider === "xai" || provider === "xai-x") return model.provider === "xai" && model.api === "openai-responses";
 	return false;
 }
 
@@ -62,7 +71,12 @@ function explicitProvider(
 	if (provider === "native") {
 		if (nativeModelCompatible("openai", context.model) && options.openai !== undefined) return options.openai;
 		if (nativeModelCompatible("openai-codex", context.model) && options.openaiCodex !== undefined) return options.openaiCodex;
-		return unavailable("Native search requires an active OpenAI Responses or Codex Responses model", provider);
+		if (policy === "allow-configured-metered" && nativeModelCompatible("gemini", context.model) && options.gemini !== undefined) return options.gemini;
+		if (policy === "allow-configured-metered" && nativeModelCompatible("xai", context.model) && options.xai !== undefined) return options.xai;
+		if (nativeModelCompatible("gemini", context.model) || nativeModelCompatible("xai", context.model)) {
+			return unavailable("Native grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
+		}
+		return unavailable("Native search requires an active supported grounded model", provider);
 	}
 	if (provider === "openai") {
 		if (!nativeModelCompatible("openai", context.model) || options.openai === undefined) return unavailable("OpenAI native search requires an active OpenAI Responses model", provider);
@@ -71,6 +85,31 @@ function explicitProvider(
 	if (provider === "openai-codex") {
 		if (!nativeModelCompatible("openai-codex", context.model) || options.openaiCodex === undefined) return unavailable("Codex native search requires an active Codex Responses model", provider);
 		return options.openaiCodex;
+	}
+	if (provider === "gemini") {
+		if (policy !== "allow-configured-metered") return unavailable("Gemini grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
+		if (!nativeModelCompatible("gemini", context.model) || options.gemini === undefined) return unavailable("Gemini grounding requires an active Gemini model", provider);
+		if (!canServe(options.gemini, request)) return unavailable("Gemini grounding cannot satisfy the requested search constraints", provider);
+		return options.gemini;
+	}
+	if (provider === "xai" || provider === "xai-x") {
+		if (policy !== "allow-configured-metered") return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it`, provider);
+		const selected = provider === "xai" ? options.xai : options.xaiX;
+		if (!nativeModelCompatible(provider, context.model) || selected === undefined) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search requires an active xAI Responses model`, provider);
+		if (!canServe(selected, request)) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search cannot satisfy the requested search constraints`, provider);
+		return selected;
+	}
+	if (provider === "exa") {
+		if (options.exa === undefined || options.exaConfigured !== true) return unavailable("Exa search is not configured", provider);
+		if (policy !== "allow-configured-metered") return unavailable("Exa is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
+		if (!canServe(options.exa, request)) return unavailable("Exa cannot satisfy the requested search constraints", provider);
+		return options.exa;
+	}
+	if (provider === "parallel") {
+		if (options.parallel === undefined || options.parallelConfigured !== true) return unavailable("Parallel search is not configured", provider);
+		if (policy !== "allow-configured-metered") return unavailable("Parallel is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
+		if (!canServe(options.parallel, request)) return unavailable("Parallel cannot satisfy the requested search constraints", provider);
+		return options.parallel;
 	}
 	if (provider === "brave") {
 		if (options.brave === undefined || options.braveConfigured !== true) return unavailable("Brave search is not configured", provider);
@@ -103,6 +142,14 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 			if (options.openai === undefined) return unavailable("OpenAI native search is not registered", "openai");
 			return options.openai;
 		}
+		if (policy === "allow-configured-metered" && context.model?.provider === "google" && nativeModelCompatible("gemini", context.model)) {
+			if (options.gemini === undefined) return unavailable("Gemini grounding is not registered", "gemini");
+			return options.gemini;
+		}
+		if (policy === "allow-configured-metered" && context.model?.provider === "xai" && nativeModelCompatible("xai", context.model)) {
+			if (options.xai === undefined) return unavailable("xAI web search is not registered", "xai");
+			return options.xai;
+		}
 
 		const mode = normalized.mode ?? "auto";
 		const braveCanMatchMode = options.brave !== undefined && canServe(options.brave, normalized);
@@ -121,6 +168,6 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		if (braveConfigured && mode !== "auto" && options.brave !== undefined && !braveCanMatchMode) {
 			return unavailable(`Brave cannot satisfy ${mode} search semantics`, "brave");
 		}
-		return unavailable("No eligible search provider is configured; enable Brave free capacity or use an active OpenAI/Codex model", "router");
+		return unavailable("No eligible search provider is configured; enable Brave free capacity or use an active grounded model", "router");
 	};
 }
