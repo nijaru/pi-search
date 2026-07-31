@@ -4,7 +4,8 @@ import { createProviderError, SearchToolError, toSearchToolError } from "./error
 export const DEFAULT_MAX_RESULTS = 10;
 export const MAX_RESULTS = 20;
 export const MAX_QUERY_LENGTH = 2_000;
-export const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
+/** Native model-mediated search can spend tens of seconds grounding a query. */
+export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
 
 function invalidRequest(message: string): SearchToolError {
 	return new SearchToolError("WEB_SEARCH_INVALID_REQUEST", message);
