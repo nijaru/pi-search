@@ -2,7 +2,7 @@ import type { Provider, ProviderContext, SearchRequest, SearchResponse } from ".
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
 
 export const DEFAULT_MAX_RESULTS = 10;
-export const MAX_RESULTS = 100;
+export const MAX_RESULTS = 20;
 export const MAX_QUERY_LENGTH = 2_000;
 export const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
 
@@ -38,19 +38,6 @@ function normalizeDomainList(value: readonly string[] | undefined, field: string
 		return normalizeSearchDomain(domain, `${field}[${index}]`);
 	});
 	return [...new Set(domains)];
-}
-
-function validateTimestamp(value: string | undefined, field: string): void {
-	if (value === undefined) {
-		return;
-	}
-	if (
-		typeof value !== "string" ||
-		!/^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T.*)?$/.test(value) ||
-		!Number.isFinite(Date.parse(value))
-	) {
-		throw invalidRequest(`Search ${field} must be a valid ISO-8601 timestamp`);
-	}
 }
 
 /** Validate and normalize the public search request before any provider call. */
@@ -89,16 +76,6 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 			throw invalidRequest(`Search domain cannot be both included and excluded: ${overlap}`);
 		}
 	}
-	validateTimestamp(request.publishedAfter, "publishedAfter");
-	validateTimestamp(request.publishedBefore, "publishedBefore");
-	if (
-		request.publishedAfter !== undefined &&
-		request.publishedBefore !== undefined &&
-		Date.parse(request.publishedAfter) > Date.parse(request.publishedBefore)
-	) {
-		throw invalidRequest("Search publishedAfter must not be later than publishedBefore");
-	}
-
 	return {
 		...request,
 		query,

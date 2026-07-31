@@ -63,7 +63,13 @@ export type SearchToolErrorCode =
 	| "WEB_SEARCH_HTTP"
 	| "WEB_SEARCH_UNSUPPORTED"
 	| "WEB_SEARCH_PROVIDER_UNAVAILABLE"
-	| "WEB_SEARCH_UNKNOWN";
+	| "WEB_SEARCH_UNKNOWN"
+	| "WEB_RESEARCH_INVALID_REQUEST"
+	| "WEB_RESEARCH_BUDGET"
+	| "WEB_RESEARCH_TIMEOUT"
+	| "WEB_RESEARCH_CANCELED"
+	| "WEB_RESEARCH_PROVIDER"
+	| "WEB_RESEARCH_UNKNOWN";
 
 /** A stable error shape thrown so Pi records an unsuccessful tool call. */
 export class SearchToolError extends Error {

@@ -3,9 +3,8 @@
  *
  * These types are the foundation of the extension. They are intentionally
  * agnostic of how a provider fulfills a request — whether by a direct HTTP
- * search endpoint (Exa, Brave, Parallel) or by a model-mediated grounding
- * call (xAI `x_search`, Gemini grounding, OpenAI `web_search`, Claude
- * `WebSearch`). See `docs/DESIGN.md` for the two adapter families.
+ * search endpoint (Brave) or by a model-mediated native call (OpenAI/Codex
+ * `web_search`). See `docs/DESIGN.md` for the shipped boundary.
  *
  * Nothing here performs I/O or depends on Pi runtime APIs, so it can be
  * unit-tested deterministically and offline. Provider adapters build on these
@@ -125,26 +124,14 @@ export interface ProviderUsage {
  * ranking (D3).
  */
 export interface ProviderCapabilities {
-	/** Semantic / neural similarity search (e.g. Exa). */
-	readonly semantic?: boolean;
-	/** Classic keyword / exact-match retrieval (e.g. Brave). */
+	/** Classic keyword / exact-match retrieval. */
 	readonly keyword?: boolean;
-	/** Freshness-sensitive: index updated frequently, exposes published dates. */
+	/** Freshness-sensitive retrieval. */
 	readonly freshness?: boolean;
-	/** Returns source excerpts or highlights alongside the URL. */
+	/** Returns source excerpts alongside the URL. */
 	readonly excerpts?: boolean;
-	/** Returns a structured answer/excerpt for the page contents (Readability-like). */
-	readonly extraction?: boolean;
-	/** Covers social/X/Twitter content (e.g. xAI `x_search`). */
-	readonly social?: boolean;
-	/** Resolves multi-topic / multi-hop queries in a single call (e.g. Parallel). */
-	readonly multiHop?: boolean;
-	/** Provider can produce a synthesized answer (opt-in; non-default per D2). */
-	readonly answerSynthesis?: boolean;
 	/** Supports domain include/exclude filters. */
 	readonly domainFilter?: boolean;
-	/** Supports date-range filtering (from/to). */
-	readonly dateFilter?: boolean;
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────
@@ -154,16 +141,10 @@ export interface ProviderCapabilities {
  * router can pick a provider whose capabilities match the requested mode.
  */
 export const SearchMode = {
-	/** Semantic similarity; find conceptually related content. */
-	semantic: "semantic",
 	/** Exact / keyword matching. */
 	keyword: "keyword",
 	/** Freshness-first; newest relevant results. */
 	fresh: "fresh",
-	/** Multi-hop / multi-topic research resolution. */
-	multiHop: "multiHop",
-	/** Social/X/Twitter content. */
-	social: "social",
 	/** Provider-native default (no explicit bias). */
 	auto: "auto",
 } as const;
@@ -197,38 +178,17 @@ export interface SearchRequest {
 	readonly maxResults?: number;
 	/** Restrict/exclude hosts. */
 	readonly domains?: DomainFilter;
-	/** Only results published after this ISO-8601 timestamp (inclusive). */
-	readonly publishedAfter?: IsoTimestamp;
-	/** Only results published before this ISO-8601 timestamp (inclusive). */
-	readonly publishedBefore?: IsoTimestamp;
 	/**
 	 * Hint to prefer a specific provider by id. The router may still override
 	 * when the provider lacks the requested capability. Normal callers should
 	 * omit this and let the router choose (D3).
 	 */
 	readonly providerHint?: ProviderId;
-	/**
-	 * Opt into a provider-synthesized answer. Disabled by default per D2:
-	 * the default path returns inspectable evidence, not opaque summaries.
-	 * When enabled, the chosen provider may populate `SearchResponse.answer`.
-	 */
-	readonly wantAnswer?: boolean;
-	/**
-	 * Opt into raw highlight spans (offset snippets) when the provider
-	 * supports them. Off by default; excerpts are returned regardless.
-	 */
-	readonly wantHighlights?: boolean;
 }
 
 /** Options whose handling must be visible in the normalized response. */
-export type SearchOption =
-	| "mode"
-	| "maxResults"
-	| "domains"
-	| "publishedAfter"
-	| "publishedBefore"
-	| "wantAnswer"
-	| "wantHighlights";
+export type SearchOption = "mode" | "maxResults" | "domains";
+
 
 /** A non-fatal limitation or partial-application notice. */
 export interface SearchWarning {
@@ -257,11 +217,6 @@ export interface SearchResult {
 	 * when the provider exposes any text; never synthesized.
 	 */
 	readonly excerpt?: string;
-	/**
-	 * Provider-highlighted spans within the excerpt (offset ranges or marked-up
-	 * text). Only when `wantHighlights` is set and the provider supports it.
-	 */
-	readonly highlights?: readonly string[];
 	/** The provider that produced this result. */
 	readonly provider: ProviderId;
 	/** The query that produced this result. */
@@ -283,11 +238,6 @@ export interface SearchResponse {
 	readonly query: string;
 	/** Results, best-first. May be empty. */
 	readonly results: readonly SearchResult[];
-	/**
-	 * Provider-synthesized answer. Only present when the request had
-	 * `wantAnswer: true` and the provider supports it (D2 non-default path).
-	 */
-	readonly answer?: string;
 	/** Which provider actually served the request. */
 	readonly provider: ProviderId;
 	/** Options the provider applied, including post-filtered constraints. */
@@ -312,22 +262,34 @@ export interface SearchResponse {
 export interface ResearchBudget {
 	readonly maxSteps: number;
 	readonly maxProviderCalls: number;
+	readonly maxFetches: number;
 	readonly timeoutMs: number;
+	readonly maxOutputChars: number;
 	readonly maxCostUsd?: number;
 }
 
 export interface ResearchRequest {
-	readonly query: string;
+	readonly question: string;
+	/** The caller supplies the query plan; defaults to [question]. */
+	readonly queries?: readonly string[];
 	readonly budget: ResearchBudget;
-	/** Optional provider preferences; cross-provider use remains explicit. */
-	readonly providerHints?: readonly ProviderId[];
+	/** Select native search or Brave strictly for the whole invocation. */
+	readonly provider?: "native" | "brave";
+	/** Number of result URLs to fetch after search, bounded by budget.maxFetches. */
+	readonly fetchResults?: number;
 }
 
+export type ResearchStopReason = "completed" | "budget" | "deadline" | "canceled" | "provider-error";
+
 export interface ResearchResponse {
-	readonly query: string;
+	readonly question: string;
 	readonly results: readonly SearchResult[];
+	readonly fetched: readonly FetchedContent[];
 	readonly stepsCompleted: number;
 	readonly providerCalls: number;
+	readonly fetchesCompleted: number;
+	readonly fetchAttempts: number;
+	readonly stopReason: ResearchStopReason;
 	readonly usage?: ProviderUsage;
 	readonly warnings: readonly SearchWarning[];
 }
@@ -340,8 +302,14 @@ export function validateResearchBudget(budget: ResearchBudget): void {
 	if (!Number.isInteger(budget.maxProviderCalls) || budget.maxProviderCalls < 1) {
 		throw new Error("Research budget maxProviderCalls must be a positive integer");
 	}
+	if (!Number.isInteger(budget.maxFetches) || budget.maxFetches < 0) {
+		throw new Error("Research budget maxFetches must be a non-negative integer");
+	}
 	if (!Number.isFinite(budget.timeoutMs) || budget.timeoutMs <= 0) {
 		throw new Error("Research budget timeoutMs must be positive");
+	}
+	if (!Number.isInteger(budget.maxOutputChars) || budget.maxOutputChars < 1) {
+		throw new Error("Research budget maxOutputChars must be a positive integer");
 	}
 	if (budget.maxCostUsd !== undefined && (!Number.isFinite(budget.maxCostUsd) || budget.maxCostUsd < 0)) {
 		throw new Error("Research budget maxCostUsd must be non-negative");
@@ -366,6 +334,10 @@ export interface FetchRequest {
 	readonly offset?: number;
 	/** Format hint; the response reports the produced format explicitly. */
 	readonly format?: "markdown" | "text" | "html";
+	/** Maximum PDF pages to parse when the URL serves a PDF. */
+	readonly maxPages?: number;
+	/** Caption language passed to the local YouTube extractor. */
+	readonly captionLanguage?: string;
 	/** Strip the page to its main readable content (Readability). Default true. */
 	readonly readable?: boolean;
 	/** Permit bounded raw HTML when readable extraction fails. Default true. */
@@ -373,7 +345,7 @@ export interface FetchRequest {
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
-export type FetchExtraction = "readability" | "raw" | "plain-text";
+export type FetchExtraction = "readability" | "raw" | "plain-text" | "pdf" | "youtube-transcript";
 
 export interface FetchWarning {
 	readonly code: "truncated" | "raw-fallback";
@@ -446,15 +418,7 @@ export interface FindResult {
  * Identifier for a provider. Used in results and capability descriptors.
  * The concrete union grows as adapters land; string allows forward-compat.
  */
-export type ProviderId =
-	| "openai"
-	| "openai-codex"
-	| "exa"
-	| "brave"
-	| "parallel"
-	| "gemini"
-	| "xai"
-	| (string & {});
+export type ProviderId = "native" | "openai" | "openai-codex" | "brave" | (string & {});
 
 /**
  * A normalized error from a provider call. Carries enough to route retries
@@ -507,7 +471,7 @@ export interface Provider {
 	 *   kind `unsupported`;
 	 * - normalize results to {@link SearchResult};
 	 * - preserve `url`, `excerpt`, `publishedAt`, `provider`, `searchQuery`;
-	 * - never synthesize an answer unless `request.wantAnswer` is set.
+	 * - return evidence rather than an opaque provider answer.
 	 */
 	readonly search: (
 		request: SearchRequest,

@@ -21,7 +21,6 @@ const MAX_SOURCE_URL_LENGTH = 8_192;
 const MAX_SOURCE_TITLE_LENGTH = 500;
 const MAX_SOURCE_EXCERPT_LENGTH = 4_000;
 const MAX_SOURCE_ID_LENGTH = 500;
-const MAX_ANSWER_LENGTH = 8_000;
 
 export type OpenAIProviderId = "openai" | "openai-codex";
 export type OpenAIFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -56,14 +55,12 @@ interface SourceCandidate {
 	readonly excerpt?: string;
 	readonly publishedAt?: string;
 	readonly sourceId?: string;
-	readonly highlights?: readonly string[];
 }
 
 const capabilities: ProviderCapabilities = {
 	keyword: true,
 	freshness: true,
 	domainFilter: true,
-	answerSynthesis: true,
 };
 
 const profile: ProviderProfile = {
@@ -135,15 +132,6 @@ function parseHttpUrl(value: unknown): { url: string; sourceUrl?: string; domain
 	}
 }
 
-function stringArray(value: unknown): string[] | undefined {
-	if (!Array.isArray(value)) return undefined;
-	const values = value
-		.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-		.slice(0, 5)
-		.map((item) => item.slice(0, MAX_SOURCE_EXCERPT_LENGTH));
-	return values.length > 0 ? values : undefined;
-}
-
 function candidateFromRecord(value: unknown): SourceCandidate | undefined {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
 	const record = value as Record<string, unknown>;
@@ -153,7 +141,6 @@ function candidateFromRecord(value: unknown): SourceCandidate | undefined {
 	const excerpt = optionalString(record.snippet ?? record.text ?? record.description, MAX_SOURCE_EXCERPT_LENGTH);
 	const publishedAt = optionalTimestamp(record.published_at ?? record.publishedDate ?? record.published_date);
 	const sourceId = optionalString(record.id ?? record.source_id, MAX_SOURCE_ID_LENGTH);
-	const highlights = stringArray(record.highlights);
 	return {
 		url: parsed.url,
 		...(parsed.sourceUrl === undefined ? {} : { sourceUrl: parsed.sourceUrl }),
@@ -161,7 +148,6 @@ function candidateFromRecord(value: unknown): SourceCandidate | undefined {
 		...(excerpt === undefined ? {} : { excerpt }),
 		...(publishedAt === undefined ? {} : { publishedAt }),
 		...(sourceId === undefined ? {} : { sourceId }),
-		...(highlights === undefined ? {} : { highlights }),
 	};
 }
 
@@ -209,27 +195,10 @@ function mergeCandidate(
 		...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),
 		...(current.publishedAt === undefined && candidate.publishedAt !== undefined ? { publishedAt: candidate.publishedAt } : {}),
 		...(current.sourceId === undefined && candidate.sourceId !== undefined ? { sourceId: candidate.sourceId } : {}),
-		...(current.highlights === undefined && candidate.highlights !== undefined ? { highlights: candidate.highlights } : {}),
 	});
 }
 
-function answerFromOutput(items: readonly unknown[]): string | undefined {
-	const parts: string[] = [];
-	for (const item of items) {
-		if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
-		const record = item as Record<string, unknown>;
-		if (record.type !== "message" || !Array.isArray(record.content)) continue;
-		for (const part of record.content) {
-			if (typeof part !== "object" || part === null || Array.isArray(part)) continue;
-			const text = optionalString((part as Record<string, unknown>).text);
-			if (text !== undefined) parts.push(text);
-		}
-	}
-	const answer = parts.join("\n").trim();
-	return answer.length > 0 ? answer.slice(0, MAX_ANSWER_LENGTH) : undefined;
-}
-
-function resultFromCandidate(candidate: SourceCandidate, query: string, provider: OpenAIProviderId, wantHighlights: boolean): SearchResult {
+function resultFromCandidate(candidate: SourceCandidate, query: string, provider: OpenAIProviderId): SearchResult {
 	const parsed = new URL(candidate.url);
 	return {
 		url: candidate.url,
@@ -238,7 +207,6 @@ function resultFromCandidate(candidate: SourceCandidate, query: string, provider
 		domain: parsed.hostname.toLowerCase(),
 		...(candidate.publishedAt === undefined ? {} : { publishedAt: candidate.publishedAt }),
 		...(candidate.excerpt === undefined ? {} : { excerpt: candidate.excerpt }),
-		...(wantHighlights && candidate.highlights !== undefined ? { highlights: candidate.highlights } : {}),
 		provider,
 		searchQuery: query,
 		...(candidate.sourceId === undefined ? {} : { sourceId: candidate.sourceId }),
@@ -292,9 +260,8 @@ export function normalizeOpenAIResponse(
 	}
 
 	const ordered = [...candidates.values()].slice(0, normalized.maxResults);
-	const results = ordered.map((candidate) => resultFromCandidate(candidate, normalized.query, provider, normalized.wantHighlights === true));
+	const results = ordered.map((candidate) => resultFromCandidate(candidate, normalized.query, provider));
 	const requestId = optionalString(root.id);
-	const answer = answerFromOutput(items);
 
 	return {
 		query: normalized.query,
@@ -302,7 +269,6 @@ export function normalizeOpenAIResponse(
 		provider,
 		appliedOptions: [],
 		warnings: [],
-		...(normalized.wantAnswer === true && answer === undefined ? {} : normalized.wantAnswer === true && answer !== undefined ? { answer } : {}),
 		...(requestId === undefined ? {} : { requestId }),
 	};
 }
@@ -329,14 +295,13 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 	if (normalized.domains?.exclude !== undefined && normalized.domains.exclude.length > 0) {
 		return unsupported(provider, "OpenAI web search does not support excluded-domain filters");
 	}
-	if (normalized.publishedAfter !== undefined || normalized.publishedBefore !== undefined) {
-		return unsupported(provider, "OpenAI web search does not support publication-date bounds");
-	}
-
 	const appliedOptions: SearchOption[] = ["maxResults"];
 	const warnings: SearchWarning[] = [];
-	if (normalized.mode === "auto" || normalized.mode === "fresh") {
+	if (normalized.mode === "auto" || normalized.mode === "keyword" || normalized.mode === "fresh") {
 		appliedOptions.push("mode");
+		if (normalized.mode === "keyword") {
+			warnings.push({ code: "unsupported-option", option: "mode", message: "OpenAI native search does not guarantee keyword-only ranking" });
+		}
 		if (normalized.mode === "fresh") {
 			warnings.push({
 				code: "unsupported-option",
@@ -354,14 +319,6 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 
 	const filters = domainFilters(normalized);
 	if (filters !== undefined) appliedOptions.push("domains");
-	if (normalized.wantHighlights === true) {
-		warnings.push({
-			code: "unsupported-option",
-			option: "wantHighlights",
-			message: "OpenAI web search exposes URL citations but not provider highlight spans",
-		});
-	}
-	if (normalized.wantAnswer === true) appliedOptions.push("wantAnswer");
 
 	const tool = {
 		type: "web_search",

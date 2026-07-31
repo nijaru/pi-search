@@ -1,0 +1,71 @@
+import { describe, expect, it } from "bun:test";
+import type { Provider, SearchResponse } from "./contracts";
+import { SearchToolError } from "./errors";
+import { executeResearch } from "./research-tool";
+
+function context(): never {
+	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
+}
+
+function provider(fail = false, estimatedCostUsd?: number, resultUrls = ["https://example.com/1"]): Provider {
+	let calls = 0;
+	return {
+		id: "openai",
+		capabilities: { keyword: true, freshness: true },
+		profile: { auth: "modelRegistry", costModel: "unknown", ...(estimatedCostUsd === undefined ? {} : { estimatedCostUsd }) },
+		search: async (request): Promise<SearchResponse> => {
+			calls += 1;
+			if (fail) throw new SearchToolError("WEB_SEARCH_RATE_LIMIT", "native rate limit");
+			return {
+				query: request.query,
+				results: [{ url: resultUrls[(calls - 1) % resultUrls.length]!, provider: "openai", searchQuery: request.query }],
+				provider: "openai",
+				appliedOptions: ["maxResults"],
+				warnings: [],
+			};
+		},
+	};
+}
+
+const budget = { maxSteps: 3, maxProviderCalls: 2, maxFetches: 0, timeoutMs: 5_000, maxOutputChars: 20_000 };
+
+describe("web_research", () => {
+	it("runs only caller-supplied queries under one provider and explicit bounds", async () => {
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget }, () => provider(), context());
+		expect(result).toMatchObject({ question: "main", providerCalls: 2, stepsCompleted: 2, fetchesCompleted: 0, fetchAttempts: 0, stopReason: "completed" });
+		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
+	});
+
+	it("returns a bounded partial result on provider failure", async () => {
+		const result = await executeResearch({ question: "main", budget }, () => provider(true), context());
+		expect(result.stopReason).toBe("provider-error");
+		expect(result.providerCalls).toBe(1);
+		expect(result.warnings[0]?.message).toContain("rate limit");
+	});
+
+	it("rejects invalid budgets before provider selection effects", async () => {
+		let selected = false;
+		await expect(executeResearch({ question: "main", budget: { ...budget, maxSteps: 0 } }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
+		expect(selected).toBe(false);
+	});
+
+	it("reserves estimated cost before each provider call", async () => {
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget: { ...budget, maxCostUsd: 1 } }, () => provider(false, 0.6), context());
+		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", usage: { costUsd: 0.6 } });
+	});
+
+	it("counts fetch attempts separately from successful fetches", async () => {
+		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["http://127.0.0.1/blocked", "http://127.0.0.1/blocked-2"]), context());
+		expect(result.fetchAttempts).toBe(1);
+		expect(result.fetchesCompleted).toBe(0);
+	});
+
+	it("bounds the serialized research response", async () => {
+		const result = await executeResearch({ question: "q".repeat(2_000), budget: { ...budget, maxOutputChars: 1_000 } }, () => provider(), context());
+		expect(new TextEncoder().encode(JSON.stringify(result, null, 2)).byteLength).toBeLessThanOrEqual(850);
+	});
+
+	it("rejects a cost ceiling when the selected provider has no estimate", async () => {
+		await expect(executeResearch({ question: "main", budget: { ...budget, maxCostUsd: 0 } }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
+	});
+});

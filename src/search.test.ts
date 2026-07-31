@@ -7,7 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 function makeProvider(search: Provider["search"]): Provider {
 	return {
-		id: "exa",
+		id: "brave",
 		capabilities: {},
 		profile: { auth: "environment", costModel: "unknown" },
 		search,
@@ -20,26 +20,25 @@ function successResponse(query = "q"): SearchResponse {
 		results: [
 			{
 				url: "https://example.com",
-				provider: "exa",
+				provider: "brave",
 				searchQuery: query,
 			},
 		],
-		provider: "exa",
+		provider: "brave",
 		appliedOptions: ["maxResults"],
 		warnings: [],
 	};
 }
 
 describe("search boundary", () => {
-	it("validates queries, result limits, domains, and dates before a call", () => {
+	it("validates queries, result limits, and domains before a call", () => {
 		expect(validateSearchRequest({ query: "  q  " })).toMatchObject({ query: "q", maxResults: 10, mode: "auto" });
 		expect(() => validateSearchRequest({ query: "   " })).toThrow("must not be empty");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 0 })).toThrow("maxResults");
-		expect(() => validateSearchRequest({ query: "q", maxResults: 101 })).toThrow("maxResults");
+		expect(() => validateSearchRequest({ query: "q", maxResults: 21 })).toThrow("maxResults");
 		expect(() => validateSearchRequest({ query: "q", domains: { include: ["example.com"], exclude: ["example.com"] } })).toThrow(
 			"both included and excluded",
 		);
-		expect(() => validateSearchRequest({ query: "q", publishedAfter: "not-a-date" })).toThrow("ISO-8601");
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {
@@ -72,9 +71,9 @@ describe("search boundary", () => {
 	it("maps provider failures to stable tool-visible codes and bounded diagnostics", async () => {
 		const provider = makeProvider(async () => {
 			throw createProviderError({
-				provider: "exa",
+				provider: "brave",
 				kind: "rateLimit",
-				message: "Exa rate limit exceeded",
+				message: "Brave rate limit exceeded",
 				retryable: true,
 				status: 429,
 				requestId: "request-1",
@@ -127,7 +126,7 @@ describe("search boundary", () => {
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
 		const text = result.content[0];
 		expect(text.type).toBe("text");
-		if (text.type === "text") expect(text.text.length).toBeLessThanOrEqual(45_000);
+		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(45_000);
 		expect(result.details?.warnings.at(-1)).toMatchObject({ code: "partial-results" });
 	});
 
@@ -159,7 +158,7 @@ describe("search boundary", () => {
 	});
 
 	it("keeps SearchToolError instances stable when converting results", () => {
-		const error = new SearchToolError("WEB_SEARCH_TIMEOUT", "timed out", { provider: "exa", kind: "timeout" });
+		const error = new SearchToolError("WEB_SEARCH_TIMEOUT", "timed out", { provider: "brave", kind: "timeout" });
 		expect(error.code).toBe("WEB_SEARCH_TIMEOUT");
 	});
 });

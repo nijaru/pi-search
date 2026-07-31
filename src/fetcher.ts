@@ -3,6 +3,8 @@ import type { FetchRequest, FetchedContent, FetchOutputFormat } from "./contract
 import { SafeFetchError } from "./fetch-errors";
 import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } from "./ssrf";
 import type { DirectTransport } from "./direct-transport";
+import { extractPdfText } from "./pdf";
+import { extractYouTubeTranscript, parseYouTubeUrl } from "./youtube";
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_LENGTH = 8_000;
@@ -12,12 +14,12 @@ export const MAX_FETCH_RESPONSE_BYTES = 20 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 500;
 const MAX_OUTPUT_BYTES = 32_000;
 
-type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback">>;
+type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback" | "maxPages" | "captionLanguage">>;
 
 interface ExtractedContent {
 	readonly content: string;
 	readonly outputFormat: FetchOutputFormat;
-	readonly extraction: "readability" | "raw" | "plain-text";
+	readonly extraction: "readability" | "raw" | "plain-text" | "pdf" | "youtube-transcript";
 	readonly title?: string;
 	readonly fellBackToRaw?: boolean;
 }
@@ -28,6 +30,10 @@ export interface FetcherOptions {
 	readonly lookup?: Lookup;
 	readonly transport?: DirectTransport;
 	readonly now?: () => Date;
+	readonly pdfCommand?: string;
+	readonly youtubeCommand?: string;
+	readonly pdfMaxOutputBytes?: number;
+	readonly youtubeMaxOutputBytes?: number;
 }
 
 export async function fetchContent(
@@ -56,6 +62,9 @@ export async function fetchContent(
 	signal?.addEventListener("abort", onAbort, { once: true });
 
 	try {
+		if (parseYouTubeUrl(normalized.url) !== undefined) {
+			return await fetchYouTubeContent(normalized, controller.signal, options, options.now ?? (() => new Date()));
+		}
 		const fetched = await fetchRemoteUrl(normalized.url, {
 			signal: controller.signal,
 			lookup: options.lookup,
@@ -75,19 +84,29 @@ export async function fetchContent(
 
 		const contentType = response.headers.get("content-type") ?? "";
 		const mimeType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-		if (!isSupportedContentType(mimeType)) {
+		const pdfExpectedByMetadata = mimeType === "application/pdf" || mimeType === "application/octet-stream" || isPdfUrl(normalized.url);
+		if (!isSupportedContentType(mimeType) && !pdfExpectedByMetadata) {
 			await closeResponseBody(response.body);
 			throw new SafeFetchError({ kind: "unsupportedContentType", message: "Response content type is not supported" });
 		}
+		const responseByteLimit = options.maxResponseBytes === undefined && pdfExpectedByMetadata ? MAX_FETCH_RESPONSE_BYTES : maxResponseBytes;
 		const contentLength = parseContentLength(response.headers.get("content-length"));
-		if (contentLength !== undefined && contentLength > maxResponseBytes) {
+		if (contentLength !== undefined && contentLength > responseByteLimit) {
 			await closeResponseBody(response.body);
 			throw new SafeFetchError({ kind: "responseTooLarge", message: "Response exceeds the configured byte limit" });
 		}
 
-		const bytes = await readBoundedBody(response.body, maxResponseBytes, controller.signal);
-		const sourceText = decodeUtf8(bytes);
-		const extracted = await extractWithDeadline(sourceText, mimeType, normalized, controller.signal);
+		const bytes = await readBoundedBody(response.body, responseByteLimit, controller.signal);
+		const pdfExpected = pdfExpectedByMetadata && hasPdfHeader(bytes);
+		if (pdfExpectedByMetadata && !pdfExpected) {
+			throw new SafeFetchError({
+				kind: mimeType === "application/octet-stream" ? "unsupportedContentType" : "extraction",
+				message: mimeType === "application/octet-stream" ? "Binary response is not a PDF" : "Response was identified as PDF but did not contain a valid PDF header",
+			});
+		}
+		const extracted = pdfExpected
+			? await extractPdfContent(bytes, normalized, controller.signal, options.pdfCommand, options.pdfMaxOutputBytes)
+			: await extractWithDeadline(decodeUtf8(bytes), mimeType, normalized, controller.signal);
 		const sliced = sliceOutput(extracted.content, normalized.offset, normalized.maxLength);
 		const warnings = [
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
@@ -149,6 +168,14 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 	if (format !== "markdown" && format !== "text" && format !== "html") {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "format is not supported" });
 	}
+	const maxPages = request.maxPages ?? 100;
+	if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 500) {
+		throw new SafeFetchError({ kind: "invalidRequest", message: "maxPages must be between 1 and 500" });
+	}
+	const captionLanguage = request.captionLanguage ?? "en";
+	if (!/^[A-Za-z0-9,._*-]{1,32}$/.test(captionLanguage)) {
+		throw new SafeFetchError({ kind: "invalidRequest", message: "captionLanguage is invalid" });
+	}
 	return {
 		url,
 		maxLength,
@@ -156,7 +183,69 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 		format,
 		readable: request.readable ?? true,
 		allowRawHtmlFallback: request.allowRawHtmlFallback ?? true,
+		maxPages,
+		captionLanguage,
 	};
+}
+
+async function extractPdfContent(
+	bytes: Uint8Array,
+	request: NormalizedFetchRequest,
+	signal: AbortSignal,
+	command: string | undefined,
+	maxOutputBytes: number | undefined,
+): Promise<ExtractedContent> {
+	const result = await extractPdfText(bytes, {
+		signal,
+		command,
+		maxPages: request.maxPages,
+		maxOutputBytes,
+	});
+	return { content: result.text, outputFormat: "text", extraction: "pdf" };
+}
+
+async function fetchYouTubeContent(
+	request: NormalizedFetchRequest,
+	signal: AbortSignal,
+	options: FetcherOptions,
+	now: () => Date,
+): Promise<FetchedContent> {
+	const result = await extractYouTubeTranscript(request.url, {
+		signal,
+		command: options.youtubeCommand,
+		language: request.captionLanguage,
+		maxOutputBytes: options.youtubeMaxOutputBytes,
+	});
+	const sliced = sliceOutput(result.text, request.offset, request.maxLength);
+	return {
+		url: request.url,
+		content: sliced.content,
+		contentTrust: "untrusted",
+		contentType: "text/plain",
+		outputFormat: "text",
+		extraction: "youtube-transcript",
+		fetchedAt: now().toISOString(),
+		status: 200,
+		redirectCount: 0,
+		bytesRead: result.bytesRead,
+		truncated: sliced.truncated,
+		offset: request.offset,
+		...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
+		totalCharacters: result.text.length,
+		warnings: sliced.truncated ? [{ code: "truncated", message: "Content was truncated to the configured output bound" }] : [],
+	};
+}
+
+function isPdfUrl(value: string): boolean {
+	try {
+		return new URL(value).pathname.toLowerCase().endsWith(".pdf");
+	} catch {
+		return false;
+	}
+}
+
+function hasPdfHeader(bytes: Uint8Array): boolean {
+	return bytes.length >= 5 && new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";
 }
 
 async function extractWithDeadline(

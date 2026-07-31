@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { chmodSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { FetchRequest } from "./contracts";
 import { SafeFetchError } from "./fetch-errors";
 import { fetchContent } from "./fetcher";
@@ -104,9 +107,25 @@ describe("direct content fetch", () => {
 			lookup: publicLookup,
 			transport: transportFor("", "application/pdf", { body: binaryBody }),
 		});
-		await expect(unsupported).rejects.toMatchObject({ kind: "unsupportedContentType" });
-		await expect(unsupported).rejects.toThrow("Response content type is not supported");
+		await expect(unsupported).rejects.toMatchObject({ kind: "extraction" });
+		await expect(unsupported).rejects.toThrow("valid PDF header");
 		expect(read).toBe(true);
+	});
+
+	it("extracts PDF URLs locally without publishing the downloaded file", async () => {
+		const script = join(tmpdir(), `pi-search-pdftotext-${process.pid}-${Date.now()}.sh`);
+		writeFileSync(script, "#!/bin/sh\nprintf 'PDF passage\\n'\n");
+		chmodSync(script, 0o700);
+		try {
+			const result = await fetchContent({ ...baseRequest, url: "https://example.test/report.pdf" }, undefined, {
+				lookup: publicLookup,
+				pdfCommand: script,
+				transport: transportFor("%PDF-test", "application/pdf"),
+			});
+			expect(result).toMatchObject({ extraction: "pdf", outputFormat: "text", content: "PDF passage", contentTrust: "untrusted" });
+		} finally {
+			unlinkSync(script);
+		}
 	});
 
 	it("enforces actual streamed byte limits without Content-Length", async () => {
@@ -163,6 +182,18 @@ describe("direct content fetch", () => {
 		const pending = fetchContent(baseRequest, controller.signal, { lookup: publicLookup, transport: waiting, timeoutMs: 1_000 });
 		controller.abort();
 		await expect(pending).rejects.toMatchObject({ kind: "canceled" });
+	});
+
+	it("dispatches YouTube URLs to bounded local captions without direct HTTP", async () => {
+		const script = join(tmpdir(), `pi-search-ytdlp-${process.pid}-${Date.now()}.sh`);
+		writeFileSync(script, "#!/bin/sh\nout=''\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = \"--output\" ]; then shift; out=\"$1\"; fi\n  shift\ndone\nout=$(printf '%s' \"$out\" | sed 's/%(ext)s/vtt/')\nprintf 'WEBVTT\\n\\n00:00.000 --> 00:01.000\\nCaption text\\n' > \"$out\"\n");
+		chmodSync(script, 0o700);
+		try {
+			const result = await fetchContent({ url: "https://www.youtube.com/watch?v=abc12345678" }, undefined, { youtubeCommand: script });
+			expect(result).toMatchObject({ extraction: "youtube-transcript", outputFormat: "text", content: "Caption text", contentTrust: "untrusted" });
+		} finally {
+			unlinkSync(script);
+		}
 	});
 
 	it("maps non-success HTTP responses to typed failures", async () => {

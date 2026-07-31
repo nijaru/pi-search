@@ -13,7 +13,7 @@ import {
 function makeResult(over: Partial<SearchResult> = {}): SearchResult {
 	return {
 		url: "https://example.com/a",
-		provider: "exa",
+		provider: "brave",
 		searchQuery: "query",
 		...over,
 	};
@@ -21,14 +21,14 @@ function makeResult(over: Partial<SearchResult> = {}): SearchResult {
 
 function makeProvider(over: Partial<Provider> = {}): Provider {
 	return {
-		id: "exa",
-		capabilities: { semantic: true, excerpts: true },
+		id: "brave",
+		capabilities: { keyword: true, excerpts: true },
 		profile: { auth: "environment", costModel: "per-request", estimatedCostUsd: 0.01 },
 		async search(_req: SearchRequest, _signal: AbortSignal, _context: ProviderContext): Promise<SearchResponse> {
 			return {
 				query: "query",
 				results: [makeResult()],
-				provider: "exa",
+				provider: "brave",
 				appliedOptions: [],
 				warnings: [],
 			};
@@ -39,11 +39,8 @@ function makeProvider(over: Partial<Provider> = {}): Provider {
 
 describe("contracts", () => {
 	it("SearchMode exposes the expected routing axes", () => {
-		expect(SearchMode.semantic).toBe("semantic");
 		expect(SearchMode.keyword).toBe("keyword");
 		expect(SearchMode.fresh).toBe("fresh");
-		expect(SearchMode.multiHop).toBe("multiHop");
-		expect(SearchMode.social).toBe("social");
 		expect(SearchMode.auto).toBe("auto");
 	});
 
@@ -57,20 +54,19 @@ describe("contracts", () => {
 	it("SearchResult preserves the evidence-first fields", () => {
 		const r = makeResult({ title: "t", excerpt: "e", publishedAt: "2026-01-01" });
 		expect(r.url).toBe("https://example.com/a");
-		expect(r.provider).toBe("exa");
+		expect(r.provider).toBe("brave");
 		expect(r.searchQuery).toBe("query");
 		expect(r.excerpt).toBe("e");
 	});
 
-	it("SearchResponse defaults to no synthesized answer", async () => {
+	it("SearchResponse contains evidence metadata", async () => {
 		const res = await makeProvider().search({ query: "q" }, new AbortController().signal, {});
-		expect(res).toMatchObject({ appliedOptions: [], warnings: [] });
-		expect(res.answer).toBeUndefined();
+		expect(res).toMatchObject({ appliedOptions: [], warnings: [], provider: "brave" });
 	});
 
 	it("hasCapability reflects declared capabilities", () => {
 		const p = makeProvider();
-		expect(hasCapability(p, "semantic")).toBe(true);
+		expect(hasCapability(p, "keyword")).toBe(true);
 		expect(hasCapability(p, "freshness")).toBe(false);
 	});
 
@@ -85,11 +81,12 @@ describe("contracts", () => {
 	});
 
 	it("research budgets reject unbounded or invalid values", () => {
-		validateResearchBudget({ maxSteps: 3, maxProviderCalls: 4, timeoutMs: 10_000, maxCostUsd: 1 });
-		expect(() => validateResearchBudget({ maxSteps: 0, maxProviderCalls: 1, timeoutMs: 10_000 })).toThrow(
+		validateResearchBudget({ maxSteps: 3, maxProviderCalls: 4, maxFetches: 1, timeoutMs: 10_000, maxOutputChars: 10_000, maxCostUsd: 1 });
+		expect(() => validateResearchBudget({ maxSteps: 0, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 10_000, maxOutputChars: 10_000 })).toThrow(
 			"maxSteps",
 		);
-		expect(() => validateResearchBudget({ maxSteps: 1, maxProviderCalls: 1, timeoutMs: 0 })).toThrow(
+		expect(() => validateResearchBudget({ maxSteps: 1, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 10_000, maxOutputChars: 10_000 })).not.toThrow();
+		expect(() => validateResearchBudget({ maxSteps: 1, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 0, maxOutputChars: 10_000 })).toThrow(
 			"timeoutMs",
 		);
 	});

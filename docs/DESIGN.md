@@ -8,96 +8,95 @@ The extension exposes exactly three Pi tools:
 - `web_fetch` retrieves bounded content from a selected URL.
 - `web_research` runs an explicit, budgeted multi-step workflow.
 
-In-content matching is a reusable internal helper for fetched content and
-research. It is not a public `web_find` tool. Browser automation and remote
-extraction are deferred.
+In-content matching is internal. Browser automation, crawling, and remote
+extraction services are not part of the extension.
 
 ## Provider boundary
 
-All providers implement the provider-neutral contract in
-`src/contracts.ts`. Provider routing, billing policy, provider comparison, and
-replacement scope are recorded in [`provider-policy.md`](provider-policy.md).
-There are two implementation families:
+The shipped providers are:
 
-- Direct HTTP providers: Exa, Brave, and Parallel.
-- Model-mediated providers: OpenAI/Codex native Responses search, Gemini, and
-  xAI, using the execution context's model registry for credentials and model
-  headers.
+- **OpenAI/Codex native Responses search**, selected for the active model and
+  authenticated through Pi's model registry.
+- **Brave**, optional for keyword/fresh searches when the user explicitly
+  asserts free capacity or permits metered use.
 
-The tool boundary supplies `ProviderContext`; adapters must not read Pi's
-model registry, credentials, or other runtime state through globals. Direct
-providers may ignore model context. The provider profile supplies advisory
-latency, cost, and authentication metadata for routing; actual usage is
-returned when the provider reports it.
+The tool boundary supplies `ProviderContext`; adapters must not read Pi's model
+registry, credentials, or other runtime state through globals. Native search is
+strict: an authentication, rate-limit, or transient failure is visible and
+never falls through to another provider. Brave is also strict: a failure never
+starts a second provider call.
 
-Normal search selects one provider. When the active Pi model is OpenAI or
-Codex, the custom tool uses that model's native Responses `web_search` first;
-a failure is visible and never falls back to Exa. For other models, the
-current default is `free-only`: Brave serves general keyword/fresh searches
-only when `PI_SEARCH_BRAVE_FREE_ONLY=1` asserts free capacity, while metered
-Brave or Exa requires `PI_SEARCH_ALLOW_METERED=1`. Cross-provider calls are
-permitted only inside an explicitly requested research workflow. The policy never hides a paid fallback behind quota or transient
-errors. Gemini and xAI remain explicit model-mediated paths, while Brave, Exa,
-and Parallel are direct HTTP adapters.
+Exa, Parallel, Gemini, and xAI are intentionally omitted. They add metered
+semantic, multi-hop, grounding, or social capabilities that are not required by
+the primary OpenAI/Codex workflow. If a future workflow justifies one, add it
+as a separate reviewed adapter rather than enabling hidden fallback.
 
-## Constraint semantics
+## Search routing
 
-Search options are observable. Providers list applied options in the response
-and report unsupported or partial options as warnings, or raise a normalized
-`unsupported` error. A hard domain/date constraint must be routed to a capable
-provider or applied by a semantically correct post-filter; it must never be
-silently discarded.
+Normal search selects exactly one provider:
 
-## Fetch safety
+1. An active OpenAI/Codex model uses that model's native `web_search`.
+2. Other models may use Brave only when `BRAVE_API_KEY` is configured and
+   `PI_SEARCH_BRAVE_FREE_ONLY=1` asserts free capacity.
+3. `PI_SEARCH_ALLOW_METERED=1` explicitly permits configured metered Brave use.
+4. Without an eligible provider, the tool fails clearly; it does not spend
+   money to recover.
 
-The first fetch implementation uses a pinned direct HTTP transport, manual
-redirect validation, DNS/IP SSRF checks, streamed response-size limits,
-one overall deadline, cancellation, and local extraction. It does not trust
-proxy resolution in the initial path. Fetched content is untrusted data and is
-clearly fenced at the Pi tool boundary; `FetchedContent.contentTrust` is always
-`"untrusted"`. Successful results report the produced format, extraction
-method, redirect count, bytes read, and truncation state. If local extraction
-fails, the fetcher may return bounded raw HTML only when the request permits
-that fallback and marks the produced format accordingly.
+The public search surface is deliberately small: query, result limit, keyword
+or freshness mode, domain include/exclude filters, and strict `native` or
+`brave` provider selection. Results are evidence, not provider-synthesized
+answers.
 
-Remote extraction services such as Jina are not part of the default path. Any
-future remote extractor needs explicit opt-in plus a separate privacy, cost,
-redirect, and SSRF review because the extension cannot inspect a third-party
-fetcher's server-side redirects.
+## Fetch safety and specialty handling
 
-## Specialty coverage
+The fetch operation uses a pinned direct HTTP transport, manual redirect
+validation, DNS/IP SSRF checks, streamed response-size limits, one overall
+deadline, cancellation, and local extraction. Fetched content is always
+untrusted data and is fenced at the Pi tool boundary. Successful results report
+the produced format, extraction method, redirect count, bytes read, and
+truncation state.
 
-X/social search, YouTube transcripts, PDFs, and GitHub repository exploration
-are separate capability handlers, not hidden fallbacks from ordinary HTML
-fetching. See [`provider-policy.md`](provider-policy.md) for the replacement
-acceptance matrix and intentional non-goals.
+`web_fetch` owns these URL-based specialty paths:
+
+- **PDF:** safe-fetch the bytes, validate the PDF magic header, run local
+  `pdftotext` with page/output bounds, and remove the temporary file. Scanned
+  and encrypted PDFs fail explicitly; OCR is not implicit.
+- **YouTube:** recognize supported video URLs, run `yt-dlp` with
+  `--ignore-config`, `--no-netrc`, `--no-playlist`, captions-only flags,
+  bounded output, and temporary-file cleanup. Only canonical HTTPS YouTube
+  hosts/video IDs are accepted; the original URL is reduced to a canonical
+  YouTube URL before the subprocess runs. It returns captions only; frames,
+  downloads, and visual analysis remain outside the extension. The bounded
+  subprocess path currently requires POSIX process limits; Windows reports a
+  clear unsupported-platform error rather than running unbounded.
+
+Local filesystem PDFs, repository operations, Git history, GitHub issues/PRs,
+video downloads, frames, and OCR belong to Bash with `read`, `git`, `gh`,
+`yt-dlp`, `ffmpeg`, or dedicated workflows. The extension never clones a
+repository or reads an arbitrary local path as a side effect of URL fetching.
 
 ## Research limits
 
-`web_research` requires a `ResearchBudget` before making a provider call:
+`web_research` is deterministic rather than an additional model planner. The
+calling model supplies the question and optional explicit query list. It:
 
-- positive `maxSteps`;
-- positive `maxProviderCalls`;
-- positive `timeoutMs`; and
-- optional non-negative `maxCostUsd`.
+- selects one provider once for the invocation;
+- runs searches sequentially;
+- optionally fetches a bounded number of result URLs in result order;
+- counts search calls, fetches, and total steps separately;
+- uses one overall deadline;
+- bounds output and reports partial failures; and
+- performs no hidden retries, provider fan-out, answer synthesis, or paid
+  fallback.
 
-The orchestrator validates the budget up front and stops at every limit. When a
-cost ceiling is set, every selected provider must have a cost estimate; the
-orchestrator reserves that estimate before a call and reconciles it with actual
-usage when available. It reports completed steps, provider calls, usage, and
-warnings. Provider fan-out is explicit and bounded; there are no hidden
-retries across paid providers.
+A cost ceiling is rejected unless the selected provider supplies a reliable
+per-call estimate. Native provider-internal search activity cannot provide an
+exact dollar guarantee, so the default research path uses no cost promise and
+relies on the same native subscription policy as ordinary search.
 
-## Initial provider target
+## Replacement scope
 
-The initial target set is deliberately limited to six niches:
-
-- OpenAI/Codex native search for the active model's subscription capability;
-- Exa for semantic and technical retrieval;
-- Brave for independent keyword retrieval, freshness, and latency;
-- Gemini for Google-backed grounding;
-- Parallel for multi-hop research;
-- xAI for social/X retrieval.
-
-This is a target set, not a promise that all six ship before the first useful
-vertical slice. Providers without a distinct role remain deferred.
+This scope replaces the useful, cost-sensitive portions of `pi-web-access`
+without reproducing its hidden provider chains, curator UI, persistent search
+storage, browser-cookie Gemini access, remote extraction fallbacks, implicit
+GitHub cloning, video analysis, or automatic PDF writes to `~/Downloads`.

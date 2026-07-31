@@ -21,21 +21,15 @@ describe("BraveProvider", () => {
 		const plan = buildBraveRequest({
 			query: "typescript fetch",
 			mode: "fresh",
-			maxResults: 30,
+			maxResults: 20,
 			domains: { include: ["Example.com", "docs.example.com"], exclude: ["blocked.example"] },
-			wantAnswer: true,
-			wantHighlights: true,
 		});
 		const url = new URL(plan.url);
 		expect(url.searchParams.get("q")).toBe("(site:example.com OR site:docs.example.com) typescript fetch -site:blocked.example");
 		expect(url.searchParams.get("count")).toBe(String(BRAVE_MAX_RESULTS));
 		expect(url.searchParams.get("freshness")).toBe("pm");
 		expect(plan.appliedOptions).toEqual(["maxResults", "domains", "mode"]);
-		expect(plan.warnings).toEqual([
-			{ code: "partial-results", option: "maxResults", message: "Brave returns at most 20 results per request" },
-			{ code: "unsupported-option", option: "wantAnswer", message: "Brave returns evidence only and does not synthesize an answer" },
-			{ code: "unsupported-option", option: "wantHighlights", message: "Brave returns snippets, not provider highlight spans" },
-		]);
+		expect(plan.warnings).toEqual([]);
 	});
 
 	it("normalizes evidence and post-filters domains", () => {

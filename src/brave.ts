@@ -115,15 +115,6 @@ function malformed(message: string, cause?: unknown): never {
 	});
 }
 
-function unsupported(message: string): never {
-	throw createProviderError({
-		provider: "brave",
-		kind: "unsupported",
-		message,
-		retryable: false,
-	});
-}
-
 function objectValue(value: unknown, label: string): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		return malformed(`${label} is not an object`);
@@ -261,18 +252,12 @@ export interface BraveRequestPlan {
 /** Build one bounded Brave request; no pagination or hidden follow-up calls. */
 export function buildBraveRequest(request: SearchRequest, endpoint = BRAVE_SEARCH_ENDPOINT): BraveRequestPlan {
 	const normalized = validateSearchRequest(request);
-	if (normalized.publishedAfter !== undefined || normalized.publishedBefore !== undefined) {
-		return unsupported("Brave search cannot enforce publication date bounds");
-	}
 	const appliedOptions: SearchOption[] = ["maxResults"];
 	const warnings: SearchWarning[] = [];
 	const params = new URLSearchParams({
 		q: domainQuery(normalized),
 		count: String(Math.min(normalized.maxResults ?? 10, BRAVE_MAX_RESULTS)),
 	});
-	if (normalized.maxResults !== undefined && normalized.maxResults > BRAVE_MAX_RESULTS) {
-		warnings.push({ code: "partial-results", option: "maxResults", message: `Brave returns at most ${BRAVE_MAX_RESULTS} results per request` });
-	}
 	if (normalized.domains?.include?.length || normalized.domains?.exclude?.length) appliedOptions.push("domains");
 	switch (normalized.mode) {
 		case "auto":
@@ -284,13 +269,7 @@ export function buildBraveRequest(request: SearchRequest, endpoint = BRAVE_SEARC
 			appliedOptions.push("mode");
 			break;
 		default:
-			warnings.push({ code: "unsupported-option", option: "mode", message: `Brave does not provide ${String(normalized.mode)} search semantics` });
-	}
-	if (normalized.wantAnswer === true) {
-		warnings.push({ code: "unsupported-option", option: "wantAnswer", message: "Brave returns evidence only and does not synthesize an answer" });
-	}
-	if (normalized.wantHighlights === true) {
-		warnings.push({ code: "unsupported-option", option: "wantHighlights", message: "Brave returns snippets, not provider highlight spans" });
+			break;
 	}
 	return { url: `${endpoint}?${params.toString()}`, appliedOptions, warnings };
 }

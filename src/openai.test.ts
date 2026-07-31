@@ -28,7 +28,6 @@ const request: SearchRequest = {
 	query: "latest TypeScript release",
 	maxResults: 2,
 	domains: { include: ["typescriptlang.org"] },
-	wantAnswer: true,
 };
 
 const payload = {
@@ -60,10 +59,9 @@ const payload = {
 };
 
 describe("OpenAIProvider", () => {
-	it("normalizes citations and sources without exposing an answer by default", () => {
-		const result = normalizeOpenAIResponse(payload, { ...request, wantAnswer: false }, "openai");
+	it("normalizes citations and sources as inspectable evidence", () => {
+		const result = normalizeOpenAIResponse(payload, request, "openai");
 		expect(result).toMatchObject({ query: request.query, provider: "openai", requestId: "resp-123" });
-		expect(result.answer).toBeUndefined();
 		expect(result.results).toEqual([
 			{
 				url: "https://typescriptlang.org/docs",
@@ -106,12 +104,11 @@ describe("OpenAIProvider", () => {
 		expect(body).toMatchObject({ model: "gpt-5.4", stream: true, tool_choice: "required", store: false });
 		expect(body.tools).toEqual([{ type: "web_search", filters: { allowed_domains: ["typescriptlang.org"] } }]);
 		expect(result).toMatchObject({
-		provider: "openai",
-		requestId: "resp-123",
-		answer: "TypeScript's latest release is documented here.",
-		appliedOptions: ["maxResults", "mode", "domains", "wantAnswer"],
-		warnings: [],
-	});
+			provider: "openai",
+			requestId: "resp-123",
+			appliedOptions: ["maxResults", "mode", "domains"],
+			warnings: [],
+		});
 	});
 
 	it("parses the Codex SSE protocol and adds its account headers", async () => {
@@ -132,7 +129,7 @@ describe("OpenAIProvider", () => {
 			}) as OpenAIFetch,
 		});
 
-		const result = await provider.search({ query: "q", wantAnswer: true }, new AbortController().signal, context("openai-codex", token));
+		const result = await provider.search({ query: "q" }, new AbortController().signal, context("openai-codex", token));
 		expect(result.provider).toBe("openai-codex");
 		expect(result.requestId).toBe("codex-resp");
 	});
@@ -178,10 +175,6 @@ describe("OpenAIProvider", () => {
 			fetchImpl: (async () => response(payload)) as OpenAIFetch,
 		});
 		await expect(provider.search({ query: "q", domains: { exclude: ["example.com"] } }, new AbortController().signal, context())).rejects.toMatchObject({
-			provider: "openai",
-			kind: "unsupported",
-		});
-		await expect(provider.search({ query: "q", publishedAfter: "2026-01-01" }, new AbortController().signal, context())).rejects.toMatchObject({
 			provider: "openai",
 			kind: "unsupported",
 		});
