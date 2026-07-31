@@ -70,16 +70,17 @@ reliable `Content-Length`, non-HTML responses, extraction fallback, output
 truncation, cleanup, timeout, and cancellation without requiring network
 access by default.
 
-## 3. Capability-aware routing and remaining adapters
+## 3. Capability-aware routing and remaining adapters — in progress
 
-Add the router only after the first search and fetch paths have stable
-contracts. It must use capability, billing-policy, quota, and profile metadata,
-honor explicit latency/cost limits, and select one provider for ordinary
-search. The default is free-capacity first, then explicitly allowed metered
-capacity. Quota and transient failures remain visible; hidden paid fallback is
-forbidden.
+The initial router and Brave adapter are complete. The router uses capability,
+billing-policy, quota, and profile metadata, honors native OpenAI/Codex
+selection first, and selects one provider for ordinary search. The default is
+`free-only`: Brave is eligible only when `PI_SEARCH_BRAVE_FREE_ONLY=1`
+asserts free capacity, while metered Brave or Exa requires
+`PI_SEARCH_ALLOW_METERED=1`. Quota and transient failures remain visible;
+hidden paid fallback is forbidden.
 
-Add Brave, Gemini, Parallel, and xAI one at a time. Each adapter gets offline
+Add Gemini, Parallel, and xAI one at a time. Each adapter gets offline
 fixtures, explicit auth/availability behavior, rate-limit metadata, and a
 credential-gated live smoke test. Parallel belongs primarily in the research
 workflow; xAI and Gemini use the model-registry execution context. Start with

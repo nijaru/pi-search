@@ -10,6 +10,20 @@ function invalidRequest(message: string): SearchToolError {
 	return new SearchToolError("WEB_SEARCH_INVALID_REQUEST", message);
 }
 
+export function normalizeSearchDomain(value: string, field = "domain"): string {
+	const domain = value.trim().toLowerCase();
+	if (
+		domain.length === 0 ||
+		domain.length > 253 ||
+		!domain.includes(".") ||
+		domain.includes("..") ||
+		!domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
+	) {
+		throw invalidRequest(`Search ${field} must be a hostname without a scheme, path, port, or operators`);
+	}
+	return domain;
+}
+
 function normalizeDomainList(value: readonly string[] | undefined, field: string): string[] | undefined {
 	if (value === undefined) {
 		return undefined;
@@ -21,7 +35,7 @@ function normalizeDomainList(value: readonly string[] | undefined, field: string
 		if (typeof domain !== "string" || domain.trim().length === 0) {
 			throw invalidRequest(`Search ${field}[${index}] must be a non-empty string`);
 		}
-		return domain.trim();
+		return normalizeSearchDomain(domain, `${field}[${index}]`);
 	});
 	return [...new Set(domains)];
 }

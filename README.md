@@ -2,7 +2,7 @@
 
 A standalone, provider-neutral web search extension for Pi.
 
-> **Status:** search and direct fetch slices implemented. The extension uses native OpenAI/Codex `web_search` for the active OpenAI model and Exa otherwise, plus a safe local `web_fetch` path.
+> **Status:** search and direct fetch slices implemented. The extension uses native OpenAI/Codex `web_search` for the active OpenAI model, Brave only when `PI_SEARCH_BRAVE_FREE_ONLY=1` asserts free capacity (or metered mode is explicitly enabled), and Exa only when `PI_SEARCH_ALLOW_METERED=1` is set, plus a safe local `web_fetch` path.
 
 ## Scope
 
@@ -49,7 +49,7 @@ first implementation.
 2. Add a useful `web_search` with native OpenAI/Codex routing and the Exa
    adapter. **Complete.**
 3. Add bounded direct URL fetching with local safe extraction. **Complete.**
-4. Add capability-aware provider adapters and role-based routing.
+4. Add capability-aware provider adapters and role-based routing. **In progress:** Brave and the initial billing-aware router are complete.
 5. Add budget-enforced `web_research` only after the first two tools have
    stable contracts.
 
@@ -75,9 +75,11 @@ bun run check
 The implementation plan and design decisions are tracked in
 [`docs/implementation-plan.md`](docs/implementation-plan.md). Provider routing,
 billing policy, replacement scope, and specialty coverage are recorded in
-[`docs/provider-policy.md`](docs/provider-policy.md). The first vertical slice
-uses one direct provider and grows only when a concrete agent task requires
-another capability.
+[`docs/provider-policy.md`](docs/provider-policy.md). The first vertical slice uses native OpenAI/Codex, Brave, and Exa behind explicit
+billing switches. It grows only when a concrete agent task requires another
+capability. Set `BRAVE_API_KEY` and `PI_SEARCH_BRAVE_FREE_ONLY=1` for
+non-native free-capacity search; set `PI_SEARCH_ALLOW_METERED=1` only when
+metered Brave or Exa spending is intentional.
 
 ## License
 

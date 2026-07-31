@@ -1,4 +1,4 @@
-import type { ProviderError, ProviderId } from "./contracts";
+import type { ProviderError, ProviderId, ProviderRateLimitInfo, RequestId } from "./contracts";
 
 export interface ProviderErrorOptions {
 	readonly provider: ProviderId;
@@ -6,6 +6,9 @@ export interface ProviderErrorOptions {
 	readonly message: string;
 	readonly retryable: boolean;
 	readonly status?: number;
+	readonly requestId?: RequestId;
+	readonly retryAfterMs?: number;
+	readonly rateLimits?: ProviderRateLimitInfo;
 	readonly cause?: unknown;
 }
 
@@ -15,6 +18,9 @@ export class SearchProviderError extends Error implements ProviderError {
 	readonly kind: ProviderError["kind"];
 	readonly retryable: boolean;
 	readonly status?: number;
+	readonly requestId?: RequestId;
+	readonly retryAfterMs?: number;
+	readonly rateLimits?: ProviderRateLimitInfo;
 
 	constructor(options: ProviderErrorOptions) {
 		super(options.message, { cause: options.cause });
@@ -23,6 +29,9 @@ export class SearchProviderError extends Error implements ProviderError {
 		this.kind = options.kind;
 		this.retryable = options.retryable;
 		this.status = options.status;
+		this.requestId = options.requestId;
+		this.retryAfterMs = options.retryAfterMs;
+		this.rateLimits = options.rateLimits;
 	}
 }
 
@@ -53,6 +62,7 @@ export type SearchToolErrorCode =
 	| "WEB_SEARCH_NETWORK"
 	| "WEB_SEARCH_HTTP"
 	| "WEB_SEARCH_UNSUPPORTED"
+	| "WEB_SEARCH_PROVIDER_UNAVAILABLE"
 	| "WEB_SEARCH_UNKNOWN";
 
 /** A stable error shape thrown so Pi records an unsuccessful tool call. */
@@ -62,6 +72,9 @@ export class SearchToolError extends Error {
 	readonly kind?: ProviderError["kind"];
 	readonly retryable?: boolean;
 	readonly status?: number;
+	readonly requestId?: RequestId;
+	readonly retryAfterMs?: number;
+	readonly rateLimits?: ProviderRateLimitInfo;
 
 	constructor(
 		code: SearchToolErrorCode,
@@ -71,6 +84,9 @@ export class SearchToolError extends Error {
 			readonly kind?: ProviderError["kind"];
 			readonly retryable?: boolean;
 			readonly status?: number;
+			readonly requestId?: RequestId;
+			readonly retryAfterMs?: number;
+			readonly rateLimits?: ProviderRateLimitInfo;
 		} = {},
 	) {
 		super(`${code}: ${message}`);
@@ -80,7 +96,28 @@ export class SearchToolError extends Error {
 		this.kind = options.kind;
 		this.retryable = options.retryable;
 		this.status = options.status;
+		this.requestId = options.requestId;
+		this.retryAfterMs = options.retryAfterMs;
+		this.rateLimits = options.rateLimits;
 	}
+}
+
+function providerDiagnosticMessage(error: ProviderError): string {
+	const details = {
+		provider: error.provider,
+		...(error.status === undefined ? {} : { status: error.status }),
+		...(error.requestId === undefined ? {} : { requestId: error.requestId.slice(0, 200) }),
+		...(error.retryAfterMs === undefined ? {} : { retryAfterMs: Math.max(0, Math.round(error.retryAfterMs)) }),
+		...(error.rateLimits === undefined
+			? {}
+			: {
+				rateLimits: {
+					windows: error.rateLimits.windows.slice(0, 8),
+					...(error.rateLimits.retryAfterMs === undefined ? {} : { retryAfterMs: error.rateLimits.retryAfterMs }),
+				},
+			}),
+	};
+	return `${error.message} [${JSON.stringify(details)}]`;
 }
 
 /** Convert an adapter failure into the stable shape exposed by web_search. */
@@ -100,20 +137,25 @@ export function toSearchToolError(error: unknown, provider: ProviderId): SearchT
 							? "WEB_SEARCH_MALFORMED_RESPONSE"
 							: error.kind === "timeout"
 								? "WEB_SEARCH_TIMEOUT"
-									: error.kind === "canceled"
-										? "WEB_SEARCH_CANCELED"
-											: error.kind === "network"
-												? "WEB_SEARCH_NETWORK"
-													: error.kind === "unsupported"
-														? "WEB_SEARCH_UNSUPPORTED"
-															: error.kind === "http"
-																? "WEB_SEARCH_HTTP"
-																	: "WEB_SEARCH_UNKNOWN";
-		return new SearchToolError(code, error.message, {
+								: error.kind === "canceled"
+									? "WEB_SEARCH_CANCELED"
+									: error.kind === "network"
+										? "WEB_SEARCH_NETWORK"
+											: error.kind === "unsupported"
+												? "WEB_SEARCH_UNSUPPORTED"
+													: error.kind === "http"
+														? "WEB_SEARCH_HTTP"
+														: error.kind === "unavailable"
+															? "WEB_SEARCH_PROVIDER_UNAVAILABLE"
+															: "WEB_SEARCH_UNKNOWN";
+		return new SearchToolError(code, providerDiagnosticMessage(error), {
 			provider: error.provider,
 			kind: error.kind,
 			retryable: error.retryable,
 			status: error.status,
+			requestId: error.requestId,
+			retryAfterMs: error.retryAfterMs,
+			rateLimits: error.rateLimits,
 		});
 	}
 	const message = error instanceof Error ? error.message : "Unknown search failure";
@@ -126,6 +168,9 @@ export interface SearchToolFailureDetails {
 	readonly kind?: ProviderError["kind"];
 	readonly retryable?: boolean;
 	readonly status?: number;
+	readonly requestId?: RequestId;
+	readonly retryAfterMs?: number;
+	readonly rateLimits?: ProviderRateLimitInfo;
 }
 
 export function searchToolFailureDetails(error: SearchToolError): SearchToolFailureDetails {
@@ -135,5 +180,8 @@ export function searchToolFailureDetails(error: SearchToolError): SearchToolFail
 		...(error.kind === undefined ? {} : { kind: error.kind }),
 		...(error.retryable === undefined ? {} : { retryable: error.retryable }),
 		...(error.status === undefined ? {} : { status: error.status }),
+		...(error.requestId === undefined ? {} : { requestId: error.requestId }),
+		...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+		...(error.rateLimits === undefined ? {} : { rateLimits: error.rateLimits }),
 	};
 }

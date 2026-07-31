@@ -30,6 +30,7 @@ export const WebSearchParameters = Type.Object({
 	publishedBefore: Type.Optional(Type.String({ description: "ISO-8601 upper publication bound" })),
 	wantAnswer: Type.Optional(Type.Boolean({ description: "Request a provider-synthesized answer when supported" })),
 	wantHighlights: Type.Optional(Type.Boolean({ description: "Request provider-highlighted evidence spans" })),
+	provider: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: "Strict provider selection when explicitly configured" })),
 });
 
 export type WebSearchParams = Static<typeof WebSearchParameters>;
@@ -47,7 +48,7 @@ export interface WebSearchToolOptions {
 }
 
 /** Select a provider for each call, after Pi has supplied the active model. */
-export type WebSearchProvider = Provider | ((context: ExtensionContext) => Provider);
+export type WebSearchProvider = Provider | ((request: SearchRequest, context: ExtensionContext) => Provider);
 
 function providerContextFromPi(context: ExtensionContext): ProviderContext {
 	const model = context.model;
@@ -76,8 +77,8 @@ function providerContextFromPi(context: ExtensionContext): ProviderContext {
 	};
 }
 
-function resolveProvider(provider: WebSearchProvider, context: ExtensionContext): Provider {
-	return typeof provider === "function" ? provider(context) : provider;
+function resolveProvider(provider: WebSearchProvider, request: SearchRequest, context: ExtensionContext): Provider {
+	return typeof provider === "function" ? provider(request, context) : provider;
 }
 
 function boundedSearchResponse(response: SearchResponse): SearchResponse {
@@ -127,6 +128,7 @@ function requestFromParams(params: WebSearchParams): SearchRequest {
 		...(params.publishedBefore === undefined ? {} : { publishedBefore: params.publishedBefore }),
 		...(params.wantAnswer === undefined ? {} : { wantAnswer: params.wantAnswer }),
 		...(params.wantHighlights === undefined ? {} : { wantHighlights: params.wantHighlights }),
+		...(params.provider === undefined ? {} : { providerHint: params.provider }),
 	};
 }
 
@@ -142,9 +144,11 @@ export function createWebSearchTool(
 		promptSnippet: "Search the web for structured evidence and source URLs",
 		parameters: WebSearchParameters,
 		async execute(_toolCallId, params, signal, _onUpdate, context) {
-			const selectedProvider = resolveProvider(provider, context);
+			let selectedProvider: Provider | undefined;
 			try {
-				const response = boundedSearchResponse(await executeSearch(selectedProvider, requestFromParams(params), {
+				const request = requestFromParams(params);
+				selectedProvider = resolveProvider(provider, request, context);
+				const response = boundedSearchResponse(await executeSearch(selectedProvider, request, {
 					signal,
 					timeoutMs: options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS,
 					context: providerContextFromPi(context),
@@ -154,7 +158,7 @@ export function createWebSearchTool(
 					details: response,
 				};
 			} catch (error) {
-				throw toSearchToolError(error, selectedProvider.id);
+				throw toSearchToolError(error, selectedProvider?.id ?? "router");
 			}
 		},
 	});

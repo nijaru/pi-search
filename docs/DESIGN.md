@@ -32,10 +32,11 @@ returned when the provider reports it.
 
 Normal search selects one provider. When the active Pi model is OpenAI or
 Codex, the custom tool uses that model's native Responses `web_search` first;
-a failure is visible and never falls back to Exa. For other models, the future
-policy is free-capacity first, then explicitly allowed metered capacity.
-Cross-provider calls are permitted only inside an explicitly requested research
-workflow. The policy never hides a paid fallback behind quota or transient
+a failure is visible and never falls back to Exa. For other models, the
+current default is `free-only`: Brave serves general keyword/fresh searches
+only when `PI_SEARCH_BRAVE_FREE_ONLY=1` asserts free capacity, while metered
+Brave or Exa requires `PI_SEARCH_ALLOW_METERED=1`. Cross-provider calls are
+permitted only inside an explicitly requested research workflow. The policy never hides a paid fallback behind quota or transient
 errors. Gemini and xAI remain explicit model-mediated paths, while Brave, Exa,
 and Parallel are direct HTTP adapters.
 

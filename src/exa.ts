@@ -10,9 +10,11 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
+import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
 
 export const EXA_SEARCH_ENDPOINT = "https://api.exa.ai/search";
+export const DEFAULT_EXA_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 export type ExaFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -21,6 +23,7 @@ export interface ExaAdapterOptions {
 	readonly apiKey?: string;
 	readonly endpoint?: string;
 	readonly fetchImpl?: ExaFetch;
+	readonly maxResponseBytes?: number;
 }
 
 interface ExaSearchPayload {
@@ -282,11 +285,13 @@ export class ExaProvider implements Provider {
 	private readonly apiKey?: string;
 	private readonly endpoint: string;
 	private readonly fetchImpl: ExaFetch;
+	private readonly maxResponseBytes: number;
 
 	constructor(options: ExaAdapterOptions) {
 		this.apiKey = options.apiKey;
 		this.endpoint = options.endpoint ?? EXA_SEARCH_ENDPOINT;
 		this.fetchImpl = options.fetchImpl ?? (fetch as ExaFetch);
+		this.maxResponseBytes = options.maxResponseBytes ?? DEFAULT_EXA_RESPONSE_BYTES;
 	}
 
 	async search(request: SearchRequest, signal: AbortSignal, _context: ProviderContext): Promise<SearchResponse> {
@@ -345,6 +350,7 @@ export class ExaProvider implements Provider {
 		}
 
 		if (response.status === 401 || response.status === 403) {
+			await cancelResponseBody(response);
 			throw createProviderError({
 				provider: this.id,
 				kind: "auth",
@@ -354,6 +360,7 @@ export class ExaProvider implements Provider {
 			});
 		}
 		if (response.status === 429) {
+			await cancelResponseBody(response);
 			throw createProviderError({
 				provider: this.id,
 				kind: "rateLimit",
@@ -363,6 +370,7 @@ export class ExaProvider implements Provider {
 			});
 		}
 		if (response.status < 200 || response.status >= 300) {
+			await cancelResponseBody(response);
 			throw createProviderError({
 				provider: this.id,
 				kind: response.status === 400 ? "badRequest" : "http",
@@ -374,12 +382,22 @@ export class ExaProvider implements Provider {
 
 		let payload: unknown;
 		try {
-			payload = await response.json();
+			const text = await readBoundedResponseText(response, this.maxResponseBytes, signal);
+			payload = JSON.parse(text);
 		} catch (error) {
+			if (signal.aborted) {
+				throw createProviderError({
+					provider: this.id,
+					kind: "canceled",
+					message: "Search canceled",
+					retryable: false,
+					cause: error,
+				});
+			}
 			throw createProviderError({
 				provider: this.id,
 				kind: "malformed",
-				message: "Exa returned a malformed JSON response",
+				message: "Exa returned a malformed or oversized JSON response",
 				retryable: false,
 				cause: error,
 			});

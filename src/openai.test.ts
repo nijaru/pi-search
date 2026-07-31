@@ -201,6 +201,20 @@ describe("OpenAIProvider", () => {
 		}
 	});
 
+	it("cancels non-success response bodies before reporting HTTP failures", async () => {
+		let failedResponse: Response | undefined;
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => {
+				const failure = response({ error: "not exposed" }, 401);
+				failedResponse = failure;
+				return failure;
+			}) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "auth" });
+		expect(failedResponse?.bodyUsed).toBe(true);
+	});
+
 	it("does not use a fallback when active OpenAI auth is unavailable", async () => {
 		let calls = 0;
 		const provider = createOpenAIProvider({

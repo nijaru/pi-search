@@ -11,6 +11,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
+import { cancelResponseBody } from "./http";
 import { validateSearchRequest } from "./search";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -616,12 +617,15 @@ export class OpenAIProvider implements Provider {
 		}
 
 		if (response.status === 401 || response.status === 403) {
+			await cancelResponseBody(response);
 			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false });
 		}
 		if (response.status === 429) {
+			await cancelResponseBody(response);
 			throw createProviderError({ provider: this.id, kind: "rateLimit", message: "OpenAI web search rate limit exceeded", status: response.status, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
+			await cancelResponseBody(response);
 			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}`, status: response.status, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 

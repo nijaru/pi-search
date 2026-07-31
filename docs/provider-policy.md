@@ -9,42 +9,44 @@ contracts.
 
 ### Ordinary search default
 
-The default policy is **native subscription capability first, then
-free-capacity, then explicitly allowed metered capacity**:
+The default policy is **native subscription capability first, then configured
+free-capacity, with metered providers disabled unless explicitly enabled**:
 
 1. Honor an explicit provider request strictly. Do not switch vendors behind
-   `providerHint` or a future `provider` parameter.
+   `providerHint` or the public `provider` parameter.
 2. When the active Pi model is `openai` or `openai-codex`, use that model's
    native Responses `web_search` capability first. Do not fall back to Exa or
    another paid provider when native search is unavailable or fails.
 3. Satisfy hard capabilities and filters before considering cost.
-4. For other models and `auto`, `keyword`, and `fresh`, prefer Brave when the
-   caller has configured it as free-capacity and its quota/rate headers permit
-   a call.
-5. Use Exa for semantic or technical retrieval, and as a fallback only when
-   the caller's billing policy explicitly permits configured metered use.
+4. For other models and `auto`, `keyword`, and `fresh`, use Brave when
+   `BRAVE_API_KEY` is configured and `PI_SEARCH_BRAVE_FREE_ONLY=1` explicitly
+   asserts that calls are covered by free capacity. Observed quota windows
+   still stop calls when a known finite window is exhausted.
+5. `PI_SEARCH_ALLOW_METERED=1` explicitly enables configured metered providers,
+   including Brave and Exa. A known Brave quota failure does not silently turn
+   into an Exa request.
 6. Use Parallel only for an explicit multi-hop/deep-research request.
 7. Use Gemini grounding only when a synthesized, Google-grounded answer is
    explicitly requested.
 8. Use xAI `x_search` only for an explicit social/X request.
 
-The default billing policy is `prefer-free` rather than “free means every
-provider is free.” Introductory credits and subscription allowances are not
-stable provider capabilities. A future router must expose a policy such as:
+The runtime supports these policy names internally. The extension defaults to
+`free-only` because provider credits, subscription allowances, and Brave's
+account quota are not stable provider capabilities:
 
 ```ts
 "free-only" | "prefer-free" | "allow-configured-metered"
 ```
 
 A quota or rate-limit failure is visible to the caller. It does not silently
-turn into a paid request. Cross-provider fallback requires an explicit
-policy, and every attempted call remains visible in usage and warnings.
+turn into a paid request. Every attempted call remains visible in usage and
+warnings; there are no automatic retries.
 
-The first vertical slice now includes Exa plus native OpenAI/Codex routing.
-The selector runs at tool execution time so it sees the active Pi model. A
-native OpenAI/Codex failure is visible; it never spends Exa capacity as an
-implicit fallback. Full capability-aware routing for Brave and other adapters
-still belongs to Step 3.
+The current slice includes native OpenAI/Codex routing, Brave keyword/fresh
+search, and Exa semantic/keyword search behind the metered switch. The
+selector runs at tool execution time so it sees the active Pi model. A native
+OpenAI/Codex failure is visible; it never spends Exa capacity as an implicit
+fallback.
 
 ### Transient failures
 
@@ -72,7 +74,7 @@ or structured details where the Pi runtime permits them.
 | Provider | Distinct role | Evidence and constraints | Cost / quota posture | Authentication |
 | --- | --- | --- | --- | --- |
 | OpenAI/Codex native search | First choice when the active Pi model is OpenAI or Codex | Responses `web_search` returns URL citations and optional source metadata. Include-domain filters are supported; excluded domains and publication-date bounds are rejected rather than approximated. Native response text is only returned when `wantAnswer` is requested. | Uses the active model's subscription or API billing. No Exa fallback is performed on failure. | Pi model registry execution context; never read auth globally |
-| Brave | Keyword, fresh, low-latency default when free capacity exists | Direct URLs, titles, snippets, freshness and domain filters; no provider answer required | The current official pricing page advertises $5/1,000 requests with $5 monthly credits and 50 req/s capacity. Official rate-limit docs still show plan-shaped headers such as `1 request/second` and a monthly window. The historical 2,000/month free plan is not safe to encode as the current universal plan; use account headers/dashboard. | `BRAVE_API_KEY` / explicit credential source |
+| Brave | Keyword, fresh, low-latency default when configured free capacity exists | Direct URLs, titles, snippets, a bounded freshness hint, and domain post-filtering; publication-date bounds are rejected; no provider answer required | Account quota is authoritative. A user's observed free-tier constraint may be 1 request/second and 2,000/month; do not hard-code those values. Parse rate headers and stop when a known finite window is exhausted. | `BRAVE_API_KEY` / explicit credential source |
 | Exa | Semantic and technical retrieval | Direct results, dates, IDs, scores, highlights/text, domain and date filters; request bounded highlights/text when evidence is required | Current docs price base Search per request/result tier and charge content fields per result. Requesting highlights improves evidence but has a measurable cost. | `EXA_API_KEY` through explicit adapter construction |
 | Parallel | Explicit multi-hop and deep research | Search modes are `turbo`, `basic`, and `advanced`; advanced is the documented default and is aimed at multi-hop quality. Source policy and date/domain controls must be mapped from current API fields, not guessed. | Official docs describe approximately 200ms/$1 per 1,000 for turbo, approximately 1s/$5 per 1,000 for basic, and approximately 3s/$5 per 1,000 for advanced. Treat prices as a live-provider value. | `PARALLEL_API_KEY` through explicit adapter construction |
 | Gemini grounding | Explicit model-mediated Google-grounded answer | Returns generated text with annotations and Google-search call/result steps. It can execute multiple searches per request. The documented Google Search grounding surface does not provide the same hard domain/date controls as direct search APIs. | Gemini 3 bills per search query the model executes; older Gemini grounding versions bill per prompt. A single request can trigger multiple billable queries. | Pi model registry execution context; never read auth globally |
@@ -119,6 +121,11 @@ while retaining specialty fetch/storage tools. The active config is
 current local config disables the incumbent search registrations. A coexistence
 smoke test must show only the custom `web_search` plus the incumbent specialty
 fetch/storage tools. Re-enable the incumbent search flag for rollback.
+
+`PI_SEARCH_BRAVE_FREE_ONLY=1` is required before default non-native routing
+can select Brave. `PI_SEARCH_ALLOW_METERED=1` is required before routing can
+select configured metered Brave or Exa capacity. The extension sets neither
+switch.
 
 ### Intentionally not reproduced
 

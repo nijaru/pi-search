@@ -89,19 +89,40 @@ export interface ProviderProfile {
 	readonly auth: "none" | "environment" | "modelRegistry";
 }
 
+/** A single provider-reported quota or rate-limit window. */
+export interface ProviderRateLimitWindow {
+	/** Maximum calls in this window, when the provider reports it. */
+	readonly limit?: number;
+	/** Calls remaining in this window, when the provider reports it. */
+	readonly remaining?: number;
+	/** Absolute reset time, when the provider reports one. */
+	readonly resetAt?: IsoTimestamp;
+	/** Relative reset delay, when the provider reports one. */
+	readonly resetAfterMs?: number;
+	/** Provider-defined scope such as `second` or `month`. */
+	readonly scope?: string;
+}
+
+/** Provider-reported rate-limit metadata. It is observational, never a budget reservation. */
+export interface ProviderRateLimitInfo {
+	readonly windows: readonly ProviderRateLimitWindow[];
+	readonly retryAfterMs?: number;
+}
+
 /**
- * Provider-reported billing information when available.
+ * Provider-reported billing and capacity information when available.
  */
 export interface ProviderUsage {
 	readonly costUsd?: number;
 	readonly billedUnits?: number;
 	readonly billedUnit?: string;
+	readonly rateLimits?: ProviderRateLimitInfo;
 }
 
 /**
  * Free-form capability flags describing what a provider can do. The router
- * (a later stage, not in this module) uses these to select a provider by
- * task rather than by a fixed vendor ranking (D3).
+ * uses these to select a provider by task rather than by a fixed vendor
+ * ranking (D3).
  */
 export interface ProviderCapabilities {
 	/** Semantic / neural similarity search (e.g. Exa). */
@@ -441,7 +462,7 @@ export type ProviderId =
  */
 export interface ProviderError extends Error {
 	readonly provider: ProviderId;
-	/** Network failure, auth failure, rate limit, bad request, etc. */
+	/** Network failure, auth failure, rate limit, bad request, or availability. */
 	readonly kind:
 		| "network"
 		| "auth"
@@ -452,9 +473,16 @@ export interface ProviderError extends Error {
 		| "timeout"
 		| "canceled"
 		| "http"
+		| "unavailable"
 		| "unknown";
 	/** HTTP status if applicable. */
 	readonly status?: number;
+	/** Provider request identifier when one exists. */
+	readonly requestId?: RequestId;
+	/** Provider-advised delay before another call. */
+	readonly retryAfterMs?: number;
+	/** Provider-reported quota metadata. */
+	readonly rateLimits?: ProviderRateLimitInfo;
 	/** Whether retrying the same provider could help. */
 	readonly retryable: boolean;
 }

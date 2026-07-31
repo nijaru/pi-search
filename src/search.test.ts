@@ -69,7 +69,7 @@ describe("search boundary", () => {
 		expect(aborted).toBe(true);
 	});
 
-	it("maps provider failures to stable tool-visible codes", async () => {
+	it("maps provider failures to stable tool-visible codes and bounded diagnostics", async () => {
 		const provider = makeProvider(async () => {
 			throw createProviderError({
 				provider: "exa",
@@ -77,11 +77,17 @@ describe("search boundary", () => {
 				message: "Exa rate limit exceeded",
 				retryable: true,
 				status: 429,
+				requestId: "request-1",
+				retryAfterMs: 1_000,
+				rateLimits: { windows: [{ remaining: 0, resetAfterMs: 1_000 }] },
 			});
 		});
 		await expect(executeSearch(provider, { query: "q" })).rejects.toMatchObject({
 			code: "WEB_SEARCH_RATE_LIMIT",
 			status: 429,
+			requestId: "request-1",
+			retryAfterMs: 1_000,
+			message: expect.stringContaining('"retryAfterMs":1000'),
 		});
 	});
 
