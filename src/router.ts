@@ -44,6 +44,13 @@ function canServe(provider: Provider, request: SearchRequest): boolean {
 	return true;
 }
 
+function nativeModelCompatible(provider: ProviderId, model: ExtensionContext["model"]): boolean {
+	if (model === undefined) return false;
+	if (provider === "openai") return model.provider === "openai" && model.api === "openai-responses";
+	if (provider === "openai-codex") return model.provider === "openai-codex" && model.api === "openai-codex-responses";
+	return false;
+}
+
 function explicitProvider(
 	request: SearchRequest,
 	context: ExtensionContext,
@@ -53,16 +60,16 @@ function explicitProvider(
 	const provider = request.providerHint;
 	if (provider === undefined) return unavailable("No provider was selected");
 	if (provider === "native") {
-		if (context.model?.provider === "openai" && options.openai !== undefined) return options.openai;
-		if (context.model?.provider === "openai-codex" && options.openaiCodex !== undefined) return options.openaiCodex;
-		return unavailable("Native search requires an active OpenAI or Codex model", provider);
+		if (nativeModelCompatible("openai", context.model) && options.openai !== undefined) return options.openai;
+		if (nativeModelCompatible("openai-codex", context.model) && options.openaiCodex !== undefined) return options.openaiCodex;
+		return unavailable("Native search requires an active OpenAI Responses or Codex Responses model", provider);
 	}
 	if (provider === "openai") {
-		if (context.model?.provider !== "openai" || options.openai === undefined) return unavailable("OpenAI native search requires an active OpenAI model", provider);
+		if (!nativeModelCompatible("openai", context.model) || options.openai === undefined) return unavailable("OpenAI native search requires an active OpenAI Responses model", provider);
 		return options.openai;
 	}
 	if (provider === "openai-codex") {
-		if (context.model?.provider !== "openai-codex" || options.openaiCodex === undefined) return unavailable("Codex native search requires an active Codex model", provider);
+		if (!nativeModelCompatible("openai-codex", context.model) || options.openaiCodex === undefined) return unavailable("Codex native search requires an active Codex Responses model", provider);
 		return options.openaiCodex;
 	}
 	if (provider === "brave") {
@@ -87,10 +94,12 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 
 		// Native subscription capability always wins for its active model.
 		if (context.model?.provider === "openai-codex") {
+			if (!nativeModelCompatible("openai-codex", context.model)) return unavailable("Active Codex model does not use the Codex Responses API", "openai-codex");
 			if (options.openaiCodex === undefined) return unavailable("Codex native search is not registered", "openai-codex");
 			return options.openaiCodex;
 		}
 		if (context.model?.provider === "openai") {
+			if (!nativeModelCompatible("openai", context.model)) return unavailable("Active OpenAI model does not use the OpenAI Responses API", "openai");
 			if (options.openai === undefined) return unavailable("OpenAI native search is not registered", "openai");
 			return options.openai;
 		}

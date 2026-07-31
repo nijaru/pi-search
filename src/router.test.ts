@@ -12,8 +12,12 @@ function provider(id: Provider["id"], capabilities: Provider["capabilities"] = {
 	};
 }
 
-function context(providerName?: string): never {
-	return { model: providerName === undefined ? undefined : { provider: providerName, id: "test", api: "test", baseUrl: "https://example.test" } } as never;
+function context(providerName?: string, api?: string): never {
+	return {
+		model: providerName === undefined
+			? undefined
+			: { provider: providerName, id: "test", api: api ?? (providerName === "openai" ? "openai-responses" : providerName === "openai-codex" ? "openai-codex-responses" : "test"), baseUrl: "https://example.test" },
+	} as never;
 }
 
 describe("search provider router", () => {
@@ -43,7 +47,12 @@ describe("search provider router", () => {
 	it("honors strict provider hints without hidden fallback", () => {
 		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q", providerHint: "brave" }, context("anthropic")).id).toBe("brave");
-		expect(() => route({ query: "q", providerHint: "native" }, context("anthropic"))).toThrow(/active OpenAI/);
+		expect(() => route({ query: "q", providerHint: "native" }, context("anthropic"))).toThrow(/active OpenAI Responses/);
 		expect(() => route({ query: "q", providerHint: "unknown" }, context("anthropic"))).toThrow(/not configured/);
+	});
+
+	it("does not route OpenAI completions models to the Responses search adapter", () => {
+		const route = createSearchRouter({ openai: nativeOpenAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(() => route({ query: "q" }, context("openai", "openai-completions"))).toThrow(/does not use the OpenAI Responses API/);
 	});
 });

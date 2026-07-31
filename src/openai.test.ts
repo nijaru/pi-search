@@ -158,7 +158,7 @@ describe("OpenAIProvider", () => {
 			fetchImpl: (async (_input, init) => {
 				calls += 1;
 				expect(new Headers(init?.headers).get("authorization")).toBe("Bearer header-only");
-				return response({ output: [] });
+				return response({ status: "completed", output: [] });
 			}) as OpenAIFetch,
 		});
 		const headerOnly: ProviderContext = {
@@ -180,16 +180,22 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
-	it("maps auth, rate-limit, and transient HTTP failures", async () => {
+	it("maps auth, rate-limit, and transient HTTP failures with retry metadata", async () => {
 		for (const [status, kind] of [[401, "auth"], [429, "rateLimit"], [503, "http"]] as const) {
 			const provider = createOpenAIProvider({
 				provider: "openai",
-				fetchImpl: (async () => response({ error: "not exposed" }, status)) as OpenAIFetch,
+				fetchImpl: (async () => response({ error: "not exposed" }, status, {
+					"content-type": "application/json",
+					"x-request-id": "req-1",
+					"retry-after": "2",
+				})) as OpenAIFetch,
 			});
 			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
 				provider: "openai",
 				kind,
 				status,
+				requestId: "req-1",
+				retryAfterMs: 2_000,
 			});
 		}
 	});
@@ -208,6 +214,17 @@ describe("OpenAIProvider", () => {
 		expect(failedResponse?.bodyUsed).toBe(true);
 	});
 
+	it("requires an OpenAI Responses model rather than a completions model", async () => {
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response(payload)) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, {
+			model: model("openai", "openai-completions"),
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key" }) },
+		})).rejects.toMatchObject({ provider: "openai", kind: "unsupported" });
+	});
+
 	it("does not use a fallback when active OpenAI auth is unavailable", async () => {
 		let calls = 0;
 		const provider = createOpenAIProvider({
@@ -223,5 +240,33 @@ describe("OpenAIProvider", () => {
 		};
 		await expect(provider.search({ query: "q" }, new AbortController().signal, noAuth)).rejects.toMatchObject({ kind: "auth" });
 		expect(calls).toBe(0);
+	});
+
+	it("requires a terminal completion event for LF and CRLF streams", async () => {
+		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com", title: "Example" }] } };
+		const lf = [
+			`data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [item] } })}`,
+		].join("\n\n");
+		const crlf = lf.replaceAll("\n", "\r\n");
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async (_input, init) => response(String(init?.body).includes("crlf-marker") ? crlf : lf, 200, { "content-type": "text/event-stream" })) as OpenAIFetch,
+		});
+		const [first, second] = await Promise.all([
+			provider.search({ query: "q" }, new AbortController().signal, context()),
+			provider.search({ query: "crlf-marker" }, new AbortController().signal, context()),
+		]);
+		expect(first.results).toHaveLength(1);
+		expect(second.results).toHaveLength(1);
+	});
+
+	it("rejects a stream that ends before completion", async () => {
+		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com" }] } };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response(`data: ${JSON.stringify({ type: "response.output_item.done", item })}`, 200, { "content-type": "text/event-stream" })) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ provider: "openai", kind: "malformed", retryable: true });
 	});
 });

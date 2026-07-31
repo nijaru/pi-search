@@ -423,54 +423,99 @@ async function readBody(response: Response, signal: AbortSignal, maxBytes: numbe
 	}
 }
 
+function parseRetryAfter(headers: Headers): number | undefined {
+	const milliseconds = headers.get("retry-after-ms");
+	if (milliseconds !== null && /^\d+(?:\.\d+)?$/.test(milliseconds.trim())) {
+		const value = Number(milliseconds);
+		if (Number.isFinite(value)) return Math.max(0, Math.round(value));
+	}
+	const retryAfter = headers.get("retry-after");
+	if (retryAfter === null) return undefined;
+	if (/^\d+(?:\.\d+)?$/.test(retryAfter.trim())) {
+		const value = Number(retryAfter);
+		return Number.isFinite(value) ? Math.max(0, Math.round(value * 1_000)) : undefined;
+	}
+	const date = Date.parse(retryAfter);
+	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+}
+
+function parseSseEventData(body: string, provider: OpenAIProviderId): readonly Record<string, unknown>[] {
+	const events: Record<string, unknown>[] = [];
+	let dataLines: string[] = [];
+	const flush = (): void => {
+		if (dataLines.length === 0) return;
+		const data = dataLines.join("\n").trim();
+		dataLines = [];
+		if (data.length === 0 || data === "[DONE]") return;
+		try {
+			events.push(objectValue(JSON.parse(data), "SSE event", provider));
+		} catch (error) {
+			if (isProviderError(error)) throw error;
+			return malformed(provider, "SSE event could not be parsed", error);
+		}
+	};
+
+	for (const rawLine of body.split(/\r?\n/)) {
+		const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+		if (line.length === 0) {
+			flush();
+			continue;
+		}
+		if (line.startsWith(":")) continue;
+		if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+	}
+	flush();
+	return events;
+}
+
 function parseResponseBody(body: string, provider: OpenAIProviderId): Record<string, unknown> {
 	const trimmed = body.trim();
 	if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
 		try {
 			const parsed = JSON.parse(trimmed) as unknown;
-			if (Array.isArray(parsed)) return { output: parsed };
-			return objectValue(parsed, "response", provider);
+			if (Array.isArray(parsed)) return { output: parsed, status: "completed" };
+			const response = objectValue(parsed, "response", provider);
+			if (optionalString(response.status) === undefined) return malformed(provider, "JSON response has no terminal status");
+			return response;
 		} catch (error) {
+			if (isProviderError(error)) throw error;
 			return malformed(provider, "JSON could not be parsed", error);
 		}
 	}
 
 	const output: unknown[] = [];
 	let completed: Record<string, unknown> | undefined;
-	for (const chunk of body.split(/\n\n+/)) {
-		const data = chunk
-			.split("\n")
-			.filter((line) => line.startsWith("data:"))
-			.map((line) => line.slice(5).trim())
-			.join("\n")
-			.trim();
-		if (data.length === 0 || data === "[DONE]") continue;
-		let event: Record<string, unknown>;
-		try {
-			event = objectValue(JSON.parse(data), "SSE event", provider);
-		} catch (error) {
-			if (isProviderError(error)) throw error;
-			return malformed(provider, "SSE event could not be parsed", error);
-		}
-		if (event.type === "error") {
+	let terminal = false;
+	for (const event of parseSseEventData(body, provider)) {
+		const type = String(event.type ?? "");
+		if (type === "error") {
 			throw createProviderError({ provider, kind: "http", message: "OpenAI web search returned an error event", retryable: false });
 		}
-		if (event.type === "response.output_item.done" && event.item !== undefined) output.push(event.item);
-		if (["response.done", "response.completed", "response.incomplete", "response.failed"].includes(String(event.type))) {
+		if (type === "response.output_item.done" && event.item !== undefined) output.push(event.item);
+		if (["response.done", "response.completed", "response.incomplete", "response.failed"].includes(type)) {
+			terminal = true;
 			if (event.response !== undefined) completed = objectValue(event.response, "response event", provider);
+			if (type !== "response.done" && type !== "response.completed") {
+				throw createProviderError({ provider, kind: "http", message: `OpenAI web search stream was ${type.replace("response.", "")}`, retryable: type === "response.incomplete" });
+			}
 		}
+	}
+	if (!terminal) {
+		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search stream ended before a terminal response event", retryable: true });
 	}
 	if (completed !== undefined) {
 		const embeddedOutput = Array.isArray(completed.output) ? completed.output : output;
-		return { ...completed, output: embeddedOutput };
+		return { ...completed, output: embeddedOutput, status: completed.status ?? "completed" };
 	}
-	if (output.length > 0) return { output };
-	return malformed(provider, "no response output was found");
+	return { output, status: "completed" };
 }
 
 function responseStatusFailure(provider: OpenAIProviderId, payload: Record<string, unknown>): void {
 	const status = optionalString(payload.status);
-	if (status === undefined || status === "completed") return;
+	if (status === "completed") return;
+	if (status === undefined) {
+		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search response has no terminal status", retryable: true });
+	}
 	throw createProviderError({
 		provider,
 		kind: "http",
@@ -506,8 +551,8 @@ export class OpenAIProvider implements Provider {
 		if (this.id === "openai-codex" && model.api !== "openai-codex-responses") {
 			return unsupported(this.id, `Active ${this.id} model does not use the Codex Responses API`);
 		}
-		if (this.id === "openai" && model.api !== "openai-responses" && model.api !== "openai-completions") {
-			return unsupported(this.id, `Active OpenAI model does not use a supported OpenAI API`);
+		if (this.id === "openai" && model.api !== "openai-responses") {
+			return unsupported(this.id, `Active OpenAI model does not use the OpenAI Responses API`);
 		}
 		const plan = buildOpenAIRequest(normalized, this.id);
 		if (signal.aborted) {
@@ -573,17 +618,19 @@ export class OpenAIProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "network", message: "OpenAI web search network request failed", retryable: true, cause: error });
 		}
 
+		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
+		const retryAfterMs = parseRetryAfter(response.headers);
 		if (response.status === 401 || response.status === 403) {
 			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false });
+			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})`, status: response.status, requestId, retryAfterMs, retryable: false });
 		}
 		if (response.status === 429) {
 			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "rateLimit", message: "OpenAI web search rate limit exceeded", status: response.status, retryable: true });
+			throw createProviderError({ provider: this.id, kind: "rateLimit", message: "OpenAI web search rate limit exceeded", status: response.status, requestId, retryAfterMs, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
 			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}`, status: response.status, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
+			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 
 		const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);
