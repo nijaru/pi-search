@@ -302,7 +302,7 @@ describe("OpenAIProvider", () => {
 		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com", title: "Example" }] } };
 		const lf = [
 			`data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
-			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [item] } })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [] } })}`,
 		].join("\n\n");
 		const crlf = lf.replaceAll("\n", "\r\n");
 		const provider = createOpenAIProvider({

@@ -595,7 +595,7 @@ function parseResponseBody(body: string, provider: OpenAIProviderId): Record<str
 		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search stream ended before a terminal response event", retryable: true });
 	}
 	if (completed !== undefined) {
-		const embeddedOutput = Array.isArray(completed.output) ? completed.output : output;
+		const embeddedOutput = Array.isArray(completed.output) && completed.output.length > 0 ? completed.output : output;
 		return { ...completed, output: embeddedOutput, status: completed.status ?? "completed" };
 	}
 	return { output, status: "completed" };
