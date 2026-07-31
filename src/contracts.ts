@@ -5,12 +5,11 @@
  * agnostic of how a provider fulfills a request — whether by a direct HTTP
  * search endpoint (Exa, Brave, Parallel) or by a model-mediated grounding
  * call (xAI `x_search`, Gemini grounding, OpenAI `web_search`, Claude
- * `WebSearch`). See handoff.md D10 (two adapter families).
+ * `WebSearch`). See `docs/DESIGN.md` for the two adapter families.
  *
  * Nothing here performs I/O or depends on Pi runtime APIs, so it can be
- * unit-tested deterministically and offline. Adapters (the `Provider`
- * implementations) are added later; do not add them before these contracts
- * are stable.
+ * unit-tested deterministically and offline. Provider adapters build on these
+ * contracts and keep their transport and payload handling in separate modules.
  */
 
 // ─── Common ────────────────────────────────────────────────────────────────
@@ -394,7 +393,10 @@ export interface ProviderError extends Error {
 		| "auth"
 		| "rateLimit"
 		| "badRequest"
+		| "malformed"
 		| "unsupported"
+		| "timeout"
+		| "canceled"
 		| "http"
 		| "unknown";
 	/** HTTP status if applicable. */
