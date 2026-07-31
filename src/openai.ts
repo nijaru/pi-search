@@ -11,7 +11,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
-import { cancelResponseBody } from "./http";
+import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -21,6 +21,8 @@ const MAX_SOURCE_URL_LENGTH = 8_192;
 const MAX_SOURCE_TITLE_LENGTH = 500;
 const MAX_SOURCE_EXCERPT_LENGTH = 4_000;
 const MAX_SOURCE_ID_LENGTH = 500;
+const MAX_ERROR_BODY_BYTES = 8 * 1024;
+const MAX_ERROR_DIAGNOSTIC_CHARS = 1_000;
 
 export type OpenAIProviderId = "openai" | "openai-codex";
 export type OpenAIFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -85,6 +87,39 @@ function unsupported(provider: OpenAIProviderId, message: string): never {
 		message,
 		retryable: false,
 	});
+}
+
+function sanitizeErrorDiagnostic(body: string, secret?: string): string | undefined {
+	let text = body.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+	if (secret !== undefined && secret.length > 0) text = text.split(secret).join("[redacted]");
+	if (text.length === 0) return undefined;
+	try {
+		const parsed = JSON.parse(text) as unknown;
+		if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+			const record = parsed as Record<string, unknown>;
+			const error = record.error;
+			if (typeof error === "object" && error !== null && !Array.isArray(error)) {
+				const value = error as Record<string, unknown>;
+				const fields = [value.code, value.type, value.message].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+				if (fields.length > 0) text = fields.join(": ");
+			} else if (typeof record.message === "string" && record.message.trim().length > 0) {
+				text = record.message;
+			}
+		}
+	} catch {
+		// Preserve bounded non-JSON diagnostics as-is.
+	}
+	return text.slice(0, MAX_ERROR_DIAGNOSTIC_CHARS);
+}
+
+async function readErrorDiagnostic(response: Response, secret?: string): Promise<string | undefined> {
+	try {
+		const body = await readBoundedResponseText(response, MAX_ERROR_BODY_BYTES);
+		return sanitizeErrorDiagnostic(body, secret);
+	} catch {
+		await cancelResponseBody(response);
+		return undefined;
+	}
 }
 
 function objectValue(value: unknown, label: string, provider: OpenAIProviderId = "openai"): Record<string, unknown> {
@@ -621,16 +656,16 @@ export class OpenAIProvider implements Provider {
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
 		const retryAfterMs = parseRetryAfter(response.headers);
 		if (response.status === 401 || response.status === 403) {
-			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})`, status: response.status, requestId, retryAfterMs, retryable: false });
+			const diagnostic = await readErrorDiagnostic(response, auth.apiKey);
+			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: false });
 		}
 		if (response.status === 429) {
-			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "rateLimit", message: "OpenAI web search rate limit exceeded", status: response.status, requestId, retryAfterMs, retryable: true });
+			const diagnostic = await readErrorDiagnostic(response, auth.apiKey);
+			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
-			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
+			const diagnostic = await readErrorDiagnostic(response, auth.apiKey);
+			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 
 		const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);

@@ -200,6 +200,17 @@ describe("OpenAIProvider", () => {
 		}
 	});
 
+	it("includes bounded provider diagnostics for HTTP failures", async () => {
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response({ error: { type: "invalid_request_error", code: "unsupported_model", message: "model is not enabled" } }, 400)) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+			kind: "badRequest",
+			message: expect.stringContaining("unsupported_model: invalid_request_error: model is not enabled"),
+		});
+	});
+
 	it("cancels non-success response bodies before reporting HTTP failures", async () => {
 		let failedResponse: Response | undefined;
 		const provider = createOpenAIProvider({
