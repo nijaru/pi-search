@@ -111,6 +111,37 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
+	it("selects an authenticated same-provider search model", async () => {
+		let authenticatedModel = "";
+		let body: Record<string, unknown> | undefined;
+		const token = `header.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-search" } }))}.signature`;
+		const active = { ...model("openai-codex"), id: "gpt-5.6-sol" };
+		const searchModel = { ...model("openai-codex"), id: "gpt-5.5" };
+		const provider = createOpenAIProvider({
+			provider: "openai-codex",
+			endpoint: "https://example.test/backend-api",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			model: active,
+			modelRegistry: {
+				getModels: () => [
+					{ ...searchModel, id: "gpt-5.6-pro" },
+					searchModel,
+				],
+				getApiKeyAndHeaders: async (requested) => {
+					authenticatedModel = requested.id;
+					return { ok: true, apiKey: token };
+				},
+			},
+		});
+		expect(authenticatedModel).toBe("gpt-5.5");
+		expect(body?.model).toBe("gpt-5.5");
+	});
+
 	it("parses the Codex SSE protocol and adds its account headers", async () => {
 		const token = `header.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" } }))}.signature`;
 		const events = [
@@ -153,6 +184,18 @@ describe("OpenAIProvider", () => {
 		await expect(incompleteProvider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "http" });
 	});
 
+	it("rejects completed responses with no inspectable sources", async () => {
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response({ status: "completed", output: [{ type: "message", content: [] }] })) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+			provider: "openai",
+			kind: "malformed",
+			message: expect.stringContaining("no inspectable HTTP sources"),
+		});
+	});
+
 	it("accepts header-only OpenAI auth while still requiring a Codex token", async () => {
 		let calls = 0;
 		const provider = createOpenAIProvider({
@@ -160,7 +203,7 @@ describe("OpenAIProvider", () => {
 			fetchImpl: (async (_input, init) => {
 				calls += 1;
 				expect(new Headers(init?.headers).get("authorization")).toBe("Bearer header-only");
-				return response({ status: "completed", output: [] });
+				return response(payload);
 			}) as OpenAIFetch,
 		});
 		const headerOnly: ProviderContext = {

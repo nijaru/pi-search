@@ -45,25 +45,36 @@ export interface WebSearchToolOptions {
 /** Select a provider for each call, after Pi has supplied the active model. */
 export type WebSearchProvider = Provider | ((request: SearchRequest, context: ExtensionContext) => Provider);
 
-export function providerContextFromPi(context: ExtensionContext): ProviderContext {
-	const model = context.model;
-	if (model === undefined) {
-		return {};
-	}
-
-	const descriptor: ProviderModel = {
+function providerModelFromPi(model: NonNullable<ExtensionContext["model"]>): ProviderModel {
+	return {
 		id: model.id,
 		provider: model.provider,
 		api: model.api,
 		baseUrl: model.baseUrl,
 		...(model.headers === undefined ? {} : { headers: model.headers }),
 	};
+}
+
+export function providerContextFromPi(context: ExtensionContext): ProviderContext {
+	const model = context.model;
+	if (model === undefined) {
+		return {};
+	}
+
+	const descriptor = providerModelFromPi(model);
+	const resolvePiModel = (requested: ProviderModel): NonNullable<ExtensionContext["model"]> | undefined => {
+		if (requested.provider === descriptor.provider && requested.id === descriptor.id) return model;
+		return context.modelRegistry.find(requested.provider, requested.id);
+	};
 
 	return {
 		model: descriptor,
 		modelRegistry: {
-			getApiKeyAndHeaders: async () => {
-				const resolved = await context.modelRegistry.getApiKeyAndHeaders(model);
+			getModels: () => context.modelRegistry.getAvailable().map(providerModelFromPi),
+			getApiKeyAndHeaders: async (requested) => {
+				const selected = resolvePiModel(requested);
+				if (selected === undefined) return { ok: false, error: `Pi model ${requested.provider}/${requested.id} is not available` };
+				const resolved = await context.modelRegistry.getApiKeyAndHeaders(selected);
 				return resolved.ok
 					? { ok: true, ...(resolved.apiKey === undefined ? {} : { apiKey: resolved.apiKey }), ...(resolved.headers === undefined ? {} : { headers: resolved.headers }) }
 					: { ok: false, error: resolved.error };

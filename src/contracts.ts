@@ -61,11 +61,14 @@ export type ProviderAuthResult =
 
 /**
  * The narrow model-auth surface needed by model-mediated providers. The tool
- * boundary binds this function to the exact active Pi model, so adapters never
- * read Pi auth state or environment credentials globally.
+ * boundary binds this function to Pi's model registry, so adapters can resolve
+ * the active model or a same-provider execution model without reading Pi auth
+ * state or environment credentials globally.
  */
 export interface ProviderModelRegistry {
 	readonly getApiKeyAndHeaders: (model: ProviderModel) => Promise<ProviderAuthResult>;
+	/** Available authenticated-model metadata for adapters that need a provider-compatible execution model. */
+	readonly getModels?: () => readonly ProviderModel[];
 }
 
 /**
