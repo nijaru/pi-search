@@ -25,7 +25,7 @@ retries, paid fallback chains, or automatic multi-provider searches.
 
 | Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
-| OpenAI/Codex | Native default for compatible active model | One Responses call; no fallback | Pi model registry |
+| OpenAI/Codex | Native default for compatible active provider | One authenticated same-provider Responses model; no fallback | Pi model registry |
 | Gemini | Native Google Search grounding for active Gemini | One grounding call; no fallback | Pi model registry |
 | xAI | Native web grounding for active xAI Responses | One Responses call; no fallback | Pi model registry |
 | xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |

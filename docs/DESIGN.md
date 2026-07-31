@@ -61,7 +61,9 @@ adapters:
 
 - OpenAI uses only `openai-responses`; Codex uses only
   `openai-codex-responses`.
-- Credentials are resolved through the active model registry.
+- The active model selects the native provider; the adapter then selects one
+  authenticated same-provider Responses model from Pi's registry for search.
+- Credentials and model headers are resolved for that selected registry model.
 - Codex OAuth account headers are derived from the resolved token.
 - Responses streaming accepts LF and CRLF SSE, requires a terminal completed
   event, rejects incomplete/truncated streams, and bounds body bytes.
