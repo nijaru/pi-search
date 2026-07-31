@@ -125,6 +125,8 @@ describe("OpenAIProvider", () => {
 				expect(requestHeaders.get("chatgpt-account-id")).toBe("acct-1");
 				expect(requestHeaders.get("originator")).toBe("pi");
 				expect(requestHeaders.get("openai-beta")).toBe("responses=experimental");
+				const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				expect(body.max_output_tokens).toBeUndefined();
 				return response(events, 200, { "content-type": "text/event-stream" });
 			}) as OpenAIFetch,
 		});

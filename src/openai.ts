@@ -610,7 +610,11 @@ export class OpenAIProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}
 
-		const body = { ...plan.body, model: model.id, max_output_tokens: 2_048 };
+		const body = {
+			...plan.body,
+			model: model.id,
+			...(this.id === "openai" ? { max_output_tokens: 2_048 } : {}),
+		};
 		const headers = new Headers();
 		for (const source of [model.headers, auth.headers]) {
 			if (source === undefined) continue;
