@@ -22,3 +22,11 @@ durable rationale belongs in `decisions.md`.
   `ai/research/provider-landscape.md`.
 - Initialized `.tasks/` with a planning parent and four bounded research and
   design tasks.
+- Completed the provider, fetch, and live-smoke research tasks. The resulting
+  matrix recommends contract cleanup first, Perplexity as the first possible
+  new adapter, SearXNG only for an explicit self-hosted requirement, and no
+  new social adapter beyond xAI X yet.
+- The fetch audit found no need for browser rendering or caching in the default
+  path. It identified a shared result-cleanup/URL-identity gap, Markdown
+  content-negotiation metadata work, and the need for an explicit live-smoke
+  runner that never runs from the offline test command.

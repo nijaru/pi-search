@@ -27,19 +27,25 @@ synthesis, or unnecessary browser infrastructure. Preserve evidence-first
 results, explicit provider selection, hard constraint reporting, untrusted
 content fencing, bounded resources, and deterministic offline tests.
 
+The research phase is complete. The next implementation gates are: close the
+unexpected provider-`answer` output gap, add shared conservative result cleanup
+and URL identity, improve Markdown content negotiation, and add an explicit
+credential-gated live smoke runner. Only then should Perplexity or a configured
+SearXNG adapter be considered; xAI remains the only dedicated X path.
+
 ## Verification
 
 The current checkout has 108 passing tests, 247 assertions, and a passing
-TypeScript check. These are fixture and boundary tests; credential-gated live
-provider smoke tests remain an operational gap.
+TypeScript check before the planning-only context updates. These are fixture and
+boundary tests; credential-gated live provider smoke tests remain an
+operational gap.
 
 ## Open questions
 
-- Which providers offer reliable social/X retrieval, and under what API or
-  subscription constraints?
-- Which additional providers materially improve coverage without duplicating
-  existing adapters or violating the billing policy?
+- Does the evidence-first boundary remove the current untyped provider
+  `answer` field, or expose an explicitly opt-in answer capability?
+- Is Perplexity's hard domain/date filtering worth another metered adapter?
+- Is a configured self-hosted SearXNG endpoint a real requirement, separate
+  from hidden fallback behavior?
 - Should JavaScript-rendered pages be an explicit opt-in fetch layer, or remain
   outside the extension in favor of browser workflows?
-- What normalization and cleanup should happen to provider results without
-  turning source evidence into synthesized claims?

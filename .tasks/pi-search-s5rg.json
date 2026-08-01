@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "s5rg",
+  "title": "Add explicit credential-gated live smoke runner",
+  "description": "Create a separate live smoke CLI/docs for shipped providers. Require PI_SEARCH_LIVE=1, explicit provider selection, metered acknowledgement, finite timeout, no retry/fanout, safe credential resolution, redacted output, and assertions for inspectable URLs and supported hard filters. Keep bun test offline.",
+  "status": "open",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T13:52:26.993764Z",
+  "updated_at": "2026-08-01T13:52:26.993764Z",
+  "completed_at": null,
+  "external": {}
+}

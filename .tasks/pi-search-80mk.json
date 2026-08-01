@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "80mk",
+  "title": "Evaluate Perplexity and optional SearXNG adapters",
+  "description": "After cleanup and smoke gates, verify current APIs, auth, cost, citations, constraints, and SSRF/configuration policy. Add only the adapter that provides distinct value; Perplexity first candidate, SearXNG only for explicit self-hosted need. No automatic fallback.",
+  "status": "open",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T13:52:27.004635Z",
+  "updated_at": "2026-08-01T13:52:27.004635Z",
+  "completed_at": null,
+  "external": {}
+}

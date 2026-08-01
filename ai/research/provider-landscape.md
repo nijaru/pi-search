@@ -77,16 +77,46 @@ reachability checks, citation audits, reports, and metrics. It is a reference
 for a future advanced research workflow, not a replacement for the current
 bounded single-provider `web_research` contract.
 
+## Current provider capability matrix
+
+The matrix below is a planning snapshot, not a permanent provider ranking.
+Provider documentation, pricing, quotas, and response schemas must be checked
+again before an adapter is enabled.
+
+| Provider | Auth and cost posture | Constraint posture | Evidence and social coverage | Decision |
+| --- | --- | --- | --- | --- |
+| OpenAI/Codex | Pi model registry; model/provider billing | Native Responses search; excluded domains are intentionally rejected by the current contract | Citations and source records; no dedicated X path | Keep as native default |
+| Gemini | Pi model registry; grounding can be metered | Fresh/current grounding, but no hard domain-filter contract | Grounding chunks and URL annotations; no dedicated X path | Keep; report domain limitation |
+| xAI web/X | Pi model registry; metered tool and token usage | Web allowed/excluded domains; X has a separate contract and no web-domain filters | Structured citations; `xai-x` is the strongest dedicated X path currently | Keep explicit; add handle/date options only after fixture and live checks |
+| Brave | API key; quota and paid usage must be explicit | Freshness and domain operators, with post-filtering | URL, title, snippet, publication metadata; no reliable dedicated X path | Keep as controlled general direct provider |
+| Exa | API key; usage-based and reports cost | Domains and documented date filters; current adapter does not yet send exact dates | Highlights, text, score, publication date, cost metadata; no dedicated X path | Keep explicit; evaluate date-filter gap |
+| Parallel | API key; metered and objective-oriented | No stable domain-filter contract | URL, title, excerpts, dates, search ID; no reliable dedicated X path | Keep explicit and specialized |
+| Perplexity Search API | Bearer key; predictable per-request pricing | Include/exclude domains, path prefixes, and exact publication/update dates | Ranked URLs, snippets, dates, request ID; no dedicated X path | **First candidate** if a new hard-filter provider is wanted |
+| Anthropic native web search | API key/model; search-use and token charges | `max_uses` plus allowed or blocked domains, but not both; no native date filter | Strong URL/title/cited-text citations; no dedicated X path | Conditional candidate after auth/evidence review |
+| SearXNG | Self-hosted endpoint; no provider billing | Engine-dependent operators and freshness; must validate returned hosts | JSON URL/title/content; no stable X guarantee | Optional privacy/keyless adapter, never a universal fallback |
+| Tavily | Bearer key; credits per search with a free allowance | Include/exclude domains and broad date ranges | URL/title/content and optional raw content; no dedicated X path | Defer due to overlap |
+| Claude bridge / DuckDuckGo scrape | CLI/subscription or unofficial scraping | No stable structured constraint contract | Opaque synthesis or fragile scraped provenance | Do not add to core |
+
+The current shipped set already covers native grounding, keyword search,
+semantic retrieval, objective retrieval, and dedicated X retrieval. Perplexity
+is the only reviewed candidate with a clearly distinct combination of
+structured evidence plus hard domain/date controls. Anthropic is attractive for
+citation quality but overlaps native model-mediated search and has search-use
+billing. SearXNG is useful for self-hosting/privacy, not for universal
+coverage. Tavily, a Claude bridge, and DuckDuckGo do not justify core
+complexity yet.
+
 ## X/social access
 
 The shipped package already has explicit xAI X search (`xai-x`) through the xAI
 Responses API. The reviewed extensions do not establish a provider-neutral X
-contract. `pi-native-search` covers xAI web search but not a separate X path;
-`pi-web-access` and `pi-search-hub` expose many web backends but their listed
-provider surfaces do not make X retrieval a stable, evidence-first guarantee.
-X support should remain a capability declared by a provider, not a generic
-search option. The next task is to verify current provider APIs and live
-citation shapes before adding any other social adapter.
+contract. General web providers may find `x.com` URLs when asked, but that is
+not equivalent to dedicated social retrieval. Keep social/X as a capability
+declared by a provider, not a generic search option. Add another social adapter
+only when it provides stable source URLs, inspectable citations, bounded cost,
+rate-limit evidence, and deterministic fixtures. Current confidence is high
+for the xAI capability and moderate for domain-filtered social results from
+other providers; no live provider calls have been run yet.
 
 ## Applied
 
@@ -119,3 +149,15 @@ citation shapes before adding any other social adapter.
 - https://github.com/jillesme/pi-simple-web-tools
 - https://github.com/vihu/pi-web
 - https://github.com/LucianoLupo/pi-deep-research
+- https://platform.openai.com/docs/guides/tools-web-search
+- https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/web-search-tool
+- https://ai.google.dev/gemini-api/docs/google-search
+- https://docs.x.ai/developers/tools/web-search
+- https://docs.x.ai/developers/tools/x-search
+- https://docs.perplexity.ai/api-reference/search-post
+- https://docs.perplexity.ai/docs/search/filters/domain-filter
+- https://docs.perplexity.ai/docs/search/filters/date-time-filters
+- https://docs.tavily.com/documentation/api-reference/endpoint/search
+- https://docs.searxng.org/dev/search_api.html
+- https://docs.z.ai/api-reference/tools/web-search
+- https://duckduckgo.com/duckduckgo-help-pages/results/sources

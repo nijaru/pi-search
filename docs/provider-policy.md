@@ -64,6 +64,26 @@ Freshness and keyword modes are retrieval hints for model-mediated or semantic
 providers. They produce an explicit warning when the provider cannot guarantee
 the requested ranking semantics.
 
+## Candidate providers under evaluation
+
+No candidate below is installed or selected automatically. A new adapter must
+first have deterministic request/normalization/error fixtures, an explicit
+credential and billing policy, stable inspectable source URLs, and a
+credential-gated smoke case.
+
+| Candidate | Why it may earn a slot | Why it is not enabled yet |
+| --- | --- | --- |
+| Perplexity Search API | Structured results with hard domain, path, and date filters | Adds another metered direct provider; overlap and current schema need a fixture/live audit |
+| SearXNG | Self-hosted, privacy-oriented, non-metered search | Engine capabilities and freshness vary; endpoint configuration and SSRF policy need explicit design |
+| Anthropic native web search | Strong citations and native model integration | Search-use plus token billing; model-registry auth and evidence normalization are unverified |
+| Tavily | Simple API, raw content option, predictable credits | Overlaps Brave/Exa/Perplexity and has no dedicated X path |
+| Z.AI / Claude bridge / DuckDuckGo | Possible native or keyless coverage | Current provenance, auth, or scraping contracts are not strong enough for the core |
+
+Per-provider research recommends Perplexity as the first addition only if hard
+filters are materially needed. SearXNG should be an explicitly configured
+self-hosted option, never a hidden fallback. Dedicated X remains an xAI
+capability; a general provider returning `x.com` links is not equivalent.
+
 ## Transient failures
 
 There are zero automatic retries. Authentication, invalid requests,

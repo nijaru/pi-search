@@ -67,6 +67,32 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
 - xAI web and X grounding through the Responses API.
 - Explicit provider schemas and routing tests for local/non-native workflows.
 
+## 7. Next implementation gates — planned, not required for install
+
+The current package is usable, but the audit found four high-value follow-ups
+before calling the search surface mature:
+
+1. Close the evidence-boundary gap in `src/search-tool.ts`: ordinary
+   `web_search` should not forward an untyped provider `answer` field when the
+   public contract is evidence-first.
+2. Add a shared conservative result-cleanup and URL-identity module. Apply it
+   after provider parsing and use it for research fetch deduplication. Preserve
+   raw URLs when canonicalization changes them; do not strip arbitrary query
+   parameters.
+3. Improve direct fetch content negotiation with `text/markdown` and report
+   actual format/extraction metadata. Keep browser rendering and caching out of
+   the default path.
+4. Add an explicit credential-gated live smoke runner. It must never run from
+   `bun test`, infer a provider from available credentials, retry, fan out, or
+   print secrets. It should verify bounded inspectable URLs and hard-filter
+   behavior where supported.
+
+Only after those gates should a new adapter be considered. Perplexity is the
+first candidate because it adds structured evidence plus hard domain/date
+filters. SearXNG is optional for a self-hosted/privacy requirement. Anthropic
+native search is conditional on auth and citation fit. Tavily, Z.AI, Claude
+bridge, and DuckDuckGo remain deferred due to overlap or provenance concerns.
+
 ## Deferred / outside ownership
 
 These are intentional boundaries, not missing search-provider implementations:

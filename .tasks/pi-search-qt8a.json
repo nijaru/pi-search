@@ -3,7 +3,7 @@
   "ref": "qt8a",
   "title": "Plan provider consolidation and fetch architecture",
   "description": "Compare existing Pi web extensions, define provider/social coverage, choose reusable implementations, and produce a phased plan that preserves evidence-first output, strict cost policy, bounded fetches, SSRF protection, and deterministic offline tests.",
-  "status": "open",
+  "status": "done",
   "priority": 1,
   "labels": [
     "research",
@@ -19,10 +19,14 @@
     {
       "ts": "2026-08-01T13:26:34.07402Z",
       "msg": "Initialized ai/ context and .tasks/. Added provider landscape findings and proposed phased consolidation/fetch plan; provider capability and live smoke questions remain open."
+    },
+    {
+      "ts": "2026-08-01T13:52:31.968472Z",
+      "msg": "Consolidated provider, fetch, and smoke research into ai/research/provider-landscape.md, ai/design/provider-consolidation-plan.md, docs/implementation-plan.md, and docs/provider-policy.md. Recommendation: close evidence/cleanup gaps first; then Markdown negotiation and explicit live smoke; Perplexity is first candidate, SearXNG conditional, no new social adapter beyond xAI X."
     }
   ],
   "created_at": "2026-08-01T13:24:46.056533Z",
-  "updated_at": "2026-08-01T13:26:34.07402Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T13:52:31.980624Z",
+  "completed_at": "2026-08-01T13:52:31.980624Z",
   "external": {}
 }

@@ -3,7 +3,7 @@
   "ref": "yy7z",
   "title": "Build provider capability and social/X matrix",
   "description": "Verify current native and API provider support, including xAI X search and any Brave, Exa, Parallel, Perplexity, Tavily, SearXNG, Anthropic, Claude bridge, or ZAI social capabilities. Separate hard guarantees from hints and unknowns.",
-  "status": "open",
+  "status": "done",
   "priority": 1,
   "labels": [
     "research",
@@ -15,9 +15,14 @@
   "blocked_by": [],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T13:48:51.607652Z",
+      "msg": "Researcher completed provider/social matrix: recommends fix shipped drift first, then Perplexity, SearXNG, Anthropic native; defer Tavily/Claude bridge/DDG; xAI remains best native X."
+    }
+  ],
   "created_at": "2026-08-01T13:24:54.040406Z",
-  "updated_at": "2026-08-01T13:24:54.040406Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T13:48:51.638692Z",
+  "completed_at": "2026-08-01T13:48:51.638692Z",
   "external": {}
 }
