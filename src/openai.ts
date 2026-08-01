@@ -527,6 +527,12 @@ async function readBody(response: Response, signal: AbortSignal, maxBytes: numbe
 			}
 		}
 		return chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
+	} catch (error) {
+		if (isProviderError(error)) throw error;
+		if (signal.aborted) {
+			throw createProviderError({ provider, kind: "canceled", message: "Search canceled", retryable: false, cause: error });
+		}
+		throw createProviderError({ provider, kind: "network", message: "OpenAI web search response stream failed", retryable: true, cause: error });
 	} finally {
 		signal.removeEventListener("abort", onAbort);
 		try {
@@ -643,6 +649,27 @@ function responseStatusFailure(provider: OpenAIProviderId, payload: Record<strin
 	});
 }
 
+function addResponseMetadata(
+	error: unknown,
+	provider: OpenAIProviderId,
+	requestId: string | undefined,
+	retryAfterMs: number | undefined,
+	rateLimits: ReturnType<typeof parseProviderRateLimits>,
+): never {
+	if (!isProviderError(error)) throw error;
+	throw createProviderError({
+		provider,
+		kind: error.kind,
+		message: error.message,
+		retryable: error.retryable,
+		status: error.status,
+		requestId: error.requestId ?? requestId,
+		retryAfterMs: error.retryAfterMs ?? retryAfterMs,
+		rateLimits: error.rateLimits ?? rateLimits,
+		cause: error,
+	});
+}
+
 export class OpenAIProvider implements Provider {
 	readonly id: OpenAIProviderId;
 	readonly capabilities = capabilities;
@@ -750,20 +777,24 @@ export class OpenAIProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 
-		const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);
-		const payload = parseResponseBody(responseBody, this.id);
-		responseStatusFailure(this.id, payload);
-		const normalizedResponse = normalizeOpenAIResponse(payload, normalized, this.id);
-		const usage = normalizedResponse.usage === undefined && responseRateLimits === undefined
-			? undefined
-			: { ...normalizedResponse.usage, ...(responseRateLimits === undefined ? {} : { rateLimits: responseRateLimits }) };
-		return {
-			...normalizedResponse,
-			...(normalizedResponse.requestId === undefined && requestId === undefined ? {} : { requestId: normalizedResponse.requestId ?? requestId }),
-			...(usage === undefined ? {} : { usage }),
-			appliedOptions: plan.appliedOptions,
-			warnings: plan.warnings,
-		};
+		try {
+			const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);
+			const payload = parseResponseBody(responseBody, this.id);
+			responseStatusFailure(this.id, payload);
+			const normalizedResponse = normalizeOpenAIResponse(payload, normalized, this.id);
+			const usage = normalizedResponse.usage === undefined && responseRateLimits === undefined
+				? undefined
+				: { ...normalizedResponse.usage, ...(responseRateLimits === undefined ? {} : { rateLimits: responseRateLimits }) };
+			return {
+				...normalizedResponse,
+				...(normalizedResponse.requestId === undefined && requestId === undefined ? {} : { requestId: normalizedResponse.requestId ?? requestId }),
+				...(usage === undefined ? {} : { usage }),
+				appliedOptions: plan.appliedOptions,
+				warnings: plan.warnings,
+			};
+		} catch (error) {
+			addResponseMetadata(error, this.id, requestId, retryAfterMs, responseRateLimits);
+		}
 	}
 }
 

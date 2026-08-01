@@ -275,6 +275,36 @@ describe("OpenAIProvider", () => {
 		expect(canceled).toBe(true);
 	});
 
+	it("preserves success rate-limit metadata and failure request IDs", async () => {
+		const successful = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response(payload, 200, {
+				"content-type": "application/json",
+				"x-request-id": "header-id",
+				"x-ratelimit-limit": "10",
+				"x-ratelimit-remaining": "9",
+				"x-ratelimit-reset": "60",
+			})) as OpenAIFetch,
+		});
+		const result = await successful.search({ query: "q" }, new AbortController().signal, context());
+		expect(result.requestId).toBe("resp-123");
+		expect(result.usage?.rateLimits?.windows[0]).toMatchObject({ limit: 10, remaining: 9, resetAfterMs: 60_000 });
+
+		const incomplete = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response({ status: "incomplete", output: [] }, 200, {
+				"content-type": "application/json",
+				"x-request-id": "incomplete-id",
+				"retry-after": "2",
+			})) as OpenAIFetch,
+		});
+		await expect(incomplete.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+			kind: "http",
+			requestId: "incomplete-id",
+			retryAfterMs: 2_000,
+		});
+	});
+
 	it("maps auth, rate-limit, and transient HTTP failures with retry metadata", async () => {
 		for (const [status, kind] of [[401, "auth"], [429, "rateLimit"], [503, "http"]] as const) {
 			const provider = createOpenAIProvider({
@@ -346,6 +376,45 @@ describe("OpenAIProvider", () => {
 		};
 		await expect(provider.search({ query: "q" }, new AbortController().signal, noAuth)).rejects.toMatchObject({ kind: "auth" });
 		expect(calls).toBe(0);
+	});
+
+	it("classifies a broken success stream as a retryable network failure", async () => {
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode("data: {}\n\n"));
+				queueMicrotask(() => controller.error(new Error("socket closed")));
+			},
+		});
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => new Response(stream, { status: 200, headers: { "content-type": "text/event-stream", "x-request-id": "stream-id" } })) as OpenAIFetch,
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+			provider: "openai",
+			kind: "network",
+			retryable: true,
+			requestId: "stream-id",
+		});
+	});
+
+	it("maps stream cancellation to a canceled provider error", async () => {
+		let startedResolve!: () => void;
+		const started = new Promise<void>((resolve) => { startedResolve = resolve; });
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode("data: {}\n\n"));
+				startedResolve();
+			},
+		});
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })) as OpenAIFetch,
+		});
+		const controller = new AbortController();
+		const pending = provider.search({ query: "q" }, controller.signal, context());
+		await started;
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ provider: "openai", kind: "canceled" });
 	});
 
 	it("requires a terminal completion event for LF and CRLF streams", async () => {
