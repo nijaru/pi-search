@@ -135,21 +135,24 @@ function optionalTimestamp(value: unknown, label: string): string | undefined {
 }
 
 function normalizedUrl(value: unknown): { url: string; domain: string } {
-	const raw = optionalString(value, "web.results[].url");
-	if (raw === undefined || raw.length === 0) return malformed("web.results[].url is missing");
+	if (typeof value !== "string" || value.trim().length === 0) return malformed("web.results[].url is missing");
+	if (value.length > 8_192) return malformed("web.results[].url exceeds the supported length limit");
+	const raw = value.trim();
 	try {
 		const url = new URL(raw);
 		if (url.protocol !== "http:" && url.protocol !== "https:") {
 			return malformed("web.results[].url is not an HTTP(S) URL");
 		}
-		return { url: url.toString(), domain: url.hostname.toLowerCase() };
+		return { url: url.toString(), domain: url.hostname.toLowerCase().replace(/\.$/, "") };
 	} catch (error) {
 		return malformed("web.results[].url is not a valid URL", error);
 	}
 }
 
 function domainMatches(hostname: string, domain: string): boolean {
-	return hostname === domain || hostname.endsWith(`.${domain}`);
+	const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
+	const normalizedDomain = domain.toLowerCase().replace(/\.$/, "");
+	return normalizedHostname === normalizedDomain || normalizedHostname.endsWith(`.${normalizedDomain}`);
 }
 
 function resultAllowed(result: SearchResult, request: SearchRequest): boolean {

@@ -45,6 +45,8 @@ describe("search provider router", () => {
 		expect(route({ query: "q" }, context("google", "google-generative-ai")).id).toBe("gemini");
 		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).id).toBe("gemini");
 		expect(route({ query: "q" }, context("xai", "openai-responses")).id).toBe("xai");
+		expect(route({ query: "q", mode: "keyword", providerHint: "gemini" }, context("google", "google-generative-ai")).id).toBe("gemini");
+		expect(route({ query: "q", mode: "keyword", providerHint: "xai" }, context("xai", "openai-responses")).id).toBe("xai");
 	});
 
 	it("does not allow metered native grounding through the native alias", () => {

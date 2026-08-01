@@ -189,8 +189,15 @@ describe("direct content fetch", () => {
 		writeFileSync(script, "#!/bin/sh\nout=''\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = \"--output\" ]; then shift; out=\"$1\"; fi\n  shift\ndone\nout=$(printf '%s' \"$out\" | sed 's/%(ext)s/vtt/')\nprintf 'WEBVTT\\n\\n00:00.000 --> 00:01.000\\nCaption text\\n' > \"$out\"\n");
 		chmodSync(script, 0o700);
 		try {
-			const result = await fetchContent({ url: "https://www.youtube.com/watch?v=abc12345678" }, undefined, { youtubeCommand: script });
-			expect(result).toMatchObject({ extraction: "youtube-transcript", outputFormat: "text", content: "Caption text", contentTrust: "untrusted" });
+			const result = await fetchContent({ url: "https://youtu.be/abc12345678" }, undefined, { youtubeCommand: script });
+			expect(result).toMatchObject({
+				url: "https://www.youtube.com/watch?v=abc12345678",
+				sourceUrl: "https://youtu.be/abc12345678",
+				extraction: "youtube-transcript",
+				outputFormat: "text",
+				content: "Caption text",
+				contentTrust: "untrusted",
+			});
 		} finally {
 			unlinkSync(script);
 		}

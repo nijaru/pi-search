@@ -225,6 +225,40 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
+	it("cancels a pending error body when the caller aborts", async () => {
+		let canceled = false;
+		let fetchStartedResolve!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => { fetchStartedResolve = resolve; });
+		let closeTimer: ReturnType<typeof setTimeout> | undefined;
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode("{"));
+				closeTimer = setTimeout(() => controller.close(), 200);
+			},
+			cancel() {
+				canceled = true;
+				if (closeTimer !== undefined) clearTimeout(closeTimer);
+			},
+		});
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => {
+				fetchStartedResolve();
+				return new Response(stream, { status: 503 });
+			}) as OpenAIFetch,
+		});
+		const controller = new AbortController();
+		const pending = provider.search({ query: "q" }, controller.signal, context());
+		await fetchStarted;
+		controller.abort();
+		const settled = await Promise.race([
+			pending.then(() => true, () => true),
+			Bun.sleep(100).then(() => false),
+		]);
+		expect(settled).toBe(true);
+		expect(canceled).toBe(true);
+	});
+
 	it("maps auth, rate-limit, and transient HTTP failures with retry metadata", async () => {
 		for (const [status, kind] of [[401, "auth"], [429, "rateLimit"], [503, "http"]] as const) {
 			const provider = createOpenAIProvider({

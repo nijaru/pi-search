@@ -61,6 +61,21 @@ describe("BraveProvider", () => {
 		expect(result.usage?.rateLimits?.windows[0]?.remaining).toBe(0);
 	});
 
+	it("canonicalizes trailing-dot domains before applying exclusions", () => {
+		const result = normalizeBraveResponse(
+			{ web: { results: [{ url: "https://example.com./private", title: "Excluded" }] } },
+			{ query: "q", domains: { exclude: ["example.com"] }, maxResults: 10 },
+		);
+		expect(result.results).toEqual([]);
+	});
+
+	it("rejects overlong result URLs instead of truncating them", () => {
+		expect(() => normalizeBraveResponse(
+			{ web: { results: [{ url: `https://example.com/${"a".repeat(8_200)}` }] } },
+			{ query: "q", maxResults: 10 },
+		)).toThrow("exceeds the supported length limit");
+	});
+
 	it("parses multiple quota windows and retry-after metadata", () => {
 		const info = parseBraveRateLimits(
 			new Headers({

@@ -120,9 +120,9 @@ function sanitizeErrorDiagnostic(body: string, secret?: string): string | undefi
 	return text.slice(0, MAX_ERROR_DIAGNOSTIC_CHARS);
 }
 
-async function readErrorDiagnostic(response: Response, secret?: string): Promise<string | undefined> {
+async function readErrorDiagnostic(response: Response, secret?: string, signal?: AbortSignal): Promise<string | undefined> {
 	try {
-		const body = await readBoundedResponseText(response, MAX_ERROR_BODY_BYTES);
+		const body = await readBoundedResponseText(response, MAX_ERROR_BODY_BYTES, signal);
 		return sanitizeErrorDiagnostic(body, secret);
 	} catch {
 		await cancelResponseBody(response);
@@ -704,15 +704,15 @@ export class OpenAIProvider implements Provider {
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
 		const retryAfterMs = parseRetryAfter(response.headers);
 		if (response.status === 401 || response.status === 403) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey);
+			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
 			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: false });
 		}
 		if (response.status === 429) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey);
+			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
 			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey);
+			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
 			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 

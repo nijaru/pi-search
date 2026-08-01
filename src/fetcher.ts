@@ -217,8 +217,10 @@ async function fetchYouTubeContent(
 		maxOutputBytes: options.youtubeMaxOutputBytes,
 	});
 	const sliced = sliceOutput(result.text, request.offset, request.maxLength);
+	const canonicalUrl = `https://www.youtube.com/watch?v=${result.videoId}`;
 	return {
-		url: request.url,
+		url: canonicalUrl,
+		...(canonicalUrl === request.url ? {} : { sourceUrl: request.url }),
 		content: sliced.content,
 		contentTrust: "untrusted",
 		contentType: "text/plain",

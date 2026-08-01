@@ -33,20 +33,10 @@ function unavailable(message: string, provider: ProviderId = "router"): never {
 	throw createProviderError({ provider, kind: "unavailable", message, retryable: false });
 }
 
-function modeCapability(request: SearchRequest): keyof Provider["capabilities"] | undefined {
-	switch (request.mode) {
-		case "keyword":
-			return "keyword";
-		case "fresh":
-			return "freshness";
-		default:
-			return undefined;
-	}
-}
-
 function canServe(provider: Provider, request: SearchRequest): boolean {
-	const mode = modeCapability(request);
-	if (mode !== undefined && provider.capabilities[mode] !== true) return false;
+	// Search modes are retrieval hints. Providers that cannot guarantee a hint
+	// must report that limitation in their response rather than being rejected
+	// during routing; domain filters remain hard constraints.
 	if ((request.domains?.include?.length || request.domains?.exclude?.length) && provider.capabilities.domainFilter !== true) return false;
 	return true;
 }
