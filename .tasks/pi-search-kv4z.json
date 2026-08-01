@@ -3,7 +3,7 @@
   "ref": "kv4z",
   "title": "Inventory and close required feature gaps",
   "description": "Compare the prior extension's actual workflows with our needs and classify must-have versus intentionally excluded behavior. Implement required browser/JS fetch, social/X options, provider coverage, research, PDF/YouTube, or repository/content workflows only where the inventory requires them; do not preserve scope assumptions without validation.",
-  "status": "open",
+  "status": "active",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -11,9 +11,18 @@
   "blocked_by": [],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T16:30:00.311285Z",
+      "msg": "Inventory scope: required workflows come from user requests and existing use, not parity with every pi-web-access feature; classify provider, fetch, media, GitHub, UI, storage, and research features before sole cutover."
+    },
+    {
+      "ts": "2026-08-01T16:31:48.775114Z",
+      "msg": "Created ai/research/required-workflows.md: required core is native/direct search, Gemini/Brave/Exa/Parallel, xAI X, evidence cleanup, direct HTML/Markdown/text/JSON, PDF, YouTube captions, and bounded research. Fan-out, opaque answers, history storage, GitHub/media/browser/remote extraction, caching, and overlapping providers are deferred or Pi/Bash-owned until concrete need."
+    }
+  ],
   "created_at": "2026-08-01T16:19:41.803028Z",
-  "updated_at": "2026-08-01T16:19:41.803028Z",
+  "updated_at": "2026-08-01T16:31:48.775114Z",
   "completed_at": null,
   "external": {}
 }

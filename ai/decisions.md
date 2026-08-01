@@ -37,3 +37,16 @@ surface.
 This supersedes the earlier coexistence decision as the target state. The
 one-provider, evidence-first, explicit-cost, bounded-network principles remain
 in force.
+
+### 2026-08-01 — required workflow scope
+
+The sole replacement target is capability-complete for the workflows actually
+requested: native OpenAI/Codex-first search, controlled direct-provider search
+for local models, Gemini, Brave, Exa, Parallel, explicit xAI X, evidence
+cleanup, direct page/PDF/YouTube-caption fetch, and bounded multi-query
+research. `pi-web-access` feature parity is not the target. Fan-out, opaque
+answers, persistent history, GitHub cloning, media vision/OCR, browser or
+remote extraction, caching, and additional overlapping providers remain
+outside the runtime until a concrete workflow demonstrates that they are
+required. This keeps one owner without importing hidden cost, privacy, or
+resource behavior.

@@ -56,3 +56,14 @@ durable rationale belongs in `decisions.md`.
   tasks for correctness, live/Pi acceptance, needs inventory, and final
   cutover. Prior deferred features are now hypotheses to validate against our
   actual workflows rather than permanent exclusions.
+- Implemented and pushed `60198f4`: the shared cleanup boundary now enforces
+  include/exclude domains, domain inputs are bounded by count and aggregate
+  bytes, Brave reuses the shared matcher, and Gemini/xAI/OpenAI preserve
+  successful header request IDs. OpenAI diagnostics redact header-only bearer
+  credentials. Verification: 113 tests and 263 assertions pass with TypeScript.
+- Created `ai/research/required-workflows.md`. It keeps native/direct provider
+  search, xAI X, evidence cleanup, direct page/PDF/YouTube-caption fetch, and
+  bounded research as required. It classifies fan-out, answer synthesis,
+  history storage, GitHub cloning, media vision/OCR, browser/remote extraction,
+  caching, and extra overlapping providers as deferred or Pi/Bash-owned rather
+  than silently requiring parity with `pi-web-access`.

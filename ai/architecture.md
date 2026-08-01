@@ -38,9 +38,11 @@ local subprocesses.
 
 `pi-web-access` is currently installed with duplicate search registration
 disabled in `~/.config/pi/web-search.json`, but this is temporary migration
-state. The target runtime has one public owner: pi-search. Cutover is blocked
-until required prior workflows are inventoried, implemented or explicitly
-retired, and live/Pi acceptance passes.
+state. The target runtime has one public owner: pi-search. The required
+workflow inventory is recorded in `ai/research/required-workflows.md`; it
+requires core evidence/search/fetch/research workflows but assigns reference
+package extras to Pi/Bash or defers them until a concrete need appears.
+Cutover is blocked until required rows and live/Pi acceptance pass.
 
 ## Planned evolution
 
@@ -49,5 +51,5 @@ coverage for the inventoried needs. New adapters and fetch layers must
 implement the existing contracts, preserve request constraints and provenance,
 expose costs/limits where available, and include offline fixtures plus explicit
 live smoke coverage. Browser rendering, remote extraction, persistent caches,
-and multi-agent research are deferred until the needs inventory proves them
-necessary; they are no longer assumed permanently out of scope.
+media analysis, and extra provider adapters are deferred by the current
+inventory; reopen them only when a required workflow is demonstrated.

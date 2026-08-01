@@ -95,7 +95,9 @@ bridge, and DuckDuckGo remain deferred due to overlap or provenance concerns.
 ## 8. Sole replacement gate — required before final cutover
 
 The current package is not yet approved as the only active web extension. The
-remaining work is tracked in `.tasks/`:
+required workflow classification is recorded in
+`ai/research/required-workflows.md`; the remaining gates are tracked in
+`.tasks/`:
 
 1. Enforce hard domain constraints at the shared result boundary and bound
    domain-list inputs before network access.

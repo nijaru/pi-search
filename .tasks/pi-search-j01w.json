@@ -3,7 +3,7 @@
   "ref": "j01w",
   "title": "Enforce hard search constraints and bounded inputs",
   "description": "Post-filter supported domain include/exclude constraints at the shared search boundary, preserve explicit warnings, and bound domain count and serialized request size before network access. Add adversarial offline tests across providers and web_research.",
-  "status": "active",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -15,10 +15,14 @@
     {
       "ts": "2026-08-01T16:22:58.835598Z",
       "msg": "Shared cleanup will enforce normalized include/exclude domains; validate count and aggregate input size before provider calls."
+    },
+    {
+      "ts": "2026-08-01T16:31:55.440971Z",
+      "msg": "Implemented and pushed in 60198f4; 113 tests/263 assertions and TypeScript pass."
     }
   ],
   "created_at": "2026-08-01T16:19:41.769457Z",
-  "updated_at": "2026-08-01T16:22:58.835598Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T16:31:55.452443Z",
+  "completed_at": "2026-08-01T16:31:55.452443Z",
   "external": {}
 }
