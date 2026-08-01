@@ -4,7 +4,7 @@
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and origin are clean at
-`6a6ba7f`; the installed Git package was refreshed to that commit. The active
+`f921c38`; the installed Git package was refreshed to that commit. The active
 Pi runtime contains only this web extension and exposes exactly `web_search`,
 `web_fetch`, and `web_research`.
 
@@ -61,7 +61,8 @@ evidence. No open tasks remain in `tk`.
 
 ## Next action
 
-Refresh/restart any long-running Pi process if needed, then use explicit
-credential-gated smoke commands for providers whose live behavior needs
-confirmation. Otherwise the package is ready for normal use; only measured
-future gaps should reopen the deferred work.
+Run explicit credential-gated smoke commands for providers whose live behavior
+needs confirmation, starting with OpenAI/Codex and the direct providers used in
+this environment. Refresh/restart any long-running Pi process first. Otherwise
+the package is ready for normal use; only measured future gaps should reopen
+the deferred work.
