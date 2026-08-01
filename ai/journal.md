@@ -35,3 +35,7 @@ durable rationale belongs in `decisions.md`.
   that identity, opaque provider answers are excluded from `web_search`, and
   the unversioned package no longer sends a versioned user-agent string.
   Verification: 111 tests and 256 assertions pass with TypeScript checking.
+- Implemented and pushed `8b0e25a`: direct fetch now prefers Markdown via
+  content negotiation and preserves `text/markdown` responses as bounded,
+  untrusted Markdown with explicit extraction metadata. Verification: 112
+  tests and 258 assertions pass with TypeScript checking.

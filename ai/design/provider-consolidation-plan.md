@@ -50,14 +50,14 @@ Provider adapters still own request construction and payload parsing. Shared
 normalization and output bounds remain at the tool boundary; unsupported hard
 constraints continue to fail before network access.
 
-## Phase 2 — optimize individual-page fetching
+## Phase 2 — optimize individual-page fetching (Markdown implemented)
 
 1. Keep pinned direct HTTP, SSRF, redirect, byte, deadline, cancellation, and
    untrusted-content fencing as the default path.
-2. Add `text/markdown` to content negotiation and preserve the actual served
-   MIME type and extraction path. Markdown should remain bounded text, not be
-   interpreted as instructions. Keep JSON/XML/plain text as bounded text
-   unless a caller explicitly asks for structured parsing.
+2. Direct transport now prefers `text/markdown`; the worker preserves
+   server-provided Markdown as bounded untrusted text and reports
+   `extraction: "markdown"` plus the actual content type. JSON/XML/plain text
+   remain bounded text.
 3. Keep PDF and caption extraction local and bounded. Do not add browser/JS
    rendering to the default path. If demand proves it necessary, add an
    explicit browser mode with per-request/subresource SSRF checks, byte and

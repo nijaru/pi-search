@@ -78,9 +78,9 @@ before calling the search surface mature:
    runs after provider parsing and is reused for research fetch deduplication.
    Raw URLs are preserved when canonicalization changes them; arbitrary query
    parameters are not stripped.
-3. Improve direct fetch content negotiation with `text/markdown` and report
-   actual format/extraction metadata. Keep browser rendering and caching out of
-   the default path.
+3. ✅ Improve direct fetch content negotiation with `text/markdown` and report
+   actual format/extraction metadata. Browser rendering and caching remain out
+   of the default path.
 4. Add an explicit credential-gated live smoke runner. It must never run from
    `bun test`, infer a provider from available credentials, retry, fan out, or
    print secrets. It should verify bounded inspectable URLs and hard-filter

@@ -52,8 +52,8 @@ context. A provider hint such as `provider: "exa"`, `"parallel"`, or
 ## Fetch coverage
 
 `web_fetch` owns direct HTTPS/HTTP fetching with SSRF protection, redirect
-validation, response limits, cancellation, local Readability/Turndown
-extraction, and untrusted-content fencing. It also supports:
+validation, response limits, cancellation, Markdown content negotiation, local
+Readability/Turndown extraction, and untrusted-content fencing. It also supports:
 
 - Remote PDFs through bounded local `pdftotext` extraction. Scanned and
   encrypted PDFs fail explicitly; OCR is not implicit.
