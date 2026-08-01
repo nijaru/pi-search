@@ -33,6 +33,43 @@ describe("local PDF extraction", () => {
 		await expect(Bun.file(inputPath!).exists()).resolves.toBe(false);
 	});
 
+	it("rejects PDFs with no extractable text", async () => {
+		await expect(extractPdfText(new TextEncoder().encode("%PDF-test"), {
+			signal: new AbortController().signal,
+			spawnImpl: fakeSpawn("\n", {}),
+		})).rejects.toMatchObject({ kind: "extraction", message: expect.stringContaining("scanned PDFs") });
+	});
+
+	it("bounds parser output and terminates the child", async () => {
+		const seen: { killed?: boolean } = {};
+		await expect(extractPdfText(new TextEncoder().encode("%PDF-test"), {
+			signal: new AbortController().signal,
+			maxOutputBytes: 4,
+			spawnImpl: fakeSpawn("12345", seen),
+		})).rejects.toMatchObject({ kind: "responseTooLarge" });
+		expect(seen.killed).toBe(true);
+	});
+
+	it("reports parser diagnostics for non-zero exits", async () => {
+		const seen: { args?: readonly string[] } = {};
+		await expect(extractPdfText(new TextEncoder().encode("%PDF-test"), {
+			signal: new AbortController().signal,
+			spawnImpl: (_command, args) => {
+				seen.args = args;
+				const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: () => void };
+				child.stdout = new EventEmitter();
+				child.stderr = new EventEmitter();
+				child.kill = () => undefined;
+				queueMicrotask(() => {
+					child.stderr.emit("data", Buffer.from("encrypted PDF"));
+					child.emit("close", 1);
+				});
+				return child;
+			},
+		})).rejects.toMatchObject({ kind: "extraction", message: expect.stringContaining("encrypted PDF") });
+		expect(seen.args).toBeDefined();
+	});
+
 	it("cancels the parser process", async () => {
 		const seen: { spawned?: boolean; killed?: boolean } = {};
 		const controller = new AbortController();

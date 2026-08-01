@@ -257,6 +257,12 @@ async function extractWithDeadline(
 	signal: AbortSignal,
 ): Promise<ExtractedContent> {
 	if (signal.aborted) throw new SafeFetchError({ kind: "canceled", message: "Fetch canceled" });
+	if (mimeType === "text/markdown" || mimeType === "text/x-markdown") {
+		return { content: sourceText, outputFormat: "markdown", extraction: "markdown" };
+	}
+	if (mimeType !== "text/html" && mimeType !== "application/xhtml+xml") {
+		return { content: sourceText, outputFormat: "text", extraction: "plain-text" };
+	}
 	return new Promise<ExtractedContent>((resolve, reject) => {
 		const worker = new Worker(new URL("./fetch-extractor-worker.mjs", import.meta.url));
 		let finished = false;
@@ -286,7 +292,11 @@ async function extractWithDeadline(
 			cleanup();
 			resolve(message.result);
 		});
-		worker.postMessage({ sourceText, mimeType, request });
+		try {
+			worker.postMessage({ sourceText, mimeType, request });
+		} catch (error) {
+			fail(new SafeFetchError({ kind: "extraction", message: "Local content extraction could not start", cause: error }));
+		}
 	});
 }
 
