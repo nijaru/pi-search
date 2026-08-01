@@ -25,9 +25,15 @@ The package has no semver field or release tag. Pi installation uses the public
 Git source `git:github.com/nijaru/pi-search`. The earlier temporary `v0.1.0`
 release and tag were removed because this package is intentionally unversioned.
 
-### 2026-08-01 — coexist with pi-web-access
+### 2026-08-01 — temporary migration, final sole ownership
 
-Keep `pi-web-access` installed for capabilities outside this package's scope,
-but disable its duplicate search registration in the active Pi configuration.
-This preserves rollback and specialty workflows without registering competing
-search tools.
+`pi-web-access` may remain installed only while pi-search is being completed and
+validated. The final runtime must have one owner: pi-search must cover the
+required search, fetch, research, social, and specialty workflows before the
+prior extension is removed or left inactive. The prior extension is a source
+reference and temporary rollback aid, not an accepted permanent second tool
+surface.
+
+This supersedes the earlier coexistence decision as the target state. The
+one-provider, evidence-first, explicit-cost, bounded-network principles remain
+in force.

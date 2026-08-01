@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "obxl",
+  "title": "Make pi-search the sole complete web stack",
+  "description": "Replace the prior Pi web-search runtime with pi-search as the only production owner. Resolve the audit findings, inventory prior workflows against our actual needs, implement required coverage, run offline and credential-gated acceptance, and cut over only when no required capability is missing.",
+  "status": "active",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T16:19:41.759887Z",
+  "updated_at": "2026-08-01T16:20:55.178377Z",
+  "completed_at": null,
+  "external": {}
+}

@@ -34,17 +34,20 @@ streamed byte/deadline/cancellation bounds. HTML extraction runs in the local
 worker at `src/fetch-extractor-worker.mjs`; PDF and YouTube paths use bounded
 local subprocesses.
 
-## Extension coexistence
+## Extension migration
 
-`pi-web-access` remains installed but its search registration is disabled in
-`~/.config/pi/web-search.json`. This package owns the three public tool names;
-its specialty functionality remains an explicit rollback option.
+`pi-web-access` is currently installed with duplicate search registration
+disabled in `~/.config/pi/web-search.json`, but this is temporary migration
+state. The target runtime has one public owner: pi-search. Cutover is blocked
+until required prior workflows are inventoried, implemented or explicitly
+retired, and live/Pi acceptance passes.
 
 ## Planned evolution
 
 Provider-landscape research should add only capabilities that materially improve
-coverage. New adapters must implement the existing contracts, preserve request
-constraints and provenance, expose costs/limits where available, and include
-offline fixtures plus explicit live smoke coverage. Browser rendering, remote
-extraction, persistent caches, and multi-agent research remain opt-in design
-questions rather than default dependencies.
+coverage for the inventoried needs. New adapters and fetch layers must
+implement the existing contracts, preserve request constraints and provenance,
+expose costs/limits where available, and include offline fixtures plus explicit
+live smoke coverage. Browser rendering, remote extraction, persistent caches,
+and multi-agent research are deferred until the needs inventory proves them
+necessary; they are no longer assumed permanently out of scope.

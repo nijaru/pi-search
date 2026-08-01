@@ -3,49 +3,48 @@
 ## Current state
 
 `pi-search` is a public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Pi installs it from
-`git:github.com/nijaru/pi-search`; the local global install is configured from
-that source. `pi-web-access` remains installed for specialty capabilities, with
-its duplicate search registration disabled in the active XDG configuration.
-
-The extension registers exactly three tools:
-
-- `web_search`: evidence-first, provider-neutral search;
-- `web_fetch`: bounded direct fetching and local extraction; and
-- `web_research`: caller-planned, budgeted sequential search and fetches.
+https://github.com/nijaru/pi-search. The current branch and remote are clean at
+`fa7a60e`. The installed Git package is updated to that commit and registers
+exactly `web_search`, `web_fetch`, and `web_research`.
 
 Shipped search adapters are OpenAI/Codex, Gemini, xAI web and X, Brave, Exa,
-and Parallel. The fetch path includes pinned DNS/SSRF and redirect checks,
-streamed limits, local Readability/Turndown extraction, PDF text, and bounded
-YouTube captions.
+and Parallel. Fetching includes pinned DNS/SSRF and redirect checks, streamed
+limits, local HTML/Markdown extraction, bounded PDF text, and bounded YouTube
+captions. Search results have shared URL cleanup, provenance preservation,
+deduplication, and output bounds. The explicit live-smoke runner exists but no
+credentialed provider calls have been run.
+
+`pi-web-access` is still installed only as a temporary migration state. The
+final direction is one extension: pi-search must cover all required workflows
+correctly before the prior runtime is removed.
 
 ## Active objective
 
-Compare existing Pi web extensions and design the best provider and fetch
-coverage for this package without hidden cost, provider fan-out, opaque answer
-synthesis, or unnecessary browser infrastructure. Preserve evidence-first
-results, explicit provider selection, hard constraint reporting, untrusted
-content fencing, bounded resources, and deterministic offline tests.
+Make pi-search the sole complete web-search/fetch/research extension for our
+actual needs. Do not accept the current implementation as the final cutover
+until the audit findings are fixed, prior workflows are inventoried, required
+capabilities are implemented, and live provider/Pi integration checks pass.
 
-The research phase is complete. The evidence boundary, shared result cleanup/URL identity, Markdown content
-negotiation, and credential-gated live smoke runner are implemented. Perplexity and SearXNG are currently deferred: the public request contract
-has no exact date/path filters, Perplexity overlaps existing providers, and
-SearXNG needs a concrete self-hosted endpoint requirement. Add either only when
-that requirement is demonstrated; xAI remains the only dedicated X path.
+## Review blockers
+
+- Supported hard domain filters are not enforced at the shared result boundary.
+- Header-only OpenAI authentication can leave a bearer value available to
+  diagnostic redaction paths.
+- The live Codex smoke context uses the wrong endpoint.
+- Successful request IDs and some usage/rate-limit metadata are dropped.
+- Domain-list inputs are not bounded by count or aggregate size.
+- Search output needs an explicit untrusted-data fence.
 
 ## Verification
 
-The current checkout has 108 passing tests, 247 assertions, and a passing
-TypeScript check before the planning-only context updates. These are fixture and
-boundary tests; credential-gated live provider smoke tests remain an
-operational gap.
+Offline verification currently passes: 112 tests, 258 assertions, TypeScript,
+`git diff --check`, and Pi tool registration. Live smoke dry-run and fail-closed
+credential checks pass. Actual provider calls and the final single-extension
+cutover remain unverified.
 
-## Open questions
+## Next action
 
-- Does the evidence-first boundary remove the current untyped provider
-  `answer` field, or expose an explicitly opt-in answer capability?
-- Is Perplexity's hard domain/date filtering worth another metered adapter?
-- Is a configured self-hosted SearXNG endpoint a real requirement, separate
-  from hidden fallback behavior?
-- Should JavaScript-rendered pages be an explicit opt-in fetch layer, or remain
-  outside the extension in favor of browser workflows?
+Work the open P1 tasks in order: enforce hard constraints and input bounds,
+harden diagnostics and metadata, inventory required feature gaps, then run
+credentialed live/Pi acceptance. Only after those gates pass should the old
+extension be removed from the active runtime.

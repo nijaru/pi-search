@@ -87,11 +87,31 @@ X/social search remains a capability, not a separate universal tool. xAI X is
 already explicit; add another social provider only with stable source URLs,
 citations, cost, and rate-limit evidence.
 
-## Non-goals
+## Phase 4 — required-coverage audit and sole cutover
 
-Do not import automatic provider fallback, paid retries, provider fan-out,
-opaque answer synthesis, browser curator/storage, GitHub cloning, telemetry,
-or a multi-agent research planner into the default path.
+The prior extension is not a permanent second runtime. Before cutover:
+
+1. Inventory the workflows we actually use from `pi-web-access` and other
+   references: provider search, X/social retrieval, individual-page fetch,
+   Markdown/HTML/PDF/YouTube extraction, JavaScript-heavy pages, research,
+   citation/provenance, and any GitHub or media operations.
+2. Mark each workflow required, replaceable by Pi built-ins/Bash, or explicitly
+   retired. Do not treat the previous non-goals list as user approval.
+3. Implement every required workflow behind the existing bounded, untrusted,
+   evidence-first contracts. Browser rendering, remote extraction, caching,
+   repository helpers, and media features require their own SSRF/resource/
+   privacy review rather than being added by default.
+4. Run deterministic fixtures, Pi registration checks, credentialed live smoke
+   calls, and representative end-to-end workflows. Remove the prior active
+   extension only after all required rows pass.
+
+## Non-goals unless the needs inventory requires them
+
+Automatic provider fallback, paid retries, provider fan-out, opaque answer
+synthesis, telemetry, and curator/storage behavior remain disallowed by policy.
+Other previously deferred features are hypotheses, not permanent exclusions;
+the needs inventory decides whether pi-search must implement them or whether a
+Pi built-in/Bash workflow correctly owns them.
 
 ## Decision gate
 

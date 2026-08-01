@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "ez77",
+  "title": "Complete live smoke and Pi integration acceptance",
+  "description": "Fix the Codex smoke endpoint, test the live runner against every configured provider with dedicated credentials, verify Pi model-registry contexts and tool registration, and record PASS/SKIP/RATE_LIMITED results without secrets.",
+  "status": "open",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T16:19:41.793686Z",
+  "updated_at": "2026-08-01T16:19:41.793686Z",
+  "completed_at": null,
+  "external": {}
+}

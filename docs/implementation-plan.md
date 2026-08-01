@@ -92,9 +92,30 @@ filters. SearXNG is optional for a self-hosted/privacy requirement. Anthropic
 native search is conditional on auth and citation fit. Tavily, Z.AI, Claude
 bridge, and DuckDuckGo remain deferred due to overlap or provenance concerns.
 
-## Deferred / outside ownership
+## 8. Sole replacement gate — required before final cutover
 
-These are intentional boundaries, not missing search-provider implementations:
+The current package is not yet approved as the only active web extension. The
+remaining work is tracked in `.tasks/`:
+
+1. Enforce hard domain constraints at the shared result boundary and bound
+   domain-list inputs before network access.
+2. Harden credential diagnostics, preserve successful request IDs, and retain
+   available usage/rate-limit metadata.
+3. Inventory the workflows we actually rely on from the prior extension and
+   classify each as required, correctly owned by Pi/Bash, or retired. Any
+   previously deferred browser, JS, media, GitHub, social, caching, or
+   provider feature is decided by this inventory, not assumption.
+4. Run the live smoke matrix and representative Pi end-to-end checks with
+   dedicated credentials. Correct the Codex smoke endpoint before calling it
+   valid.
+5. Remove the prior extension from the active runtime only after every
+   required workflow passes. Keeping it installed during this work is a
+   migration aid, not the final architecture.
+
+## Deferred / outside ownership until the needs inventory says otherwise
+
+These are current boundaries, not permanent exclusions. They remain outside
+until a required workflow demonstrates that pi-search must own them:
 
 - Browser automation, crawling, remote extraction, and provider fan-out.
 - Video downloads, frames, visual analysis, and OCR. Use Bash, `yt-dlp`,

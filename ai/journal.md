@@ -47,3 +47,12 @@ durable rationale belongs in `decisions.md`.
   both as explicit future candidates rather than adding overlap or endpoint
   complexity without a concrete requirement. Perplexity's extra date/path
   controls are not represented by the current public request contract.
+- Review of the clean `fa7a60e` tree concluded that pi-search is suitable for
+  staged use but not yet a sole replacement. Concrete blockers are shared hard
+  domain enforcement, header-only auth redaction, correct Codex smoke endpoint,
+  request/usage metadata retention, bounded domain inputs, and an explicit
+  search-content trust fence.
+- The user chose one final runtime, not permanent coexistence. Created P1/P2
+  tasks for correctness, live/Pi acceptance, needs inventory, and final
+  cutover. Prior deferred features are now hypotheses to validate against our
+  actual workflows rather than permanent exclusions.
