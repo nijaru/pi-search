@@ -3,7 +3,7 @@
   "ref": "5urx",
   "title": "Make non-native search use configured Exa",
   "description": "The previous pi-web-access default preferred Exa for non-native models, while pi-search currently routes them to Brave. Prefer configured direct Exa when EXA_API_KEY exists; retain Brave as the cost-controlled default when Exa is unavailable. Add regression coverage and documentation.",
-  "status": "active",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-08-01T23:06:14.362016Z",
-  "updated_at": "2026-08-01T23:06:17.038938Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T23:08:01.979387Z",
+  "completed_at": "2026-08-01T23:08:01.979387Z",
   "external": {}
 }
