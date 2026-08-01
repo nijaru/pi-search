@@ -50,3 +50,11 @@ remote extraction, caching, and additional overlapping providers remain
 outside the runtime until a concrete workflow demonstrates that they are
 required. This keeps one owner without importing hidden cost, privacy, or
 resource behavior.
+
+### 2026-08-01 — sole runtime cutover
+
+After offline fixtures, installed registration, and a fresh Pi Codex call
+passed, `pi-web-access` was removed from the active Pi package list. Dedicated
+live credentials for the other providers were absent, so those rows are
+recorded as skipped rather than treated as passing. Existing Pi processes must
+restart to observe the package-list change.

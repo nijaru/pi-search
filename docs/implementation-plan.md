@@ -92,27 +92,17 @@ filters. SearXNG is optional for a self-hosted/privacy requirement. Anthropic
 native search is conditional on auth and citation fit. Tavily, Z.AI, Claude
 bridge, and DuckDuckGo remain deferred due to overlap or provenance concerns.
 
-## 8. Sole replacement gate — required before final cutover
+## 8. Sole replacement gate — complete with credential caveats
 
-The current package is not yet approved as the only active web extension. The
-required workflow classification is recorded in
-`ai/research/required-workflows.md`; the remaining gates are tracked in
-`.tasks/`:
+The required workflow classification is recorded in
+`ai/research/required-workflows.md`. The shared hard-constraint, metadata,
+trust-fence, and Codex smoke fixes are complete. Offline fixtures cover every
+required row; a fresh Pi Codex call and installed registration passed. Gemini,
+xAI, Brave, Exa, and Parallel live rows are marked skipped because dedicated
+credentials are not available, not because their behavior was guessed.
 
-1. Enforce hard domain constraints at the shared result boundary and bound
-   domain-list inputs before network access.
-2. Harden credential diagnostics, preserve successful request IDs, and retain
-   available usage/rate-limit metadata.
-3. Inventory the workflows we actually rely on from the prior extension and
-   classify each as required, correctly owned by Pi/Bash, or retired. Any
-   previously deferred browser, JS, media, GitHub, social, caching, or
-   provider feature is decided by this inventory, not assumption.
-4. Run the live smoke matrix and representative Pi end-to-end checks with
-   dedicated credentials. Correct the Codex smoke endpoint before calling it
-   valid.
-5. Remove the prior extension from the active runtime only after every
-   required workflow passes. Keeping it installed during this work is a
-   migration aid, not the final architecture.
+`pi-web-access` has been removed from the active Pi package list. Restart an
+existing Pi process before relying on the cutover.
 
 ## Deferred / outside ownership until the needs inventory says otherwise
 

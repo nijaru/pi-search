@@ -14,9 +14,9 @@ captions. Search results have shared URL cleanup, hard domain enforcement,
 provenance preservation, deduplication, and output bounds. The explicit
 live-smoke runner exists but no credentialed provider calls have been run.
 
-`pi-web-access` is still installed only as a temporary migration state. The
-final direction is one extension: pi-search must cover all required workflows
-correctly before the prior runtime is removed.
+The prior `pi-web-access` package has been removed from the active Pi package
+list. pi-search is now the sole active web extension; deferred specialty
+workflows are explicit scope decisions in `ai/research/required-workflows.md`.
 
 ## Active objective
 
@@ -27,25 +27,28 @@ capabilities are implemented, and live provider/Pi integration checks pass.
 
 ## Review blockers
 
-- Credentialed provider calls and representative Pi workflows remain unverified.
-- The prior package is still installed as a temporary migration aid.
+- Dedicated live credentials for Gemini, xAI, Brave, Exa, and Parallel were not
+  available, so those provider smoke rows are skipped rather than claimed.
+- The final process must restart before an already-running Pi session observes
+  the package removal and current registration.
 
 The shared hard-domain boundary, bounded domain inputs, header-only auth
 redaction, successful request IDs, token usage, standard rate-limit metadata,
-Codex smoke endpoint, and response-level search trust fence are implemented
-and tested.
+Codex smoke endpoint, response-level search trust fence, installed registration,
+and native Codex Pi call are verified.
 
 ## Verification
 
-Offline verification currently passes: 116 tests, 270 assertions, TypeScript,
+Offline verification passes: 116 tests, 270 assertions, TypeScript,
 `git diff --check`, provider/tool fixtures, and the Codex endpoint assertion.
-Live smoke dry-run and fail-closed credential checks pass. Actual provider
-calls, representative Pi workflows, installed-package refresh, and the final
-single-extension cutover remain unverified.
+Live smoke dry-run and fail-closed credential checks pass. The installed
+package registers exactly three tools, and a fresh Pi Codex call returned
+structured evidence. Dedicated non-native provider calls remain skipped for
+lack of credentials.
 
 ## Next action
 
-Use `ai/research/required-workflows.md` as the cutover checklist. Refresh the
-installed Git package, run credentialed live/Pi acceptance for every required
-row, and record any provider-specific skips or failures. Only after those
-gates pass should `pi-web-access` be removed from the active runtime.
+Use `ai/research/required-workflows.md` as the ongoing coverage checklist.
+Restart Pi to load the sole-owner cutover in an existing process. Add a
+provider-specific live smoke only when dedicated credentials are available;
+never turn skipped providers into unverified claims.

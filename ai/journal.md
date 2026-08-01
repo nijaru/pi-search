@@ -74,3 +74,11 @@ durable rationale belongs in `decisions.md`.
   rate-limit headers propagate through JSON adapters. Search output now has an
   explicit untrusted-data prefix while remaining within the serialized bound.
   Verification: 116 tests and 270 assertions pass with TypeScript.
+- Refreshed the installed Git package to `eff97c7` and verified direct
+  registration of exactly `web_search`, `web_fetch`, and `web_research`.
+  A fresh Pi process returned one structured Codex search result with request
+  ID and token usage. Dedicated shell credentials for Gemini, xAI, Brave, Exa,
+  and Parallel were absent, so their live smoke rows remain explicitly skipped.
+- Removed `npm:pi-web-access` from the active Pi package list. Updated README,
+  architecture, implementation plan, brief, and decisions for the sole-owner
+  runtime. Existing Pi processes need a restart to observe the cutover.

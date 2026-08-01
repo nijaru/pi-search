@@ -78,9 +78,10 @@ The design, provider billing policy, and implementation gates are tracked in
 [`docs/provider-policy.md`](docs/provider-policy.md), and
 [`docs/implementation-plan.md`](docs/implementation-plan.md).
 
-Keep `pi-web-access` installed during rollout. Its duplicate search
-registration is disabled in the active Pi configuration while its specialty
-capabilities remain available for rollback.
+`pi-search` is the sole active web extension. Do not install a second web
+extension with overlapping tools; the deferred specialty workflows are
+intentionally outside this package until a concrete requirement justifies
+owning them.
 
 ## License
 

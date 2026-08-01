@@ -36,13 +36,12 @@ local subprocesses.
 
 ## Extension migration
 
-`pi-web-access` is currently installed with duplicate search registration
-disabled in `~/.config/pi/web-search.json`, but this is temporary migration
-state. The target runtime has one public owner: pi-search. The required
-workflow inventory is recorded in `ai/research/required-workflows.md`; it
-requires core evidence/search/fetch/research workflows but assigns reference
-package extras to Pi/Bash or defers them until a concrete need appears.
-Cutover is blocked until required rows and live/Pi acceptance pass.
+The active Pi package list now contains one web extension: pi-search. The
+required workflow inventory is recorded in
+`ai/research/required-workflows.md`; it requires core evidence/search/fetch/
+research workflows but assigns reference-package extras to Pi/Bash or defers
+them until a concrete need appears. A running Pi process must restart after a
+package-list change before it observes the sole-owner runtime.
 
 ## Planned evolution
 

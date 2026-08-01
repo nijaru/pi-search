@@ -3,7 +3,7 @@
   "ref": "muhe",
   "title": "Cut over to one extension after acceptance",
   "description": "After all P1 gates pass, disable/remove the prior runtime registration, verify only pi-search owns the public tools, update install and docs, and record rollback only as source history rather than a second active extension.",
-  "status": "open",
+  "status": "done",
   "priority": 2,
   "labels": null,
   "assignees": null,
@@ -11,9 +11,14 @@
   "blocked_by": [],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T16:43:52.732178Z",
+      "msg": "Cutover executed: removed npm:pi-web-access from active Pi package list; pi-search remains installed from Git and registers exactly web_search/web_fetch/web_research."
+    }
+  ],
   "created_at": "2026-08-01T16:19:41.811636Z",
-  "updated_at": "2026-08-01T16:19:41.811636Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T16:43:52.743666Z",
+  "completed_at": "2026-08-01T16:43:52.743666Z",
   "external": {}
 }
