@@ -1,6 +1,5 @@
 {
   "name": "pi-search",
-  "version": "0.1.0",
   "description": "Provider-neutral web search and fetching tools for Pi",
   "type": "module",
   "license": "MIT",
