@@ -31,7 +31,8 @@
   "scripts": {
     "test": "bun test --pass-with-no-tests",
     "typecheck": "tsc --noEmit",
-    "check": "bun run test && bun run typecheck"
+    "check": "bun run test && bun run typecheck",
+    "live:smoke": "bun scripts/live-smoke.ts"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.80.10",
