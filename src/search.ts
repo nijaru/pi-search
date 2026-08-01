@@ -1,5 +1,6 @@
 import type { Provider, ProviderContext, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
+import { cleanupSearchResponse } from "./search-cleanup";
 
 export const DEFAULT_MAX_RESULTS = 10;
 export const MAX_RESULTS = 20;
@@ -160,7 +161,8 @@ export async function executeSearch(
 
 	const providerCall = Promise.resolve().then(() => provider.search(normalized, controller.signal, options.context ?? {}));
 	try {
-		return await Promise.race([providerCall, timedOut, canceled]);
+		const response = await Promise.race([providerCall, timedOut, canceled]);
+		return cleanupSearchResponse(response, normalized, provider.id);
 	} catch (error) {
 		throw toSearchToolError(error, provider.id);
 	} finally {

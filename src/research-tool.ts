@@ -13,6 +13,7 @@ import { fetchContent, type FetcherOptions } from "./fetcher";
 import { executeSearch } from "./search";
 import { providerContextFromPi } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
+import { searchUrlIdentity } from "./search-cleanup";
 
 const ResearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "xai" | "xai-x">;
 export const MAX_RESEARCH_OUTPUT_CHARS = 45_000;
@@ -213,8 +214,9 @@ export async function executeResearch(
 					if (fetchAttempts < fetchLimit || stepsCompleted >= normalized.budget.maxSteps) stopReason = "budget";
 					break;
 				}
-				if (seenUrls.has(result.url)) continue;
-				seenUrls.add(result.url);
+				const fetchIdentity = searchUrlIdentity(result.url);
+				if (fetchIdentity === undefined || seenUrls.has(fetchIdentity)) continue;
+				seenUrls.add(fetchIdentity);
 				if (deadlineController.signal.aborted || remaining(deadline) <= 1) {
 					stopReason = "deadline";
 					break;

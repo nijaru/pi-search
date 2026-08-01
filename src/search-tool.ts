@@ -34,7 +34,6 @@ export type WebSearchDetails = SearchResponse;
 /** Keep serialized tool output below Pi's documented custom-tool limit. */
 export const MAX_SEARCH_OUTPUT_CHARS = 45_000;
 const MAX_SEARCH_EXCERPT_CHARS = 4_000;
-const MAX_SEARCH_UNEXPECTED_ANSWER_CHARS = 8_000;
 const MAX_SEARCH_TITLE_CHARS = 500;
 const SEARCH_WARNING_BUDGET_CHARS = 1_000;
 
@@ -107,31 +106,27 @@ function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] |
 
 function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	let truncated = false;
-	const results = response.results.map((result) => ({
-		url: result.url.slice(0, 8_192),
-		...(result.sourceUrl === undefined ? {} : { sourceUrl: result.sourceUrl.slice(0, 8_192) }),
-		...(result.title === undefined ? {} : { title: result.title.slice(0, MAX_SEARCH_TITLE_CHARS) }),
-		...(result.domain === undefined ? {} : { domain: result.domain.slice(0, 500) }),
-		...(result.publishedAt === undefined ? {} : { publishedAt: result.publishedAt.slice(0, 100) }),
-		...(result.excerpt === undefined ? {} : { excerpt: result.excerpt.slice(0, MAX_SEARCH_EXCERPT_CHARS) }),
-		provider: result.provider,
-		searchQuery: result.searchQuery.slice(0, MAX_QUERY_LENGTH),
-		...(result.sourceId === undefined ? {} : { sourceId: result.sourceId.slice(0, 500) }),
-		...(result.score === undefined ? {} : { score: result.score }),
-	}));
-	const unexpectedAnswer = (response as SearchResponse & { readonly answer?: unknown }).answer;
-	let bounded: SearchResponse & { readonly answer?: string } = {
+	let bounded: SearchResponse = {
 		query: response.query.slice(0, MAX_QUERY_LENGTH),
-		results,
+		results: response.results.map((result) => ({
+			url: result.url,
+			...(result.sourceUrl === undefined ? {} : { sourceUrl: result.sourceUrl.slice(0, 8_192) }),
+			...(result.title === undefined ? {} : { title: result.title.slice(0, MAX_SEARCH_TITLE_CHARS) }),
+			...(result.domain === undefined ? {} : { domain: result.domain.slice(0, 500) }),
+			...(result.publishedAt === undefined ? {} : { publishedAt: result.publishedAt.slice(0, 100) }),
+			...(result.excerpt === undefined ? {} : { excerpt: result.excerpt.slice(0, MAX_SEARCH_EXCERPT_CHARS) }),
+			provider: result.provider,
+			searchQuery: result.searchQuery.slice(0, MAX_QUERY_LENGTH),
+			...(result.sourceId === undefined ? {} : { sourceId: result.sourceId.slice(0, 500) }),
+			...(result.score === undefined ? {} : { score: result.score }),
+		})),
 		provider: response.provider,
 		appliedOptions: [...response.appliedOptions],
 		warnings: response.warnings.slice(0, 8).map((item) => ({ ...item, message: item.message.slice(0, 1_000) })),
 		...(response.requestId === undefined ? {} : { requestId: response.requestId.slice(0, 500) }),
 		...(response.latencyMs === undefined ? {} : { latencyMs: response.latencyMs }),
 		...(boundedUsage(response.usage) === undefined ? {} : { usage: boundedUsage(response.usage) }),
-		...(typeof unexpectedAnswer === "string" ? { answer: unexpectedAnswer.slice(0, MAX_SEARCH_UNEXPECTED_ANSWER_CHARS) } : {}),
 	};
-	if (typeof unexpectedAnswer === "string" && unexpectedAnswer.length > MAX_SEARCH_UNEXPECTED_ANSWER_CHARS) truncated = true;
 	const byteLength = (): number => new TextEncoder().encode(JSON.stringify(bounded, null, 2)).byteLength;
 	while (byteLength() > MAX_SEARCH_OUTPUT_CHARS - SEARCH_WARNING_BUDGET_CHARS && bounded.results.length > 0) {
 		truncated = true;
@@ -139,7 +134,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	}
 	if (byteLength() > MAX_SEARCH_OUTPUT_CHARS - SEARCH_WARNING_BUDGET_CHARS) {
 		truncated = true;
-		bounded = { ...bounded, answer: bounded.answer?.slice(0, 1_000), results: [] };
+		bounded = { ...bounded, results: [] };
 	}
 	if (!truncated) return bounded;
 	bounded = {
@@ -148,9 +143,6 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	};
 	while (byteLength() > MAX_SEARCH_OUTPUT_CHARS && bounded.warnings.length > 1) {
 		bounded = { ...bounded, warnings: bounded.warnings.slice(1) };
-	}
-	while (byteLength() > MAX_SEARCH_OUTPUT_CHARS && (bounded.answer?.length ?? 0) > 0) {
-		bounded = { ...bounded, answer: bounded.answer?.slice(0, Math.max(0, (bounded.answer?.length ?? 0) - 500)) };
 	}
 	if (byteLength() > MAX_SEARCH_OUTPUT_CHARS) bounded = { ...bounded, query: bounded.query.slice(0, 500), results: [] };
 	return bounded;

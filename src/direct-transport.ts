@@ -33,7 +33,7 @@ function requestDirect(target: ValidatedRemoteUrl, init: DirectTransportInit): P
 		path,
 		headers: {
 			accept: "text/html, text/plain, application/json, application/xml;q=0.9, */*;q=0.1",
-			"user-agent": "pi-search/0.1 (+https://github.com/nijaru/pi-search)",
+			"user-agent": "pi-search (+https://github.com/nijaru/pi-search)",
 			...init.headers,
 		},
 		lookup: (_lookupHostname, lookupOptions, callback) => {

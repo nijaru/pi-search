@@ -19,7 +19,8 @@ function successResponse(query = "q"): SearchResponse {
 		query,
 		results: [
 			{
-				url: "https://example.com",
+				url: "https://example.com/",
+				domain: "example.com",
 				provider: "brave",
 				searchQuery: query,
 			},
@@ -117,17 +118,23 @@ describe("search boundary", () => {
 		});
 	});
 
-	it("bounds model-visible output while preserving a truncation warning", async () => {
+	it("bounds model-visible output without forwarding an opaque provider answer", async () => {
 		const provider = makeProvider(async () => ({
 			...successResponse(),
-			answer: "x".repeat(100_000),
+			results: Array.from({ length: 20 }, (_, index) => ({
+				...successResponse().results[0]!,
+				url: `https://example.com/${index}`,
+				excerpt: "x".repeat(4_000),
+			})),
+			answer: "opaque provider synthesis",
 		}));
 		const tool = createWebSearchTool(provider);
-		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", maxResults: 20 }, undefined, undefined, {} as never);
 		const text = result.content[0];
 		expect(text.type).toBe("text");
 		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(45_000);
 		expect(result.details?.warnings.at(-1)).toMatchObject({ code: "partial-results" });
+		expect("answer" in (result.details as object)).toBe(false);
 	});
 
 	it("selects a provider per active Pi model and passes model auth context", async () => {
