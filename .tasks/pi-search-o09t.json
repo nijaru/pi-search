@@ -3,7 +3,7 @@
   "ref": "o09t",
   "title": "Restore default Brave search behavior",
   "description": "The installed extension has BRAVE_API_KEY but no PI_SEARCH_BRAVE_FREE_ONLY flag; routing currently fails closed instead of behaving like the previous extension. Default configured Brave to conservative free-mode pacing while preserving explicit metered opt-in.",
-  "status": "active",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -18,7 +18,7 @@
     }
   ],
   "created_at": "2026-08-01T21:31:29.631228Z",
-  "updated_at": "2026-08-01T21:35:00.328269Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T21:39:06.669499Z",
+  "completed_at": "2026-08-01T21:39:06.669499Z",
   "external": {}
 }
