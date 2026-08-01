@@ -355,7 +355,7 @@ export interface FetchRequest {
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
-export type FetchExtraction = "readability" | "raw" | "plain-text" | "pdf" | "youtube-transcript";
+export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "pdf" | "youtube-transcript";
 
 export interface FetchWarning {
 	readonly code: "truncated" | "raw-fallback";

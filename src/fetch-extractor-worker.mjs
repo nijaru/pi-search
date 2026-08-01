@@ -22,6 +22,9 @@ parentPort.on("message", (message) => {
 });
 
 function extractContent(sourceText, mimeType, request) {
+	if (isMarkdownContentType(mimeType)) {
+		return { content: sourceText, outputFormat: "markdown", extraction: "markdown" };
+	}
 	if (!isHtmlContentType(mimeType)) {
 		return { content: sourceText, outputFormat: "text", extraction: "plain-text" };
 	}
@@ -71,6 +74,10 @@ function rawFallback(sourceText, title) {
 		...(title ? { title } : {}),
 		fellBackToRaw: true,
 	};
+}
+
+function isMarkdownContentType(mimeType) {
+	return mimeType === "text/markdown" || mimeType === "text/x-markdown";
 }
 
 function isHtmlContentType(mimeType) {

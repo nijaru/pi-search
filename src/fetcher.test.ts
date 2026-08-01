@@ -63,6 +63,15 @@ describe("direct content fetch", () => {
 		expect(result.title).toContain("Ignored title");
 	});
 
+	it("preserves server-provided Markdown without HTML extraction", async () => {
+		const markdown = await fetchContent(
+			{ url: baseRequest.url },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor("# Heading\n\nEvidence", "text/markdown; charset=utf-8") },
+		);
+		expect(markdown).toMatchObject({ content: "# Heading\n\nEvidence", outputFormat: "markdown", extraction: "markdown" });
+	});
+
 	it("returns text and JSON as plain text without HTML extraction", async () => {
 		const text = await fetchContent(
 			{ url: baseRequest.url, format: "text" },

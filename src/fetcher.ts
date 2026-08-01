@@ -19,7 +19,7 @@ type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | 
 interface ExtractedContent {
 	readonly content: string;
 	readonly outputFormat: FetchOutputFormat;
-	readonly extraction: "readability" | "raw" | "plain-text" | "pdf" | "youtube-transcript";
+	readonly extraction: "readability" | "raw" | "plain-text" | "markdown" | "pdf" | "youtube-transcript";
 	readonly title?: string;
 	readonly fellBackToRaw?: boolean;
 }
