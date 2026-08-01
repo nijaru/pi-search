@@ -28,8 +28,8 @@ Current portfolio:
 - OpenAI/Codex: native general search and highest correctness priority.
 - Gemini: Google-grounded alternative when explicitly metered.
 - xAI web and `xai-x`: model-mediated web/social context.
-- Brave: controlled general direct search with default free-mode local pacing when a key is configured.
-- Exa: semantic retrieval and highlights.
+- Exa: preferred semantic retrieval for non-native models when `EXA_API_KEY` is configured.
+- Brave: lower-cost general direct search with default free-mode local pacing.
 - Parallel: objective-oriented context retrieval.
 - Official X API (`provider: "x"`): exact recent post/query/user retrieval
   with an explicit bearer credential and provider selection.
@@ -65,6 +65,8 @@ The default Brave path was restored after a runtime smoke exposed that a
 configured key was rejected unless an optional flag was set. It now paces
 free-mode request starts by one second by default; `=0` requires deliberate
 metered opt-in. Active Gemini/xAI models and explicitly selected direct
-providers likewise no longer require a redundant global metered flag. Refresh
-or restart any long-running Pi process after installing this change. Only
-measured future gaps should reopen deferred work.
+providers likewise no longer require a redundant global metered flag. A
+configured Exa key now deliberately selects Exa for non-native models; callers
+can select Brave when cost matters. Refresh or restart any long-running Pi
+process after installing this change. Only measured future gaps should reopen
+deferred work.

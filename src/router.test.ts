@@ -42,6 +42,12 @@ describe("search provider router", () => {
 		expect(route({ query: "q" }, context("openrouter", "openai-completions")).id).toBe("brave");
 	});
 
+	it("prefers configured Exa for non-native models", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(route({ query: "q" }, context("openrouter", "openai-completions")).id).toBe("exa");
+		expect(route({ query: "q", providerHint: "brave" }, context("openrouter", "openai-completions")).id).toBe("brave");
+	});
+
 	it("selects configured native grounding before Brave without an extra opt-in", () => {
 		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q" }, context("google", "google-generative-ai")).id).toBe("gemini");

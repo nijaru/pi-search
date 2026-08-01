@@ -142,6 +142,11 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		}
 
 		const mode = normalized.mode ?? "auto";
+		// A configured Exa key is deliberate opt-in to its paid semantic search.
+		// Prefer it for non-native models; callers can select Brave explicitly when
+		// the lower-cost direct path is more important.
+		const exaCanMatchMode = options.exa !== undefined && options.exaConfigured === true && canServe(options.exa, normalized);
+		if (exaCanMatchMode) return options.exa!;
 		const braveCanMatchMode = options.brave !== undefined && canServe(options.brave, normalized);
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
