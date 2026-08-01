@@ -7,6 +7,11 @@ It records the workflows the project has actually called for, rather than
 requiring feature parity with every provider and UI in the reference package.
 A feature is required only when losing it would break an intended workflow.
 
+This is the current-runtime baseline, not the long-term provider ceiling. The
+long-term portfolio target, evaluation order, and conditional provider
+additions are tracked in `ai/design/provider-consolidation-plan.md` and
+`docs/implementation-plan.md`.
+
 ## Required in pi-search
 
 | Workflow | Current owner/status | Acceptance evidence |

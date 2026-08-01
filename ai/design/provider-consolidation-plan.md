@@ -15,6 +15,78 @@ project owner.
 - Reuse mature code where it reduces risk, without importing incompatible
   fallback chains or heavyweight dependencies.
 
+## Long-term portfolio target
+
+The target is best-in-class coverage by capability, not the largest provider
+count. Multiple adapters are desirable when they create a meaningful quality,
+freshness, filtering, social, latency, cost, or provenance advantage. Normal
+search still selects one provider per call. Explicit provider selection and
+future opt-in comparison are allowed; hidden fan-out, paid fallback, and
+ambiguous merged provenance remain disallowed.
+
+Evaluate each provider role against the same dimensions:
+
+- evidence quality, source fidelity, freshness, and citation completeness;
+- hard filters and retrieval modes the provider can actually guarantee;
+- semantic, keyword, news, document, and social coverage;
+- excerpt/context quality and whether it reduces downstream model tokens;
+- latency, request/token cost, quota behavior, and rate-limit metadata; and
+- authentication, privacy, regional availability, failure behavior, and
+  deterministic testability.
+
+Current portfolio roles and gaps:
+
+| Capability | Current best path | Gap or decision gate |
+| --- | --- | --- |
+| General native search | OpenAI/Codex Responses | Highest immediate correctness and live-verification priority |
+| Google-grounded search | Gemini grounding | Model-mediated and metered; no hard domain guarantee |
+| General direct keyword search | Brave | Free-credit policy and local admission control need hardening |
+| Semantic retrieval/highlights | Exa | Explicit metered path; richer date/deep-search options need evaluation |
+| Objective-oriented context | Parallel | Explicit metered path; measure excerpt quality and cost savings |
+| Web grounding | xAI web search | Keep as an explicit native alternative |
+| Dedicated X retrieval | xAI `x_search` | Evaluate official X API only for exact post/user/archive controls |
+| Hard date/path/domain retrieval | Not yet selected | Evaluate Perplexity only if the shipped set cannot guarantee it |
+| Self-hosted/privacy search | None | Evaluate SearXNG only for a concrete self-hosted requirement |
+| Search plus extraction service | Direct local fetch | Evaluate Tavily/remote extraction only when local fetch misses a required class |
+
+The current shipped set is therefore a deliberate portfolio, not a permanent
+provider ceiling. A candidate earns implementation only after a measured gap,
+a billing policy, deterministic fixtures, inspectable source URLs, and an
+explicit credential-gated smoke case.
+
+## Priority order
+
+### P0 — production correctness and efficiency
+
+1. Harden OpenAI/Codex Responses search against current provider behavior and
+   run credentialed live cases for both paths.
+2. Keep direct HTML/Markdown/text/JSON fetching the efficient default; verify
+   extraction fidelity, SSRF/redirect/cancellation/byte bounds, and PDF text
+   cleanup with representative fixtures.
+3. Add concurrency-safe Brave free-mode admission control and make the policy
+   explicit that free credits are not a separate endpoint or billing guarantee.
+4. Preserve a live smoke matrix and record skipped providers as skipped.
+
+### P1 — measurable capability coverage
+
+5. Build a provider-role evaluation harness before adding overlapping adapters.
+6. Extend contracts only for demonstrated needs such as date ranges, source
+   types, social handles, or provider-specific retrieval intent.
+7. Compare xAI `x_search` with the official X API for exact post/user/date
+   workflows; keep xAI unless a concrete gap is measured.
+
+### P2 — selective additions and specialized fetch
+
+8. Add Perplexity only if hard date/path/domain filters materially improve a
+   required workflow. Consider SearXNG, Tavily, or Anthropic only under their
+   specific privacy, extraction, or native-citation use cases.
+9. Reconsider browser/JS rendering or remote extraction only after failed-page
+   fixtures show direct fetching is insufficient and the separate resource,
+   privacy, SSRF, and cost boundary is designed.
+10. Keep repository/GitHub, media download/frames/OCR, and visual analysis in
+    Pi/Bash/`git`/`gh`/`yt-dlp`/`ffmpeg`/vision workflows unless an actual
+    repeated workflow proves the extension must own them.
+
 ## Phase 0 — establish the matrix (researched)
 
 The reviewed provider set is now documented in

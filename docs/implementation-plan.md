@@ -67,30 +67,48 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
 - xAI web and X grounding through the Responses API.
 - Explicit provider schemas and routing tests for local/non-native workflows.
 
-## 7. Next implementation gates — planned, not required for install
+## 7. Post-install maturity gates — next work
 
-The current package is usable, but the audit found four high-value follow-ups
-before calling the search surface mature:
+The package is installed and usable, but these are the correct next gates
+before calling the search surface production-mature:
 
-1. ✅ Close the evidence-boundary gap in `src/search-tool.ts`: ordinary
-   `web_search` no longer forwards an untyped provider `answer` field.
-2. ✅ Add a shared conservative result-cleanup and URL-identity module. It
-   runs after provider parsing and is reused for research fetch deduplication.
-   Raw URLs are preserved when canonicalization changes them; arbitrary query
-   parameters are not stripped.
-3. ✅ Improve direct fetch content negotiation with `text/markdown` and report
-   actual format/extraction metadata. Browser rendering and caching remain out
-   of the default path.
-4. ✅ Add an explicit credential-gated live smoke runner in
-   `scripts/live-smoke.ts`. It never runs from `bun test`, infers a provider
-   from available credentials, retries, fans out, or prints secrets. It checks
-   bounded inspectable URLs and hard-filter behavior where supported.
+1. **OpenAI/Codex production gate.** Audit current Responses behavior, source
+   citation fidelity, model/auth selection, hard constraints, cancellation,
+   incomplete streams, usage, and rate-limit diagnostics. Run explicit live
+   smoke cases for both OpenAI and Codex when credentials are available.
+2. **Direct fetch/PDF quality gate.** Exercise representative HTML, Markdown,
+   text, JSON, redirects, oversized responses, readable extraction, PDFs, and
+   explicit scanned/encrypted failures. Keep the direct local path as the
+   efficient default; do not add a browser or remote extractor by habit.
+3. **Brave free-mode admission gate.** Add a concurrency-safe local limiter,
+   preserve provider-reported quota windows, and state clearly that monthly
+   free credits are account billing rather than a separate endpoint or local
+   billing guarantee.
+4. **Provider-role evaluation gate.** Build deterministic and credential-gated
+   comparisons for quality, freshness, constraints, excerpts/context,
+   latency, cost, quotas, provenance, and failure behavior. The result should
+   choose providers by capability, not create a universal vendor ranking.
+5. **Explicit option gate.** Add date, source-type, social-handle, or other
+   provider-neutral options only when the evaluation shows a required gap.
+   Normal calls remain single-provider; comparison/fan-out is a future explicit
+   mode, never hidden behavior.
 
-Only after those gates should a new adapter be considered. Perplexity is the
-first candidate because it adds structured evidence plus hard domain/date
-filters. SearXNG is optional for a self-hosted/privacy requirement. Anthropic
-native search is conditional on auth and citation fit. Tavily, Z.AI, Claude
-bridge, and DuckDuckGo remain deferred due to overlap or provenance concerns.
+### Long-term selective additions
+
+- Evaluate the official X API against xAI `x_search` for exact post, handle,
+  user, and date/archive workflows. Keep xAI as the current dedicated path.
+- Add Perplexity only if hard date/path/domain controls materially improve a
+  required workflow beyond the shipped set.
+- Consider SearXNG only for an explicit self-hosted/privacy requirement.
+- Consider Tavily, Anthropic native search, or remote extraction only when a
+  measured quality or ownership gap justifies their cost and auth complexity.
+- Reopen browser/JS rendering, OCR, media analysis, caching, or provider
+  fan-out only with a representative workflow, resource/privacy review, and
+  explicit contract.
+
+Existing deferred features are hypotheses, not permanent exclusions. The
+provider landscape and evaluation results decide whether they move into the
+runtime.
 
 ## 8. Sole replacement gate — complete with credential caveats
 

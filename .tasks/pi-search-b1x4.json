@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "b1x4",
+  "title": "Evaluate dynamic-page fetch ownership",
+  "description": "Use representative failed-fetch fixtures to decide whether JS/browser rendering or a remote extraction service belongs in pi-search. Prefer Pi/Bash/browser workflows when they are more reliable and cheaper; if added, define a separate SSRF, subresource, resource, cancellation, privacy, and cost boundary.",
+  "status": "open",
+  "priority": 3,
+  "labels": [
+    "fetch",
+    "browser"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [
+    "pi-search-cu5b"
+  ],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.929519Z",
+  "updated_at": "2026-08-01T18:40:20.404829Z",
+  "completed_at": null,
+  "external": {}
+}

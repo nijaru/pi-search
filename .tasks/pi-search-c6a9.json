@@ -1,0 +1,25 @@
+{
+  "project": "pi-search",
+  "ref": "c6a9",
+  "title": "Define explicit capability and option portfolio",
+  "description": "After the evaluation harness, extend provider-neutral contracts only for demonstrated needs: freshness/date ranges, source types, semantic vs keyword intent, social handles/date windows, and provider-specific option warnings. Keep ordinary calls single-provider while allowing explicit provider selection and future opt-in comparison.",
+  "status": "open",
+  "priority": 2,
+  "labels": [
+    "providers",
+    "contracts",
+    "design"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [
+    "pi-search-qtee"
+  ],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.900319Z",
+  "updated_at": "2026-08-01T18:40:20.342661Z",
+  "completed_at": null,
+  "external": {}
+}

@@ -1,0 +1,23 @@
+{
+  "project": "pi-search",
+  "ref": "cu5b",
+  "title": "Make direct fetch and PDF extraction production quality",
+  "description": "Audit src/direct-transport.ts, src/fetcher.ts, src/pdf.ts, and extraction worker as the default individual-page path. Verify efficient Markdown/HTML/text/JSON handling, SSRF/redirect/cancellation/byte/deadline bounds, readable extraction fidelity, PDF text cleanup and explicit scanned/encrypted failures. Add representative fixtures and only add a new layer when it beats the current path. CLI/vision workflows remain outside the extension.",
+  "status": "open",
+  "priority": 1,
+  "labels": [
+    "fetch",
+    "pdf",
+    "quality"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.861687Z",
+  "updated_at": "2026-08-01T18:40:10.861687Z",
+  "completed_at": null,
+  "external": {}
+}

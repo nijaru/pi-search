@@ -106,6 +106,31 @@ billing. SearXNG is useful for self-hosting/privacy, not for universal
 coverage. Tavily, a Claude bridge, and DuckDuckGo do not justify core
 complexity yet.
 
+## Current official capability notes
+
+These current provider documents refine, but do not replace, the matrix above:
+
+- OpenAI documents fast non-reasoning search, agentic reasoning search, and
+  deep-research workflows. The adapter should preserve inspectable search calls
+  and citations while leaving answer synthesis to the active model.
+- xAI `x_search` supports keyword, semantic, user, and thread retrieval plus
+  handle/date filters and optional image/video understanding. The current
+  adapter intentionally exposes only the generic tool; the social option
+  contract is a P1 decision, not a reason to add a second provider blindly.
+- Exa supports highlights/text, date and category filters, additional queries,
+  deep search, and structured outputs. The current adapter covers the stable
+  evidence path; richer research options should be evaluated for cost and
+  token savings before exposing them.
+- Parallel positions objective-oriented, LLM-optimized excerpts and multi-query
+  context as its differentiator. Its value should be measured by end-to-end
+  context efficiency, not just result count.
+- Perplexity Search returns structured results with snippets, dates, update
+  dates, domain filters, and page-content controls, making it the leading
+  candidate only for a proven hard-filter or page-context gap.
+- Tavily exposes search-depth, time-range, content chunks, and separate
+  extraction/crawl APIs. That is useful, but overlaps the local fetch path and
+  needs a privacy/cost comparison before adoption.
+
 ## X/social access
 
 The shipped package already has explicit xAI X search (`xai-x`) through the xAI

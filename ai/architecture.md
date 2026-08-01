@@ -45,10 +45,18 @@ package-list change before it observes the sole-owner runtime.
 
 ## Planned evolution
 
+The long-term target is a portfolio of best-in-class providers by capability,
+not a single vendor or a large adapter count. Ordinary calls remain
+single-provider and evidence-first; explicit provider selection and a future
+opt-in comparison mode may use multiple providers without hidden fan-out.
+
 Provider-landscape research should add only capabilities that materially improve
-coverage for the inventoried needs. New adapters and fetch layers must
-implement the existing contracts, preserve request constraints and provenance,
-expose costs/limits where available, and include offline fixtures plus explicit
-live smoke coverage. Browser rendering, remote extraction, persistent caches,
-media analysis, and extra provider adapters are deferred by the current
-inventory; reopen them only when a required workflow is demonstrated.
+coverage, quality, cost, freshness, filtering, social retrieval, or context
+usability. New adapters and fetch layers must implement the existing contracts,
+preserve request constraints and provenance, expose costs/limits where
+available, and include offline fixtures plus explicit live smoke coverage. The
+next gates are OpenAI/Codex correctness, direct fetch/PDF efficiency, Brave
+free-mode admission, and a provider-role evaluation harness. Browser rendering,
+remote extraction, persistent caches, media analysis, and extra overlapping
+providers remain conditional on measured workflows rather than permanently
+excluded.

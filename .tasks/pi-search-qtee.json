@@ -1,0 +1,26 @@
+{
+  "project": "pi-search",
+  "ref": "qtee",
+  "title": "Build provider quality and cost evaluation harness",
+  "description": "Create a deterministic provider-role evaluation surface plus explicit credential-gated live cases. Compare evidence quality, freshness, hard filters, social coverage, excerpts/context, latency, token/request cost, rate-limit metadata, and failure behavior. Benchmark shipped providers by capability instead of ranking vendors globally; no default fan-out.",
+  "status": "open",
+  "priority": 2,
+  "labels": [
+    "providers",
+    "eval",
+    "cost"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [
+    "pi-search-701w",
+    "pi-search-cu5b"
+  ],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.883494Z",
+  "updated_at": "2026-08-01T18:40:20.332128Z",
+  "completed_at": null,
+  "external": {}
+}

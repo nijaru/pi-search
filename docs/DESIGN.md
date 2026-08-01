@@ -108,9 +108,10 @@ fetches result URLs in order, counts search/fetch/step limits separately, uses
 one deadline, bounds output, and reports partial failures. It performs no
 query planning, synthesis, retry, or provider fan-out.
 
-## Coexistence
+## Runtime ownership
 
-`pi-web-access` remains installed. Its duplicate search registration is
-currently disabled in Pi configuration while its specialty tools remain
-available for rollback. Re-enable it only if a workflow needs a capability
-that this extension intentionally leaves outside its boundary.
+`pi-search` is the sole active web extension. `pi-web-access` remains a source
+reference only; its duplicate registration is not part of the runtime. A
+future specialty capability may be evaluated for inclusion or assigned to
+Pi/Bash, but installing a second overlapping web extension is not the default
+solution.

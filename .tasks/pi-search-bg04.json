@@ -1,0 +1,23 @@
+{
+  "project": "pi-search",
+  "ref": "bg04",
+  "title": "Implement Brave free-mode admission control",
+  "description": "Add concurrency-safe local admission control for PI_SEARCH_BRAVE_FREE_ONLY mode. Preserve provider-reported multi-window quota observations and retry metadata, avoid claiming billing certainty, and prevent bursts that violate a configured conservative interval. Validate behavior with concurrent/offline tests and update policy docs to distinguish free credits from a separate endpoint.",
+  "status": "open",
+  "priority": 1,
+  "labels": [
+    "brave",
+    "quotas",
+    "cost"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.873007Z",
+  "updated_at": "2026-08-01T18:40:10.873007Z",
+  "completed_at": null,
+  "external": {}
+}

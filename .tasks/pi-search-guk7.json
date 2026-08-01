@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "guk7",
+  "title": "Evaluate dedicated X API versus xAI X search",
+  "description": "Compare xAI x_search with the official X API for exact post/user/handle/date/query retrieval, citations, cost, rate limits, and auth boundaries. Keep xAI as the current dedicated path; add a second adapter only if a measured workflow needs controls or coverage it cannot provide.",
+  "status": "open",
+  "priority": 2,
+  "labels": [
+    "social",
+    "x"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [
+    "pi-search-qtee"
+  ],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T18:40:10.910089Z",
+  "updated_at": "2026-08-01T18:40:20.373501Z",
+  "completed_at": null,
+  "external": {}
+}

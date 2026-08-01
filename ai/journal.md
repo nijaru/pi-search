@@ -82,3 +82,11 @@ durable rationale belongs in `decisions.md`.
 - Removed `npm:pi-web-access` from the active Pi package list. Updated README,
   architecture, implementation plan, brief, and decisions for the sole-owner
   runtime. Existing Pi processes need a restart to observe the cutover.
+- The long-term direction was clarified: the current shipped set is a cutover
+  baseline, not a permanent provider ceiling. The desired target is a
+  best-in-class portfolio by capability, with explicit multi-provider selection
+  or future comparison allowed but no hidden fan-out, paid fallback, or opaque
+  merged provenance. The next priority order is OpenAI/Codex correctness,
+  direct fetch/PDF efficiency, Brave free-mode admission, provider-role
+  evaluation, X coverage comparison, then selective provider or browser
+  additions. The consolidated plan and task backlog were updated accordingly.

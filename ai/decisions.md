@@ -58,3 +58,16 @@ passed, `pi-web-access` was removed from the active Pi package list. Dedicated
 live credentials for the other providers were absent, so those rows are
 recorded as skipped rather than treated as passing. Existing Pi processes must
 restart to observe the package-list change.
+
+### 2026-08-01 — long-term provider portfolio
+
+The sole-runtime cutover is not the long-term provider ceiling. The package
+should support multiple best-in-class providers when they materially improve a
+capability such as evidence quality, freshness, hard filtering, social search,
+context efficiency, latency, cost, or provenance. Ordinary calls still select
+one provider; explicit provider selection and a future opt-in comparison mode
+are acceptable. Hidden fan-out, paid fallback, and opaque synthesis remain
+out of contract. OpenAI/Codex correctness and direct fetch/PDF efficiency are
+P0; provider-role evaluation precedes overlapping additions; xAI `x_search` is
+the current dedicated X path while the official X API is a conditional
+candidate for exact post/user/date workflows.

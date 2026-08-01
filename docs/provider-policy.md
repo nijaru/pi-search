@@ -112,12 +112,12 @@ It does not own:
   workflows); or
 - implicit cloning, persistent search storage, or provider answer synthesis.
 
-## Coexistence and cutover
+## Runtime ownership and cutover
 
-Keep `pi-web-access` installed during rollout. Its duplicate search
-registration is disabled in the active Pi configuration while specialty tools
-remain available for rollback. The config is `$XDG_CONFIG_HOME/pi/web-search.json`
-when XDG is set, otherwise `~/.pi/web-search.json`.
+`pi-search` is the sole active web extension. `pi-web-access` is a source
+reference, not a second runtime or a required dependency. Its old configuration
+may remain on disk but has no effect when the package is not installed; an
+already-running Pi process must restart after package-list changes.
 
 Acceptance gates:
 
