@@ -3,15 +3,17 @@
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. It exposes exactly `web_search`,
-`web_fetch`, and `web_research`. The active Pi runtime contains only this web
-extension; `pi-web-access` is a source reference, not a runtime dependency.
+https://github.com/nijaru/pi-search. The current branch and origin are clean at
+`8334969`; the installed Git package was refreshed to that commit. The active
+Pi runtime contains only this web extension and exposes exactly `web_search`,
+`web_fetch`, and `web_research`.
 
-Shipped search adapters are OpenAI/Codex, Gemini, xAI web and X, Brave, Exa,
-and Parallel. Fetching includes pinned DNS/SSRF and redirect checks, streamed
-limits, local HTML/Markdown extraction, bounded PDF text, and bounded YouTube
-captions. `web_research` is an explicit single-provider, sequential, bounded
-orchestrator with optional direct fetches and no hidden synthesis or fan-out.
+Shipped search adapters are OpenAI/Codex, Gemini, xAI web and semantic X,
+Brave, Exa, Parallel, and explicit official X recent search. Fetching includes
+pinned DNS/SSRF and redirect checks, streamed limits, local HTML/Markdown
+extraction, bounded PDF text, and bounded YouTube captions. `web_research` is
+an explicit single-provider, sequential, bounded orchestrator with optional
+direct fetches and no hidden synthesis or fan-out.
 
 ## Long-term direction
 
@@ -21,37 +23,45 @@ evidence-first; explicit provider selection and a future opt-in comparison
 mode may use multiple providers. Hidden fallback, paid retries, and ambiguous
 merged provenance remain out of contract.
 
-The tracked priorities are:
+Current portfolio:
 
-1. OpenAI/Codex production correctness and live verification.
-2. Efficient direct page and PDF fetching with strong safety and extraction
-   fidelity.
-3. Brave free-mode admission control and truthful quota/billing behavior.
-4. A provider-role quality/cost evaluation harness before adding overlap.
-5. Explicit capability options and an xAI X versus official X API decision.
-6. Selective Perplexity/SearXNG/Tavily/Anthropic or browser additions only when
-   measured workflows justify them.
+- OpenAI/Codex: native general search and highest correctness priority.
+- Gemini: Google-grounded alternative when explicitly metered.
+- xAI web and `xai-x`: model-mediated web/social context.
+- Brave: controlled general direct search with free-mode local pacing.
+- Exa: semantic retrieval and highlights.
+- Parallel: objective-oriented context retrieval.
+- Official X API (`provider: "x"`): exact recent post/query/user retrieval,
+  explicit bearer credential, and explicit metered opt-in.
 
-Pi/Bash/`read`/`git`/`gh`/`yt-dlp`/`ffmpeg`/vision workflows remain the default
-owners for local repositories, media, OCR, and visual analysis.
+Direct local fetching remains the default for individual pages and PDFs. Pi,
+Bash, `read`, `git`, `gh`, `yt-dlp`, `ffmpeg`, and vision workflows remain the
+default owners for local repositories, media, OCR, and visual analysis.
 
-## Active tasks
+## Verification
 
-Open tasks are tracked with `tk`; current P1 work covers OpenAI/Codex, direct
-fetch/PDF quality, and Brave admission. P2 work covers provider evaluation,
-capability contracts, and dedicated X comparison. P3 work covers selective
-provider additions and dynamic-page ownership.
+`bun run check` passes: 131 tests and 303 assertions, with TypeScript checking.
+OpenAI/Codex failure metadata, blocked domain filters, stream cancellation,
+fetch/PDF bounds, Brave free-mode pacing, provider metrics, and official X
+normalization have deterministic coverage. Installed package refresh passed.
+A fresh Pi Codex call previously returned structured evidence.
 
-## Verification and blockers
+Credentialed live rows for direct OpenAI, Gemini, xAI, Brave, Exa, Parallel, and
+the official X API remain skipped unless dedicated smoke credentials are
+provided. Do not claim those providers passed live tests. The X and other live
+smoke dry-run paths are present and fail closed.
 
-Offline checks and the fresh Pi Codex smoke passed previously. Dedicated live
-smoke calls for Gemini, xAI, Brave, Exa, and Parallel remain unverified because
-provider-specific smoke credentials were not configured. Do not claim those
-providers passed. Current planning edits are uncommitted until reviewed.
+## Completed planning gates
+
+The provider-role evaluation harness, X API comparison, selective-provider
+evaluation, and dynamic-page ownership evaluation are complete. Perplexity is
+still conditional on a measured hard date/path/domain gap; SearXNG is
+self-hosted-only; browser/remote extraction remains conditional on failed-page
+evidence. No open tasks remain in `tk`.
 
 ## Next action
 
-Start `pi-search-701w` (OpenAI/Codex production gate) and `pi-search-cu5b`
-(fetch/PDF quality) in priority order, then implement `pi-search-bg04`
-(Brave free-mode admission). Keep the provider evaluation task blocked until
-those production gates are verified.
+Refresh/restart any long-running Pi process if needed, then use explicit
+credential-gated smoke commands for providers whose live behavior needs
+confirmation. Otherwise the package is ready for normal use; only measured
+future gaps should reopen the deferred work.

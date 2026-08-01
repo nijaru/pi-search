@@ -22,8 +22,8 @@ Pi tools:
   metered opt-in. Select `xai-x` explicitly when the task requires X search.
 - Other/local models use Brave only when its free-capacity assertion is
   enabled.
-- Exa and Parallel are available only through explicit provider selection and
-  `PI_SEARCH_ALLOW_METERED=1`.
+- Exa, Parallel, and the official X API are available only through explicit
+  provider selection and `PI_SEARCH_ALLOW_METERED=1`.
 - There are no hidden retries, provider fan-out, or paid fallback chains.
 
 All providers normalize into the same evidence-first result shape. Provider

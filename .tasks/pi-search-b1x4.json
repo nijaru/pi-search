@@ -3,7 +3,7 @@
   "ref": "b1x4",
   "title": "Evaluate dynamic-page fetch ownership",
   "description": "Use representative failed-fetch fixtures to decide whether JS/browser rendering or a remote extraction service belongs in pi-search. Prefer Pi/Bash/browser workflows when they are more reliable and cheaper; if added, define a separate SSRF, subresource, resource, cancellation, privacy, and cost boundary.",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": [
     "fetch",
@@ -16,9 +16,14 @@
   ],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T20:02:49.290575Z",
+      "msg": "Closed dynamic-page ownership evaluation. Direct pinned HTTP plus local Markdown/Readability/Turndown/PDF/caption extraction remains the efficient default. Browser/JS or remote extraction is deferred until representative failed-page fixtures justify a separate SSRF, resource, privacy, cancellation, and cost boundary; Pi/Bash/browser workflows remain available."
+    }
+  ],
   "created_at": "2026-08-01T18:40:10.929519Z",
-  "updated_at": "2026-08-01T18:40:20.404829Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T20:02:49.300642Z",
+  "completed_at": "2026-08-01T20:02:49.300642Z",
   "external": {}
 }

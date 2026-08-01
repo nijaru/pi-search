@@ -122,8 +122,9 @@ The required workflow classification is recorded in
 `ai/research/required-workflows.md`. The shared hard-constraint, metadata,
 trust-fence, and Codex smoke fixes are complete. Offline fixtures cover every
 required row; a fresh Pi Codex call and installed registration passed. Gemini,
-xAI, Brave, Exa, and Parallel live rows are marked skipped because dedicated
-credentials are not available, not because their behavior was guessed.
+xAI, Brave, Exa, Parallel, and official X API live rows are marked skipped
+because dedicated credentials are not available, not because their behavior
+was guessed.
 
 `pi-web-access` has been removed from the active Pi package list. Restart an
 existing Pi process before relying on the cutover.

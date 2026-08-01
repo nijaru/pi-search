@@ -90,3 +90,20 @@ durable rationale belongs in `decisions.md`.
   direct fetch/PDF efficiency, Brave free-mode admission, provider-role
   evaluation, X coverage comparison, then selective provider or browser
   additions. The consolidated plan and task backlog were updated accordingly.
+- Implemented and pushed the P1 gates: OpenAI/Codex response-stream failures
+  now preserve request/rate metadata and classify broken streams correctly;
+  direct plain-text/Markdown/JSON fetches bypass the extraction worker; PDF
+  fixtures cover empty output, bounds, diagnostics, and cancellation; and
+  Brave free-only mode spaces request starts by one second while retaining
+  provider quota observations.
+- Current OpenAI web-search documentation was rechecked and the adapter was
+  corrected to send both `allowed_domains` and `blocked_domains`; shared
+  result cleanup remains authoritative.
+- Added and pushed a deterministic provider-role evaluator and an explicit
+  official X API recent-search adapter. xAI `x_search` remains the semantic,
+  model-mediated social path; the official X adapter provides direct post
+  text, IDs, timestamps, query operators, and separate metered credentials.
+  X live smoke is credential-gated and currently skipped.
+- Closed the selective-provider and dynamic-page evaluation tasks. No open
+  tasks remain; Perplexity, SearXNG, browser/remote extraction, and similar
+  additions remain conditional on measured workflow gaps.
