@@ -38,12 +38,19 @@ function isDryRun(): boolean {
 	return process.argv.includes("--dry-run");
 }
 
+export function modelBaseUrlForProvider(provider: string): string {
+	if (provider === "openai-codex") return "https://chatgpt.com/backend-api";
+	if (provider === "xai") return "https://api.x.ai/v1";
+	if (provider === "google") return "https://generativelanguage.googleapis.com/v1beta";
+	return "https://api.openai.com/v1";
+}
+
 function modelContext(provider: string, api: string, modelId: string, apiKey: string): ProviderContext {
 	const model: ProviderModel = {
 		id: modelId,
 		provider,
 		api,
-		baseUrl: provider === "xai" ? "https://api.x.ai/v1" : provider === "google" ? "https://generativelanguage.googleapis.com/v1beta" : "https://api.openai.com/v1",
+		baseUrl: modelBaseUrlForProvider(provider),
 	};
 	return {
 		model,
@@ -177,12 +184,14 @@ function secretFor(provider: string): string {
 	return env(name) ?? "";
 }
 
-try {
-	await main();
-} catch (error) {
-	const provider = process.argv.find((value) => value.startsWith("--provider="))?.slice("--provider=".length) ?? env("PI_SEARCH_LIVE_PROVIDER") ?? "unknown";
-	const secret = secretFor(provider);
-	const message = error instanceof Error ? error.message : String(error);
-	console.error(JSON.stringify({ status: "FAIL", provider, error: redacted(message, secret) }, null, 2));
-	process.exitCode = 1;
+if (import.meta.main) {
+	try {
+		await main();
+	} catch (error) {
+		const provider = process.argv.find((value) => value.startsWith("--provider="))?.slice("--provider=".length) ?? env("PI_SEARCH_LIVE_PROVIDER") ?? "unknown";
+		const secret = secretFor(provider);
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(JSON.stringify({ status: "FAIL", provider, error: redacted(message, secret) }, null, 2));
+		process.exitCode = 1;
+	}
 }
