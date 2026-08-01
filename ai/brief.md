@@ -4,7 +4,7 @@
 
 `pi-search` is a public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and remote are clean at
-`60198f4`; the installed package still needs a refresh after the latest fixes.
+`ad3be38`; the installed package still needs a refresh after the latest fixes.
 The public surface is exactly `web_search`, `web_fetch`, and `web_research`.
 
 Shipped search adapters are OpenAI/Codex, Gemini, xAI web and X, Brave, Exa,
@@ -37,7 +37,7 @@ redaction, and successful request-ID fallback are now implemented and tested.
 
 ## Verification
 
-Offline verification currently passes: 113 tests, 263 assertions, TypeScript,
+Offline verification currently passes: 114 tests, 264 assertions, TypeScript,
 `git diff --check`, and provider/tool fixtures. Live smoke dry-run and
 fail-closed credential checks pass. Actual provider calls, representative Pi
 workflows, and the final single-extension cutover remain unverified.
