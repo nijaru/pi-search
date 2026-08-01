@@ -28,10 +28,10 @@ results, explicit provider selection, hard constraint reporting, untrusted
 content fencing, bounded resources, and deterministic offline tests.
 
 The research phase is complete. The evidence boundary, shared result cleanup/URL identity, Markdown content
-negotiation, and credential-gated live smoke runner are implemented. The next
-decision is whether Perplexity adds enough hard-filter coverage to justify a new
-metered adapter; SearXNG remains conditional on an explicit self-hosted need.
-xAI remains the only dedicated X path.
+negotiation, and credential-gated live smoke runner are implemented. Perplexity and SearXNG are currently deferred: the public request contract
+has no exact date/path filters, Perplexity overlaps existing providers, and
+SearXNG needs a concrete self-hosted endpoint requirement. Add either only when
+that requirement is demonstrated; xAI remains the only dedicated X path.
 
 ## Verification
 

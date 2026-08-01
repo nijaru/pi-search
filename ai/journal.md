@@ -43,3 +43,7 @@ durable rationale belongs in `decisions.md`.
   smoke runner and operator documentation. It requires separate opt-in,
   credentials, and metered acknowledgement; dry-run and missing-credential
   fail-closed paths were verified without network calls.
+- Revalidated current official Perplexity Search and SearXNG API docs. Kept
+  both as explicit future candidates rather than adding overlap or endpoint
+  complexity without a concrete requirement. Perplexity's extra date/path
+  controls are not represented by the current public request contract.
