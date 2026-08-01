@@ -117,8 +117,3 @@ durable rationale belongs in `decisions.md`.
   official X providers. Active model selection or an explicit provider hint is
   already user intent, so those redundant gates were removed; credentials and
   strict single-provider routing remain required.
-- Inspected the previous `pi-web-access` source instead of inferring its
-  behavior. Its auto order preferred Exa after native OpenAI; with an Exa key it
-  used the direct API, and without one it called `https://mcp.exa.ai/mcp`.
-  `pi-search` now prefers configured direct Exa for non-native models and keeps
-  Brave as the explicit lower-cost choice or default when Exa is unavailable.

@@ -11,17 +11,16 @@ The extension selects exactly one provider:
 2. Active Google Gemini and xAI Responses models use native grounding
    automatically; selecting that active model is the user's metered-call
    decision. `xai-x` is explicit for X-specific retrieval.
-3. Other/local models prefer Exa when `EXA_API_KEY` is configured. The key
-   is the deliberate paid semantic-search choice.
-4. Otherwise, they use Brave when `BRAVE_API_KEY` is configured. Brave uses
-   conservative free-mode admission by default: local request starts are
+3. Other/local models use Brave when `BRAVE_API_KEY` is configured. The
+   default is conservative free-mode admission: local request starts are
    spaced by one second and observed provider quota windows are honored.
    `PI_SEARCH_BRAVE_FREE_ONLY=0` disables that pacing only for deliberate
    metered use with `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account
    billing or guarantees against paid overage.
-5. Parallel and official X API search require configured credentials and an
-   explicit provider hint. The hint is the metered-call decision; they are
-   never selected automatically.
+4. Exa, Parallel, and official X API search require configured credentials
+   and an explicit provider hint. The hint is the metered-call decision; they
+   are never selected automatically. `PI_SEARCH_ALLOW_METERED=1` is only
+   needed when deliberately disabling Brave's default free-mode pacing.
 5. If nothing is eligible, search fails clearly.
 
 A provider error never starts a second provider call. There are no hidden
@@ -35,8 +34,8 @@ retries, paid fallback chains, or automatic multi-provider searches.
 | Gemini | Native Google Search grounding for active Gemini | Active model selects it; no fallback | Pi model registry |
 | xAI | Native web grounding for active xAI Responses | Active model selects it; no fallback | Pi model registry |
 | xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
-| Brave | Cost-controlled non-native direct search | Default when Exa is unavailable; conservative free-mode spacing | `BRAVE_API_KEY` |
-| Exa | Semantic retrieval and highlights | Default non-native provider when `EXA_API_KEY` is configured | `EXA_API_KEY` |
+| Brave | Non-native/local fallback path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
+| Exa | Semantic retrieval and highlights | Explicit `exa`; no automatic selection | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Exact post/query/user/recent search | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 

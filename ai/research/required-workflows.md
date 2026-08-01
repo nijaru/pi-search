@@ -18,7 +18,7 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | --- | --- | --- |
 | Native OpenAI Responses search | `src/openai.ts`; shipped | Pi model-registry auth, SSE fixtures, live smoke |
 | Native OpenAI Codex search | `src/openai.ts`; shipped | Correct ChatGPT endpoint, fresh-process live smoke |
-| Search for local/non-native models | Configured Exa preferred; Brave cost-controlled default when Exa is unavailable; explicit Parallel | Offline adapters, routing tests, live smoke where credentials exist |
+| Search for local/non-native models | Brave plus explicit Exa/Parallel; shipped | Offline adapters, billing-policy tests, live smoke where credentials exist |
 | Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; active model selection |
 | xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; active model selection |
 | Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |

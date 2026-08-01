@@ -27,8 +27,8 @@ Shipped search adapters:
 | Gemini grounding | Active Google Gemini model | `gemini` | No hard domain filter |
 | xAI web grounding | Active xAI Responses model | `xai` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` | Social/X search; no web-domain filter |
-| Brave | Other/local model when Exa is not configured; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
-| Exa | Other/local model when configured | `exa` with configured key | Semantic retrieval and domains |
+| Brave | Other/local model with configured key; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
+| Exa | — | `exa` with configured key | Semantic retrieval and domains |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
 | Official X API | — | `x` with configured bearer token | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
 
@@ -44,16 +44,14 @@ Normal `web_search` selects one provider:
 2. Gemini or xAI grounding when that provider is the active model; selecting
    the model is the user's metered-call decision. `xai-x` remains explicit for
    X-specific grounding.
-3. Exa for other models when `EXA_API_KEY` is configured. The key is the
-   deliberate paid semantic-search choice; callers can select Brave explicitly
-   when lower cost matters.
-4. Brave for other models when Exa is not configured and `BRAVE_API_KEY` exists.
-   It uses conservative free-mode admission by default (1 RPS local pacing
-   plus observed quota windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
+3. Brave for other models when `BRAVE_API_KEY` exists. It uses conservative
+   free-mode admission by default (1 RPS local pacing plus observed quota
+   windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
    `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
    configured metered Brave.
-5. No automatic Parallel or official X API selection. They require a provider
-   hint and configured credentials; the hint is the metered-call decision.
+4. No automatic Exa, Parallel, or official X API selection. They require a
+   provider hint and configured credentials; the hint is the metered-call
+   decision.
 5. No fallback after auth, rate-limit, transient, malformed, unsupported, or
    cancellation errors.
 

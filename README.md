@@ -19,11 +19,9 @@ Pi tools:
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
-- Other/local models prefer configured Exa for semantic retrieval; callers can
-  select Brave explicitly for the lower-cost direct path. If Exa is not
-  configured, Brave is the default with conservative free-mode pacing.
-- Parallel and the official X API require explicit provider selection and their
-  credentials; they are never chosen automatically.
+- Other/local models use configured Brave with conservative free-mode pacing.
+- Exa, Parallel, and the official X API require only explicit provider
+  selection and their credentials; they are never chosen automatically.
 - There are no hidden retries, provider fan-out, or paid fallback chains.
 
 All providers normalize into the same evidence-first result shape. Provider
@@ -36,18 +34,16 @@ registry; it never logs keys.
 
 ```bash
 # Non-native/local-model search
-export EXA_API_KEY=...                 # preferred semantic search when present
-export BRAVE_API_KEY=...               # lower-cost direct search / fallback
+export BRAVE_API_KEY=...
 # Configured Brave uses conservative free-mode admission by default:
 # request starts are spaced by 1s and observed quota headers are honored.
 # This explicit setting is optional; set it to 0 only when deliberately using
-# unpaced metered Brave.
+# metered Brave with the opt-in below.
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
 
 # Explicit providers (provider selection is the metered-call opt-in)
-# EXA_API_KEY is already configured above; these are never auto-selected.
-export PARALLEL_API_KEY=...
+export EXA_API_KEY=...
 export PARALLEL_API_KEY=...
 export X_API_BEARER_TOKEN=...         # explicit official X API search
 # Optional: to deliberately disable Brave's default free-mode pacing:

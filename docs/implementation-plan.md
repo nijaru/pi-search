@@ -14,8 +14,8 @@ This is the tracked source of truth for implementation order.
 
 - Native OpenAI/Codex Responses search is the first route for compatible active
   models.
-- Configured Exa is preferred for other/local models; Brave remains the
-  cost-controlled default when Exa is unavailable.
+- Brave is available for other/local models only with explicit free-capacity or
+  metered policy.
 - No native failure falls through to Brave or a paid provider.
 
 ## 2. Direct `web_fetch` — complete
@@ -33,8 +33,8 @@ Shipped routing now covers:
 - OpenAI Responses and Codex Responses native search;
 - Gemini Google Search grounding;
 - xAI web grounding and explicit X grounding;
-- Brave for cost-controlled non-native use; and
-- configured Exa for semantic non-native search plus explicit Parallel use.
+- Brave for free-capacity or explicitly metered non-native use; and
+- explicit, metered Exa and Parallel adapters.
 
 Native and direct failures remain visible. There is no hidden retry, fallback,
 or provider fan-out.
