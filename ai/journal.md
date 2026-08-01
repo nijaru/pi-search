@@ -107,6 +107,17 @@ durable rationale belongs in `decisions.md`.
 - Closed the selective-provider and dynamic-page evaluation tasks. No open
   tasks remain; Perplexity, SearXNG, browser/remote extraction, and similar
   additions remain conditional on measured workflow gaps.
+- A review found that `web_search` serialized the entire normalized response as
+  raw JSON into model-visible chat. It now renders bounded readable evidence
+  with query, provider, source URLs, titles, excerpts, dates, warnings, and
+  compact usage while preserving structured `details` for callers.
+- Verified current provider economics from official pages and live calls:
+  Brave Search lists $5/1,000 requests with monthly $5 credits; its live
+  response exposed a 1-request/second window. Exa lists $7/1,000 searches,
+  with $20 initial and $10 monthly free credits; the live adapter reported
+  $0.007 for a three-result search. Gemini Search grounding lists 5,000 free
+  requests/month then $14/1,000 queries, plus model token charges. These facts
+  are not enough to rank relevance, so automatic Exa preference was reverted.
 - A fresh Pi smoke exposed a cutover regression: configured Brave was rejected
   unless `PI_SEARCH_BRAVE_FREE_ONLY=1` was set, unlike the previous extension's
   working default. The construction boundary now enables conservative Brave
