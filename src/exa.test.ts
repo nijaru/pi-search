@@ -20,10 +20,10 @@ describe("ExaProvider", () => {
 		let seenBody: Record<string, unknown> | undefined;
 		const result = await provider({ fetchImpl: async (_input, init) => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-			return response(payload, 200, { "content-type": "application/json", "x-request-id": "exa-header" });
+			return response(payload, 200, { "content-type": "application/json", "x-request-id": "exa-header", "x-ratelimit-limit": "10", "x-ratelimit-remaining": "7", "x-ratelimit-reset": "60" });
 		} }).search({ query: "latest TypeScript release", maxResults: 1, domains: { include: ["example.com"] } }, new AbortController().signal, {});
 		expect(seenBody).toMatchObject({ query: "latest TypeScript release", numResults: 1, includeDomains: ["example.com"], contents: { highlights: true } });
-		expect(result).toMatchObject({ provider: "exa", requestId: "exa-header", usage: { costUsd: 0.007 }, appliedOptions: ["maxResults", "mode", "domains"] });
+		expect(result).toMatchObject({ provider: "exa", requestId: "exa-header", usage: { costUsd: 0.007, rateLimits: { windows: [{ limit: 10, remaining: 7, resetAfterMs: 60_000 }] } }, appliedOptions: ["maxResults", "mode", "domains"] });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "A useful excerpt.", sourceId: "result-1" });
 	});
 

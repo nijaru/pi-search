@@ -6,7 +6,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type, type Static, type TUnsafe } from "typebox";
-import type { FetchedContent, Provider, ResearchRequest, ResearchResponse, SearchRequest, SearchResult, SearchWarning } from "./contracts";
+import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
 import { SearchToolError } from "./errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
@@ -158,6 +158,13 @@ export async function executeResearch(
 	let fetchAttempts = 0;
 	let stopReason: ResearchResponse["stopReason"] = "completed";
 	let costUsd = 0;
+	let inputTokens = 0;
+	let outputTokens = 0;
+	let totalTokens = 0;
+	let hasInputTokens = false;
+	let hasOutputTokens = false;
+	let hasTotalTokens = false;
+	let latestRateLimits: ProviderUsage["rateLimits"];
 	const results: SearchResult[] = [];
 	const fetched: FetchedContent[] = [];
 	const warnings: SearchWarning[] = [];
@@ -190,7 +197,21 @@ export async function executeResearch(
 					context: providerContextFromPi(context),
 				});
 				results.push(...response.results);
-				costUsd += response.usage?.costUsd ?? estimatedCost;
+				const responseUsage = response.usage;
+				costUsd += responseUsage?.costUsd ?? estimatedCost;
+				if (responseUsage?.inputTokens !== undefined) {
+					inputTokens += responseUsage.inputTokens;
+					hasInputTokens = true;
+				}
+				if (responseUsage?.outputTokens !== undefined) {
+					outputTokens += responseUsage.outputTokens;
+					hasOutputTokens = true;
+				}
+				if (responseUsage?.totalTokens !== undefined) {
+					totalTokens += responseUsage.totalTokens;
+					hasTotalTokens = true;
+				}
+				if (responseUsage?.rateLimits !== undefined) latestRateLimits = responseUsage.rateLimits;
 				if (normalized.budget.maxCostUsd !== undefined && costUsd > normalized.budget.maxCostUsd) {
 					warnings.push(warning("Research stopped after reported provider usage exceeded maxCostUsd"));
 					stopReason = "budget";
@@ -240,6 +261,13 @@ export async function executeResearch(
 			}
 		}
 		if (deadlineController.signal.aborted && stopReason === "completed") stopReason = signal?.aborted ? "canceled" : "deadline";
+		const usage: ProviderUsage = {
+			...(costUsd > 0 ? { costUsd } : {}),
+			...(hasInputTokens ? { inputTokens } : {}),
+			...(hasOutputTokens ? { outputTokens } : {}),
+			...(hasTotalTokens ? { totalTokens, billedUnits: totalTokens, billedUnit: "tokens" } : {}),
+			...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
+		};
 		const response: ResearchResponse = {
 			question: normalized.question,
 			results,
@@ -249,7 +277,7 @@ export async function executeResearch(
 			fetchesCompleted,
 			fetchAttempts,
 			stopReason,
-			...(costUsd > 0 ? { usage: { costUsd } } : {}),
+			...(Object.keys(usage).length === 0 ? {} : { usage }),
 			warnings,
 		};
 		return boundedResponse(response, normalized.budget.maxOutputChars);

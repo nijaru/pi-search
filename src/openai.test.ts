@@ -33,6 +33,7 @@ const request: SearchRequest = {
 const payload = {
 	id: "resp-123",
 	status: "completed",
+	usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
 	output: [
 		{
 			type: "message",
@@ -61,7 +62,7 @@ const payload = {
 describe("OpenAIProvider", () => {
 	it("normalizes citations and sources as inspectable evidence", () => {
 		const result = normalizeOpenAIResponse(payload, request, "openai");
-		expect(result).toMatchObject({ query: request.query, provider: "openai", requestId: "resp-123" });
+		expect(result).toMatchObject({ query: request.query, provider: "openai", requestId: "resp-123", usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, billedUnits: 30, billedUnit: "tokens" } });
 		expect(result.results).toEqual([
 			{
 				url: "https://typescriptlang.org/docs",

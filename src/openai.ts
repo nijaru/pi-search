@@ -5,6 +5,7 @@ import type {
 	ProviderContext,
 	ProviderModel,
 	ProviderProfile,
+	ProviderUsage,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -13,6 +14,7 @@ import type {
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
+import { parseProviderRateLimits } from "./provider-http";
 import { validateSearchRequest } from "./search";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -150,6 +152,24 @@ function optionalString(value: unknown, maxLength = Number.POSITIVE_INFINITY): s
 function optionalTimestamp(value: unknown): string | undefined {
 	const candidate = optionalString(value, 100);
 	return candidate !== undefined && Number.isFinite(Date.parse(candidate)) ? candidate : undefined;
+}
+
+function optionalNonNegativeNumber(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function usageFromPayload(value: unknown): ProviderUsage | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const usage = value as Record<string, unknown>;
+	const inputTokens = optionalNonNegativeNumber(usage.input_tokens);
+	const outputTokens = optionalNonNegativeNumber(usage.output_tokens);
+	const totalTokens = optionalNonNegativeNumber(usage.total_tokens);
+	if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) return undefined;
+	return {
+		...(inputTokens === undefined ? {} : { inputTokens }),
+		...(outputTokens === undefined ? {} : { outputTokens }),
+		...(totalTokens === undefined ? {} : { totalTokens, billedUnits: totalTokens, billedUnit: "tokens" }),
+	};
 }
 
 function cleanSourceUrl(rawUrl: string): string {
@@ -314,6 +334,7 @@ export function normalizeOpenAIResponse(
 	}
 	const results = ordered.map((candidate) => resultFromCandidate(candidate, normalized.query, provider));
 	const requestId = optionalString(root.id);
+	const usage = usageFromPayload(root.usage);
 
 	return {
 		query: normalized.query,
@@ -322,6 +343,7 @@ export function normalizeOpenAIResponse(
 		appliedOptions: [],
 		warnings: [],
 		...(requestId === undefined ? {} : { requestId }),
+		...(usage === undefined ? {} : { usage }),
 	};
 }
 
@@ -714,26 +736,31 @@ export class OpenAIProvider implements Provider {
 
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
 		const retryAfterMs = parseRetryAfter(response.headers);
+		const responseRateLimits = parseProviderRateLimits(response.headers);
 		if (response.status === 401 || response.status === 403) {
 			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: false });
+			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: false });
 		}
 		if (response.status === 429) {
 			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: true });
+			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
 			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
+			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 
 		const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);
 		const payload = parseResponseBody(responseBody, this.id);
 		responseStatusFailure(this.id, payload);
 		const normalizedResponse = normalizeOpenAIResponse(payload, normalized, this.id);
+		const usage = normalizedResponse.usage === undefined && responseRateLimits === undefined
+			? undefined
+			: { ...normalizedResponse.usage, ...(responseRateLimits === undefined ? {} : { rateLimits: responseRateLimits }) };
 		return {
 			...normalizedResponse,
 			...(normalizedResponse.requestId === undefined && requestId === undefined ? {} : { requestId: normalizedResponse.requestId ?? requestId }),
+			...(usage === undefined ? {} : { usage }),
 			appliedOptions: plan.appliedOptions,
 			warnings: plan.warnings,
 		};

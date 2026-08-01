@@ -166,7 +166,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 		appliedOptions: [],
 		warnings,
 		...(optionalString(root.id, 500) === undefined ? {} : { requestId: optionalString(root.id, 500) }),
-		...(billedUnits === undefined ? {} : { usage: { billedUnits, billedUnit: "tokens" } }),
+		...(billedUnits === undefined ? {} : { usage: { billedUnits, billedUnit: "tokens", totalTokens: billedUnits } }),
 	};
 }
 
@@ -204,9 +204,13 @@ export class XAIProvider implements Provider {
 			maxResponseBytes: this.maxResponseBytes,
 		});
 		const response = normalizeXAIResponse(result.payload, normalized, this.tool);
+		const usage = response.usage === undefined && result.rateLimits === undefined
+			? undefined
+			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
 		return {
 			...response,
 			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
+			...(usage === undefined ? {} : { usage }),
 			appliedOptions: plan.appliedOptions,
 			warnings: [...plan.warnings, ...response.warnings],
 		};

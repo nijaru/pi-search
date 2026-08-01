@@ -1,4 +1,4 @@
-import type { ProviderId, ProviderRateLimitInfo } from "./contracts";
+import type { ProviderId, ProviderRateLimitInfo, ProviderRateLimitWindow } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 
@@ -40,12 +40,58 @@ function retryAfterMs(headers: Headers): number | undefined {
 	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
 
-function requestMetadata(response: Response): Pick<JsonResponse, "requestId" | "retryAfterMs"> {
+function nonNegativeHeaderNumber(value: string | null): number | undefined {
+	if (value === null || !/^\d+(?:\.\d+)?$/.test(value.trim())) return undefined;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function resetFromHeader(value: string | null): Pick<ProviderRateLimitWindow, "resetAt" | "resetAfterMs"> {
+	const parsed = nonNegativeHeaderNumber(value);
+	if (parsed === undefined) return {};
+	if (parsed >= 1_000_000_000_000) {
+		const date = new Date(parsed);
+		return Number.isFinite(date.getTime()) ? { resetAt: date.toISOString() } : {};
+	}
+	if (parsed >= 1_000_000_000) {
+		const date = new Date(parsed * 1_000);
+		return Number.isFinite(date.getTime()) ? { resetAt: date.toISOString() } : {};
+	}
+	return { resetAfterMs: Math.round(parsed * 1_000) };
+}
+
+/** Parse standard quota headers without assuming provider-specific plans. */
+export function parseProviderRateLimits(headers: Headers): ProviderRateLimitInfo | undefined {
+	const limits = (headers.get("x-ratelimit-limit") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const remaining = (headers.get("x-ratelimit-remaining") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const resets = (headers.get("x-ratelimit-reset") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const windows: ProviderRateLimitWindow[] = [];
+	const count = Math.max(limits.length, remaining.length, resets.length);
+	for (let index = 0; index < count; index += 1) {
+		const limit = nonNegativeHeaderNumber(limits[index] ?? null);
+		const left = nonNegativeHeaderNumber(remaining[index] ?? null);
+		const reset = resetFromHeader(resets[index] ?? null);
+		if (limit === undefined && left === undefined && Object.keys(reset).length === 0) continue;
+		windows.push({
+			...(limit === undefined ? {} : { limit }),
+			...(left === undefined ? {} : { remaining: left }),
+			...reset,
+			scope: `window-${index}`,
+		});
+	}
+	const retryAfter = retryAfterMs(headers);
+	if (windows.length === 0 && retryAfter === undefined) return undefined;
+	return { windows, ...(retryAfter === undefined ? {} : { retryAfterMs: retryAfter }) };
+}
+
+function requestMetadata(response: Response): Pick<JsonResponse, "requestId" | "retryAfterMs" | "rateLimits"> {
 	const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? undefined;
 	const delay = retryAfterMs(response.headers);
+	const rateLimits = parseProviderRateLimits(response.headers);
 	return {
 		...(requestId === undefined ? {} : { requestId }),
 		...(delay === undefined ? {} : { retryAfterMs: delay }),
+		...(rateLimits === undefined ? {} : { rateLimits }),
 	};
 }
 
@@ -73,11 +119,11 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 	const metadata = requestMetadata(response);
 	if (response.status === 401 || response.status === 403) {
 		await cancelResponseBody(response);
-		throw createProviderError({ provider: options.provider, kind: "auth", message: `${options.provider} search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false, ...metadata, rateLimits: options.rateLimits });
+		throw createProviderError({ provider: options.provider, kind: "auth", message: `${options.provider} search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false, ...metadata, rateLimits: options.rateLimits ?? metadata.rateLimits });
 	}
 	if (response.status === 429) {
 		await cancelResponseBody(response);
-		throw createProviderError({ provider: options.provider, kind: "rateLimit", message: `${options.provider} search rate limit exceeded`, status: response.status, retryable: true, ...metadata, rateLimits: options.rateLimits });
+		throw createProviderError({ provider: options.provider, kind: "rateLimit", message: `${options.provider} search rate limit exceeded`, status: response.status, retryable: true, ...metadata, rateLimits: options.rateLimits ?? metadata.rateLimits });
 	}
 	if (response.status < 200 || response.status >= 300) {
 		await cancelResponseBody(response);
@@ -88,7 +134,7 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 			status: response.status,
 			retryable: response.status === 408 || response.status === 425 || response.status >= 500,
 			...metadata,
-			rateLimits: options.rateLimits,
+			rateLimits: options.rateLimits ?? metadata.rateLimits,
 		});
 	}
 
@@ -100,7 +146,7 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 		return {
 			payload: JSON.parse(text) as unknown,
 			...metadata,
-			...(options.rateLimits === undefined ? {} : { rateLimits: options.rateLimits }),
+			...(options.rateLimits === undefined && metadata.rateLimits === undefined ? {} : { rateLimits: options.rateLimits ?? metadata.rateLimits }),
 		};
 	} catch (error) {
 		if (options.signal.aborted) {

@@ -3,6 +3,7 @@ import type {
 	ProviderCapabilities,
 	ProviderContext,
 	ProviderProfile,
+	ProviderRateLimitInfo,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -67,7 +68,7 @@ function malformed(message: string): never {
 	throw createProviderError({ provider: "parallel", kind: "malformed", message: `Parallel returned a malformed response (${message})`, retryable: false });
 }
 
-function normalizeParallelResponse(payload: unknown, request: SearchRequest, requestId?: string): SearchResponse {
+function normalizeParallelResponse(payload: unknown, request: SearchRequest, metadata: { readonly requestId?: string; readonly rateLimits?: ProviderRateLimitInfo } = {}): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "parallel");
 	if (!Array.isArray(root.results)) return malformed("results is not an array");
@@ -100,7 +101,8 @@ function normalizeParallelResponse(payload: unknown, request: SearchRequest, req
 		provider: "parallel",
 		appliedOptions: [],
 		warnings: discarded > 0 ? [{ code: "partial-results", message: `Parallel discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` }] : [],
-		...(requestId === undefined ? {} : { requestId }),
+		...(metadata.requestId === undefined ? {} : { requestId: metadata.requestId }),
+		...(metadata.rateLimits === undefined ? {} : { usage: { rateLimits: metadata.rateLimits } }),
 	};
 }
 
@@ -134,7 +136,7 @@ export class ParallelProvider implements Provider {
 		});
 		const payload = result.payload !== null && typeof result.payload === "object" && !Array.isArray(result.payload) ? result.payload as Record<string, unknown> : undefined;
 		const searchId = typeof payload?.search_id === "string" ? payload.search_id : undefined;
-		const response = normalizeParallelResponse(result.payload, normalized, result.requestId ?? searchId);
+		const response = normalizeParallelResponse(result.payload, normalized, { requestId: result.requestId ?? searchId, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) });
 		return { ...response, appliedOptions: plan.appliedOptions, warnings: [...plan.warnings, ...response.warnings] };
 	}
 }

@@ -3,6 +3,7 @@ import type {
 	ProviderCapabilities,
 	ProviderContext,
 	ProviderProfile,
+	ProviderRateLimitInfo,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -77,7 +78,7 @@ function malformed(message: string): never {
 	throw createProviderError({ provider: "exa", kind: "malformed", message: `Exa returned a malformed response (${message})`, retryable: false });
 }
 
-function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata: { readonly requestId?: string }): SearchResponse {
+function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata: { readonly requestId?: string; readonly rateLimits?: ProviderRateLimitInfo }): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "exa");
 	if (!Array.isArray(root.results)) return malformed("results is not an array");
@@ -111,6 +112,9 @@ function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata
 	const cost = root.costDollars === undefined ? undefined : objectValue(root.costDollars, "costDollars", "exa");
 	const costUsd = typeof cost?.total === "number" && Number.isFinite(cost.total) && cost.total >= 0 ? cost.total : undefined;
 	const bodyRequestId = optionalString(root.requestId, 500);
+	const usage = costUsd === undefined && metadata.rateLimits === undefined
+		? undefined
+		: { ...(costUsd === undefined ? {} : { costUsd }), ...(metadata.rateLimits === undefined ? {} : { rateLimits: metadata.rateLimits }) };
 	return {
 		query: normalized.query,
 		results: results.slice(0, normalized.maxResults ?? 10),
@@ -118,7 +122,7 @@ function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata
 		appliedOptions: [],
 		warnings: discarded > 0 ? [{ code: "partial-results", message: `Exa discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` }] : [],
 		...(metadata.requestId === undefined && bodyRequestId === undefined ? {} : { requestId: metadata.requestId ?? bodyRequestId }),
-		...(costUsd === undefined ? {} : { usage: { costUsd } }),
+		...(usage === undefined ? {} : { usage }),
 	};
 }
 

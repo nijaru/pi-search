@@ -119,6 +119,12 @@ export interface ProviderUsage {
 	readonly costUsd?: number;
 	readonly billedUnits?: number;
 	readonly billedUnit?: string;
+	/** Provider-reported input/prompt token count, when available. */
+	readonly inputTokens?: number;
+	/** Provider-reported output/completion token count, when available. */
+	readonly outputTokens?: number;
+	/** Provider-reported total token count, when available. */
+	readonly totalTokens?: number;
 	readonly rateLimits?: ProviderRateLimitInfo;
 }
 

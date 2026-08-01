@@ -3,7 +3,7 @@
   "ref": "kv4z",
   "title": "Inventory and close required feature gaps",
   "description": "Compare the prior extension's actual workflows with our needs and classify must-have versus intentionally excluded behavior. Implement required browser/JS fetch, social/X options, provider coverage, research, PDF/YouTube, or repository/content workflows only where the inventory requires them; do not preserve scope assumptions without validation.",
-  "status": "active",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -22,7 +22,7 @@
     }
   ],
   "created_at": "2026-08-01T16:19:41.803028Z",
-  "updated_at": "2026-08-01T16:31:48.775114Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T16:39:25.177303Z",
+  "completed_at": "2026-08-01T16:39:25.177303Z",
   "external": {}
 }
