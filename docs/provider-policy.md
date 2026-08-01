@@ -12,8 +12,9 @@ The extension selects exactly one provider:
    when `PI_SEARCH_ALLOW_METERED=1` explicitly permits it. `xai-x` is explicit
    for X-specific retrieval.
 3. Other/local models use Brave only with `BRAVE_API_KEY` and
-   `PI_SEARCH_BRAVE_FREE_ONLY=1`, which is a user assertion that free capacity
-   covers the call.
+   `PI_SEARCH_BRAVE_FREE_ONLY=1`. Free mode applies conservative local request
+   spacing and honors observed provider quota windows, but the flag is not an
+   account-billing check or a guarantee against paid overage.
 4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa, and
    Parallel only when Exa or Parallel is explicitly selected by provider hint.
 5. If nothing is eligible, search fails clearly.
@@ -29,7 +30,7 @@ retries, paid fallback chains, or automatic multi-provider searches.
 | Gemini | Native Google Search grounding for active Gemini | One grounding call; no fallback | Pi model registry |
 | xAI | Native web grounding for active xAI Responses | One Responses call; no fallback | Pi model registry |
 | xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
-| Brave | Non-native/local fallback path | Free assertion or explicit metered opt-in; quota guarded | `BRAVE_API_KEY` |
+| Brave | Non-native/local fallback path | Conservative free-mode spacing or explicit metered opt-in; provider quota guarded | `BRAVE_API_KEY` |
 | Exa | Semantic retrieval and highlights | Explicit `exa` plus metered opt-in | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel` plus metered opt-in | `PARALLEL_API_KEY` |
 

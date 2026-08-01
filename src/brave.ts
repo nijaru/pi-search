@@ -25,19 +25,61 @@ export type BraveFetch = (input: string | URL | Request, init?: RequestInit) => 
 export interface BraveCapacityTracker {
 	/** True when no known finite quota window currently blocks a call. */
 	readonly canAttempt: () => boolean;
+	/** Reserve a local request slot, returning false when the caller canceled. */
+	readonly waitForTurn?: (signal: AbortSignal) => Promise<boolean>;
 	/** Record provider observations without inventing or persisting counters. */
 	readonly observe: (info: ProviderRateLimitInfo | undefined) => void;
 	/** Return the latest immutable observation for diagnostics and errors. */
 	readonly snapshot: () => ProviderRateLimitInfo | undefined;
 }
 
+export interface BraveQuotaTrackerOptions {
+	/** Minimum spacing between request starts for a conservative local policy. */
+	readonly minimumIntervalMs?: number;
+}
+
 /**
- * Tracks only provider-reported windows. The provider remains authoritative;
- * this is a local admission guard, not a quota counter or billing ledger.
+ * Tracks provider-reported windows and, when configured, serializes local
+ * request starts. The provider remains authoritative; this is an admission
+ * guard, not a quota counter or billing ledger.
  */
 export class BraveQuotaTracker implements BraveCapacityTracker {
 	private latest: ProviderRateLimitInfo | undefined;
 	private observedAtMs = 0;
+	private readonly minimumIntervalMs: number;
+	private nextRequestAtMs = 0;
+
+	constructor(options: BraveQuotaTrackerOptions = {}) {
+		const minimumIntervalMs = options.minimumIntervalMs ?? 0;
+		if (!Number.isInteger(minimumIntervalMs) || minimumIntervalMs < 0) {
+			throw new Error("Brave minimumIntervalMs must be a non-negative integer");
+		}
+		this.minimumIntervalMs = minimumIntervalMs;
+	}
+
+	async waitForTurn(signal: AbortSignal): Promise<boolean> {
+		if (signal.aborted) return false;
+		const now = Date.now();
+		const startAt = Math.max(now, this.nextRequestAtMs);
+		this.nextRequestAtMs = startAt + this.minimumIntervalMs;
+		const delayMs = startAt - now;
+		if (delayMs <= 0) return true;
+		return new Promise<boolean>((resolve) => {
+			let settled = false;
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			const finish = (admitted: boolean): void => {
+				if (settled) return;
+				settled = true;
+				if (timer !== undefined) clearTimeout(timer);
+				signal.removeEventListener("abort", onAbort);
+				resolve(admitted);
+			};
+			const onAbort = (): void => finish(false);
+			timer = setTimeout(() => finish(true), delayMs);
+			signal.addEventListener("abort", onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		});
+	}
 
 	canAttempt(): boolean {
 		const info = this.snapshot();
@@ -330,6 +372,23 @@ export class BraveProvider implements Provider {
 				rateLimits: observed,
 				retryAfterMs: observed?.retryAfterMs,
 			});
+		}
+		if (this.capacityTracker?.waitForTurn !== undefined) {
+			const admitted = await this.capacityTracker.waitForTurn(signal);
+			if (!admitted) {
+				throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
+			}
+			if (!this.capacityTracker.canAttempt()) {
+				const latest = this.capacityTracker.snapshot();
+				throw createProviderError({
+					provider: this.id,
+					kind: "rateLimit",
+					message: "Brave quota window is exhausted",
+					retryable: true,
+					rateLimits: latest,
+					retryAfterMs: latest?.retryAfterMs,
+				});
+			}
 		}
 		const apiKey = this.apiKey;
 		if (apiKey === undefined || apiKey.trim().length === 0) {

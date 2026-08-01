@@ -104,6 +104,21 @@ describe("BraveProvider", () => {
 		expect(tracker.canAttempt()).toBe(true);
 	});
 
+	it("serializes free-mode request starts and honors cancellation while waiting", async () => {
+		const tracker = new BraveQuotaTracker({ minimumIntervalMs: 25 });
+		const starts: number[] = [];
+		await tracker.waitForTurn(new AbortController().signal);
+		starts.push(Date.now());
+		await tracker.waitForTurn(new AbortController().signal);
+		starts.push(Date.now());
+		expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(20);
+
+		const controller = new AbortController();
+		const pending = tracker.waitForTurn(controller.signal);
+		controller.abort();
+		expect(await pending).toBe(false);
+	});
+
 	it("does not call the network without a key or after known quota exhaustion", async () => {
 		let calls = 0;
 		const tracker = new BraveQuotaTracker();

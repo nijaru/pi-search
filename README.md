@@ -37,7 +37,9 @@ registry; it never logs keys.
 ```bash
 # Non-native/local-model search
 export BRAVE_API_KEY=...
-export PI_SEARCH_BRAVE_FREE_ONLY=1       # assert free Brave capacity
+export PI_SEARCH_BRAVE_FREE_ONLY=1       # opt into conservative free-mode admission
+# Free mode spaces request starts by 1s and honors observed quota headers;
+# it does not inspect account billing or guarantee no paid overage.
 
 # Explicit metered providers and non-OpenAI native grounding
 export EXA_API_KEY=...

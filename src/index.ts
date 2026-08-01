@@ -17,7 +17,8 @@ import { registerWebSearch } from "./search-tool";
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
-	const braveCapacity = new BraveQuotaTracker();
+	const braveFreeOnly = process.env.PI_SEARCH_BRAVE_FREE_ONLY === "1";
+	const braveCapacity = new BraveQuotaTracker({ minimumIntervalMs: braveFreeOnly ? 1_000 : 0 });
 	const brave = createBraveProvider({ apiKey: braveKey, capacityTracker: braveCapacity });
 	const openai = createOpenAIProvider({ provider: "openai" });
 	const codex = createOpenAIProvider({ provider: "openai-codex" });
@@ -29,7 +30,7 @@ export default function (pi: ExtensionAPI): void {
 	const exa = createExaProvider({ apiKey: exaKey });
 	const parallel = createParallelProvider({ apiKey: parallelKey });
 	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1" ? "allow-configured-metered" : "free-only";
-	const braveFreeCapacityConfigured = process.env.PI_SEARCH_BRAVE_FREE_ONLY === "1";
+	const braveFreeCapacityConfigured = braveFreeOnly;
 	const route = createSearchRouter({
 		openai,
 		openaiCodex: codex,
