@@ -4,7 +4,7 @@
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and origin are clean at
-`8334969`; the installed Git package was refreshed to that commit. The active
+`6a6ba7f`; the installed Git package was refreshed to that commit. The active
 Pi runtime contains only this web extension and exposes exactly `web_search`,
 `web_fetch`, and `web_research`.
 
