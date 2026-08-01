@@ -3,7 +3,7 @@
   "ref": "b7xw",
   "title": "Render web_search as readable evidence",
   "description": "The tool currently serializes the entire normalized SearchResponse as JSON into model-visible chat. Preserve structured details for callers, but render compact readable source evidence with bounded URLs/titles/excerpts/dates/provider/usage and tests.",
-  "status": "active",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-08-01T23:21:31.711166Z",
-  "updated_at": "2026-08-01T23:21:36.509823Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T23:23:06.300491Z",
+  "completed_at": "2026-08-01T23:23:06.300491Z",
   "external": {}
 }
