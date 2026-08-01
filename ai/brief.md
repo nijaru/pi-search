@@ -27,10 +27,11 @@ synthesis, or unnecessary browser infrastructure. Preserve evidence-first
 results, explicit provider selection, hard constraint reporting, untrusted
 content fencing, bounded resources, and deterministic offline tests.
 
-The research phase is complete. The evidence boundary, shared result cleanup/URL identity, and Markdown
-content negotiation are implemented. The remaining gate is an explicit
-credential-gated live smoke runner. Only then should Perplexity or a configured
-SearXNG adapter be considered; xAI remains the only dedicated X path.
+The research phase is complete. The evidence boundary, shared result cleanup/URL identity, Markdown content
+negotiation, and credential-gated live smoke runner are implemented. The next
+decision is whether Perplexity adds enough hard-filter coverage to justify a new
+metered adapter; SearXNG remains conditional on an explicit self-hosted need.
+xAI remains the only dedicated X path.
 
 ## Verification
 

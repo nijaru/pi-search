@@ -70,6 +70,9 @@ bun install
 bun run check
 ```
 
+Credential-gated live provider checks are separate; see
+[`docs/live-smoke.md`](docs/live-smoke.md). They never run from `bun test`.
+
 The design, provider billing policy, and implementation gates are tracked in
 [`docs/DESIGN.md`](docs/DESIGN.md),
 [`docs/provider-policy.md`](docs/provider-policy.md), and

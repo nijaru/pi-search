@@ -39,3 +39,7 @@ durable rationale belongs in `decisions.md`.
   content negotiation and preserves `text/markdown` responses as bounded,
   untrusted Markdown with explicit extraction metadata. Verification: 112
   tests and 258 assertions pass with TypeScript checking.
+- Implemented and pushed `dfbac88`: added an explicit, single-provider live
+  smoke runner and operator documentation. It requires separate opt-in,
+  credentials, and metered acknowledgement; dry-run and missing-credential
+  fail-closed paths were verified without network calls.

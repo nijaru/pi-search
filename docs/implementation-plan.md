@@ -81,10 +81,10 @@ before calling the search surface mature:
 3. ✅ Improve direct fetch content negotiation with `text/markdown` and report
    actual format/extraction metadata. Browser rendering and caching remain out
    of the default path.
-4. Add an explicit credential-gated live smoke runner. It must never run from
-   `bun test`, infer a provider from available credentials, retry, fan out, or
-   print secrets. It should verify bounded inspectable URLs and hard-filter
-   behavior where supported.
+4. ✅ Add an explicit credential-gated live smoke runner in
+   `scripts/live-smoke.ts`. It never runs from `bun test`, infers a provider
+   from available credentials, retries, fans out, or prints secrets. It checks
+   bounded inspectable URLs and hard-filter behavior where supported.
 
 Only after those gates should a new adapter be considered. Perplexity is the
 first candidate because it adds structured evidence plus hard domain/date

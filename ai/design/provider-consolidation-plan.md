@@ -68,7 +68,10 @@ constraints continue to fail before network access.
 
 ## Phase 3 — selective provider additions
 
-Prioritize only after Phases 1–2 and a live-smoke harness:
+The explicit live-smoke harness is now available at
+`scripts/live-smoke.ts`; use it only with dedicated credentials and the
+acknowledgement described in `docs/live-smoke.md`. Prioritize additions only
+after Phases 1–2 and a successful smoke path:
 
 - Perplexity first, only if hard domain/date filters and citation-bearing
   results are still useful beyond the shipped set;
