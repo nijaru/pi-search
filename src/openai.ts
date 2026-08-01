@@ -392,9 +392,14 @@ async function selectSearchExecution(provider: OpenAIProviderId, active: Provide
 	return { model: selected, auth };
 }
 
-function domainFilters(request: SearchRequest): { allowed_domains?: string[] } | undefined {
+function domainFilters(request: SearchRequest): { allowed_domains?: string[]; blocked_domains?: string[] } | undefined {
 	const include = request.domains?.include;
-	return include !== undefined && include.length > 0 ? { allowed_domains: [...include] } : undefined;
+	const exclude = request.domains?.exclude;
+	const filters = {
+		...(include !== undefined && include.length > 0 ? { allowed_domains: [...include] } : {}),
+		...(exclude !== undefined && exclude.length > 0 ? { blocked_domains: [...exclude] } : {}),
+	};
+	return Object.keys(filters).length === 0 ? undefined : filters;
 }
 
 function buildInstructions(request: SearchRequest): string {
@@ -411,9 +416,6 @@ function buildInstructions(request: SearchRequest): string {
 /** Build a native OpenAI web-search request and surface unsupported hard options. */
 export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProviderId): OpenAIRequestPlan {
 	const normalized = validateSearchRequest(request);
-	if (normalized.domains?.exclude !== undefined && normalized.domains.exclude.length > 0) {
-		return unsupported(provider, "OpenAI web search does not support excluded-domain filters");
-	}
 	const appliedOptions: SearchOption[] = ["maxResults"];
 	const warnings: SearchWarning[] = [];
 	if (normalized.mode === "auto" || normalized.mode === "keyword" || normalized.mode === "fresh") {

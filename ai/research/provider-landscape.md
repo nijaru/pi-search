@@ -85,7 +85,7 @@ again before an adapter is enabled.
 
 | Provider | Auth and cost posture | Constraint posture | Evidence and social coverage | Decision |
 | --- | --- | --- | --- | --- |
-| OpenAI/Codex | Pi model registry; model/provider billing | Native Responses search; excluded domains are intentionally rejected by the current contract | Citations and source records; no dedicated X path | Keep as native default |
+| OpenAI/Codex | Pi model registry; model/provider billing | Native Responses search; allowed and blocked domains are supported and post-filtered | Citations and source records; no dedicated X path | Keep as native default; highest correctness priority |
 | Gemini | Pi model registry; grounding can be metered | Fresh/current grounding, but no hard domain-filter contract | Grounding chunks and URL annotations; no dedicated X path | Keep; report domain limitation |
 | xAI web/X | Pi model registry; metered tool and token usage | Web allowed/excluded domains; X has a separate contract and no web-domain filters | Structured citations; `xai-x` is the strongest dedicated X path currently | Keep explicit; add handle/date options only after fixture and live checks |
 | Brave | API key; quota and paid usage must be explicit | Freshness and domain operators, with post-filtering | URL, title, snippet, publication metadata; no reliable dedicated X path | Keep as controlled general direct provider |

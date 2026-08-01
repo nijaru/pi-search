@@ -23,7 +23,7 @@ Shipped search adapters:
 
 | Adapter | Active/default use | Explicit use | Hard constraints |
 | --- | --- | --- | --- |
-| OpenAI/Codex Responses | Active supported OpenAI model | `openai`/`openai-codex` | Responses APIs only; excluded domains rejected |
+| OpenAI/Codex Responses | Active supported OpenAI model | `openai`/`openai-codex` | Responses APIs only; allowed and blocked domains |
 | Gemini grounding | Active Google Gemini model | `gemini` | No hard domain filter |
 | xAI web grounding | Active xAI Responses model | `xai` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` | Social/X search; no web-domain filter |
@@ -68,7 +68,8 @@ adapters:
 - Responses streaming accepts LF and CRLF SSE, requires a terminal completed
   event, rejects incomplete/truncated streams, and bounds body bytes.
 - HTTP errors preserve status, request ID, retry timing, and retryability.
-- Unsupported excluded-domain filters fail before network access.
+- OpenAI/Codex domain filters are sent as allowed/blocked domains and
+  enforced again by shared result cleanup.
 
 This adapter never treats a completion-only or partial response as successful
 search evidence.

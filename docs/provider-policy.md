@@ -55,7 +55,8 @@ rejected before calls to those providers.
 
 Unsupported hard constraints are rejected or surfaced:
 
-- OpenAI/Codex reject excluded-domain filters.
+- OpenAI/Codex Responses accept allowed and blocked domain filters; the shared
+  cleanup boundary still enforces the returned evidence.
 - Gemini grounding has no hard domain-filter contract.
 - xAI web search supports allowed/excluded domains; xAI X search does not.
 - Parallel's stable Search API contract does not expose domain filters.

@@ -230,15 +230,17 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
-	it("rejects hard constraints that native search cannot enforce", async () => {
+	it("sends allowed and blocked domain filters to native search", async () => {
+		let body: Record<string, unknown> | undefined;
 		const provider = createOpenAIProvider({
 			provider: "openai",
-			fetchImpl: (async () => response(payload)) as OpenAIFetch,
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
 		});
-		await expect(provider.search({ query: "q", domains: { exclude: ["example.com"] } }, new AbortController().signal, context())).rejects.toMatchObject({
-			provider: "openai",
-			kind: "unsupported",
-		});
+		await provider.search({ query: "q", domains: { include: ["allowed.example"], exclude: ["blocked.example"] } }, new AbortController().signal, context());
+		expect(body?.tools).toEqual([{ type: "web_search", filters: { allowed_domains: ["allowed.example"], blocked_domains: ["blocked.example"] } }]);
 	});
 
 	it("cancels a pending error body when the caller aborts", async () => {

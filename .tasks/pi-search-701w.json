@@ -19,10 +19,14 @@
     {
       "ts": "2026-08-01T19:45:16.794847Z",
       "msg": "Audited OpenAI/Codex adapter against current Responses evidence contracts. Added response metadata propagation for malformed/incomplete/stream failures, classifies broken success streams as retryable network failures, maps stream aborts to canceled errors, and added rate-limit/metadata regression fixtures. 20 OpenAI tests and typecheck pass. Fresh Pi Codex live smoke already passed; direct OpenAI smoke remains skipped because dedicated API credentials are absent."
+    },
+    {
+      "ts": "2026-08-01T19:51:50.969632Z",
+      "msg": "Follow-up against current OpenAI docs found Responses web_search supports both allowed_domains and blocked_domains. Updated adapter, tests, and policy/design docs; shared cleanup remains authoritative. Focused OpenAI and cleanup tests plus typecheck pass."
     }
   ],
   "created_at": "2026-08-01T18:40:10.842304Z",
-  "updated_at": "2026-08-01T19:45:16.813058Z",
+  "updated_at": "2026-08-01T19:51:50.969632Z",
   "completed_at": "2026-08-01T19:45:16.813058Z",
   "external": {}
 }
