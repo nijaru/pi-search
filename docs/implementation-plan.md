@@ -72,13 +72,12 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
 The current package is usable, but the audit found four high-value follow-ups
 before calling the search surface mature:
 
-1. Close the evidence-boundary gap in `src/search-tool.ts`: ordinary
-   `web_search` should not forward an untyped provider `answer` field when the
-   public contract is evidence-first.
-2. Add a shared conservative result-cleanup and URL-identity module. Apply it
-   after provider parsing and use it for research fetch deduplication. Preserve
-   raw URLs when canonicalization changes them; do not strip arbitrary query
-   parameters.
+1. ✅ Close the evidence-boundary gap in `src/search-tool.ts`: ordinary
+   `web_search` no longer forwards an untyped provider `answer` field.
+2. ✅ Add a shared conservative result-cleanup and URL-identity module. It
+   runs after provider parsing and is reused for research fetch deduplication.
+   Raw URLs are preserved when canonicalization changes them; arbitrary query
+   parameters are not stripped.
 3. Improve direct fetch content negotiation with `text/markdown` and report
    actual format/extraction metadata. Keep browser rendering and caching out of
    the default path.

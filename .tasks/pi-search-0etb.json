@@ -3,7 +3,7 @@
   "ref": "0etb",
   "title": "Close evidence boundary and add shared result cleanup",
   "description": "Remove or explicitly gate the unexpected provider answer field at the web_search boundary. Add conservative URL canonicalization/sourceUrl preservation, shared result validation/bounds/deduplication, and canonical research fetch identity. Preserve evidence-first output, hard constraints, and offline tests.",
-  "status": "open",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -11,9 +11,14 @@
   "blocked_by": [],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T13:59:03.719044Z",
+      "msg": "Implemented src/search-cleanup.ts at executeSearch boundary: conservative HTTP URL identity, fragment/default-port/host normalization, sourceUrl preservation, field bounds, score/date cleanup, duplicate merge, malformed-result warnings, and post-dedup maxResults. Reused identity for web_research fetch deduplication, removed opaque answer leakage from web_search, and removed the versioned user-agent string. bun run check passes: 111 tests, 256 assertions."
+    }
+  ],
   "created_at": "2026-08-01T13:52:26.970784Z",
-  "updated_at": "2026-08-01T13:52:26.970784Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T13:59:03.736634Z",
+  "completed_at": "2026-08-01T13:59:03.736634Z",
   "external": {}
 }

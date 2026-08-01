@@ -34,24 +34,21 @@ normalization gaps before adding providers.
 4. Keep live smoke calls separate from deterministic fixtures and require an
    explicit provider and metered-cost acknowledgement.
 
-## Phase 1 — close contract gaps and harden evidence
+## Phase 1 — close contract gaps and harden evidence (implemented)
 
-1. Resolve the evidence-boundary policy: the current public contract is
-   evidence-first, while `src/search-tool.ts` still forwards an unexpected
-   provider `answer` field. Remove it or make provider answers an explicitly
-   separate, opt-in field; do not let opaque synthesis become ordinary search
-   output.
-2. Add one pure result-cleanup layer for conservative URL canonicalization,
-   hostname/domain, title/excerpt bounds, duplicate URLs, timestamps, and
-   source IDs. Preserve the raw source URL when canonicalization changes it.
-3. Reuse the canonical URL identity for `web_research` fetch deduplication.
-   Deduplicate before final `maxResults` where adapters can expose bounded
-   candidate sets; do not rewrite arbitrary query parameters.
-4. Keep provider adapters responsible for request construction and payload
-   parsing. Keep shared normalization and tool bounds at shared boundaries.
-5. Expose warnings for partial or hinted semantics; reject unsupported hard
-   constraints before network access. Add capability metadata instead of
-   vendor-specific router branches.
+Commit `a1f51e1` closed the first three gates:
+
+1. The evidence-first boundary no longer forwards an untyped provider `answer`
+   field from `src/search-tool.ts`.
+2. `src/search-cleanup.ts` now performs conservative URL canonicalization,
+   hostname/domain derivation, field bounds, duplicate merging, timestamp and
+   score cleanup, and raw `sourceUrl` preservation.
+3. The same URL identity is used for `web_research` fetch deduplication. It
+   does not rewrite arbitrary query parameters.
+
+Provider adapters still own request construction and payload parsing. Shared
+normalization and output bounds remain at the tool boundary; unsupported hard
+constraints continue to fail before network access.
 
 ## Phase 2 — optimize individual-page fetching
 

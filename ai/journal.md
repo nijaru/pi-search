@@ -30,3 +30,8 @@ durable rationale belongs in `decisions.md`.
   path. It identified a shared result-cleanup/URL-identity gap, Markdown
   content-negotiation metadata work, and the need for an explicit live-smoke
   runner that never runs from the offline test command.
+- Implemented and pushed `a1f51e1`: shared search-result cleanup and URL
+  identity now run after provider parsing, research fetches deduplicate using
+  that identity, opaque provider answers are excluded from `web_search`, and
+  the unversioned package no longer sends a versioned user-agent string.
+  Verification: 111 tests and 256 assertions pass with TypeScript checking.
