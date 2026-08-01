@@ -4,6 +4,20 @@
   "description": "Provider-neutral web search and fetching tools for Pi",
   "type": "module",
   "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "web-search",
+    "web-fetch"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nijaru/pi-search.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nijaru/pi-search/issues"
+  },
+  "homepage": "https://github.com/nijaru/pi-search#readme",
   "pi": {
     "extensions": [
       "./src/index.ts"
