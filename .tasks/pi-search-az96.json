@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "az96",
+  "title": "Benchmark provider quality and all-in cost",
+  "description": "Compare Brave, Exa, Parallel turbo/basic/advanced, and Gemini grounding where credentials/model access permit using the same representative task corpus. Record relevance, freshness, hard filters, latency, result context, token/search charges, free-tier accounting, and failure behavior before changing automatic routing.",
+  "status": "open",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T23:55:58.428327Z",
+  "updated_at": "2026-08-01T23:55:58.428327Z",
+  "completed_at": null,
+  "external": {}
+}
