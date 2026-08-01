@@ -116,6 +116,60 @@ function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] |
 	};
 }
 
+function compactText(value: string, maxLength = 4_000): string {
+	return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function compactUsage(usage: SearchResponse["usage"]): string | undefined {
+	if (usage === undefined) return undefined;
+	const parts: string[] = [];
+	if (usage.costUsd !== undefined) parts.push(`cost $${usage.costUsd.toFixed(6)}`.replace(/0+$/, "").replace(/\.$/, ""));
+	if (usage.billedUnits !== undefined) parts.push(`${usage.billedUnits} ${usage.billedUnit ?? "billed units"}`);
+	if (usage.totalTokens !== undefined) parts.push(`${usage.totalTokens} tokens`);
+	if (usage.rateLimits !== undefined) {
+		const windows = usage.rateLimits.windows
+			.slice(0, 4)
+			.map((window) => `${window.remaining ?? "?"}/${window.limit ?? "?"}${window.scope === undefined ? "" : ` ${window.scope}`}`)
+			.join(", ");
+		if (windows.length > 0) parts.push(`rate limits ${windows}`);
+		if (usage.rateLimits.retryAfterMs !== undefined) parts.push(`retry after ${usage.rateLimits.retryAfterMs}ms`);
+	}
+	return parts.length === 0 ? undefined : parts.join("; ");
+}
+
+/** Render evidence for model-visible chat; structured details remain on the tool result. */
+export function renderSearchResponse(response: SearchResponse): string {
+	const lines = [`Query: ${compactText(response.query, MAX_QUERY_LENGTH)}`, `Provider: ${response.provider}`];
+	if (response.latencyMs !== undefined) lines[1] += ` (${response.latencyMs}ms)`;
+	if (response.results.length === 0) {
+		lines.push("", "No inspectable results.");
+	} else {
+		lines.push("");
+		response.results.forEach((result, index) => {
+			const title = compactText(result.title ?? result.domain ?? result.url, MAX_SEARCH_TITLE_CHARS);
+			lines.push(`${index + 1}. ${title}`, `   URL: ${result.url}`);
+			if (result.domain !== undefined) lines.push(`   Domain: ${compactText(result.domain, 500)}`);
+			if (result.publishedAt !== undefined) lines.push(`   Published: ${compactText(result.publishedAt, 100)}`);
+			if (result.excerpt !== undefined) lines.push(`   Excerpt: ${compactText(result.excerpt, MAX_SEARCH_EXCERPT_CHARS)}`);
+			if (result.sourceId !== undefined) lines.push(`   Source ID: ${compactText(result.sourceId, 500)}`);
+			lines.push("");
+		});
+	}
+	if (response.appliedOptions.length > 0) lines.push(`Applied: ${response.appliedOptions.join(", ")}`);
+	for (const warning of response.warnings) lines.push(`Warning [${warning.code}]: ${compactText(warning.message, 1_000)}`);
+	if (response.requestId !== undefined) lines.push(`Request ID: ${compactText(response.requestId, 500)}`);
+	const usage = compactUsage(response.usage);
+	if (usage !== undefined) lines.push(`Usage: ${usage}`);
+	return lines.join("\n").trim();
+}
+
+function boundedResponseByteLength(response: SearchResponse): number {
+	return Math.max(
+		new TextEncoder().encode(JSON.stringify(response, null, 2)).byteLength,
+		new TextEncoder().encode(renderSearchResponse(response)).byteLength,
+	);
+}
+
 function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	let truncated = false;
 	let bounded: SearchResponse = {
@@ -139,7 +193,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		...(response.latencyMs === undefined ? {} : { latencyMs: response.latencyMs }),
 		...(boundedUsage(response.usage) === undefined ? {} : { usage: boundedUsage(response.usage) }),
 	};
-	const byteLength = (): number => new TextEncoder().encode(JSON.stringify(bounded, null, 2)).byteLength;
+	const byteLength = (): number => boundedResponseByteLength(bounded);
 	while (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS && bounded.results.length > 0) {
 		truncated = true;
 		bounded = { ...bounded, results: bounded.results.slice(0, -1) };
@@ -192,7 +246,7 @@ export function createWebSearchTool(
 					context: providerContextFromPi(context),
 				}));
 				return {
-					content: [{ type: "text", text: `${SEARCH_UNTRUSTED_PREFIX}${JSON.stringify(response, null, 2)}` }],
+					content: [{ type: "text", text: `${SEARCH_UNTRUSTED_PREFIX}${renderSearchResponse(response)}` }],
 					details: response,
 				};
 			} catch (error) {
