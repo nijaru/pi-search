@@ -43,9 +43,11 @@ Normal `web_search` selects one provider:
    compatible model.
 2. Gemini or xAI grounding only when `PI_SEARCH_ALLOW_METERED=1` explicitly
    permits model-mediated search for those active models.
-3. Brave for other models only when `BRAVE_API_KEY` exists and
-   `PI_SEARCH_BRAVE_FREE_ONLY=1` asserts free capacity, or when
-   `PI_SEARCH_ALLOW_METERED=1` explicitly permits configured metered Brave.
+3. Brave for other models when `BRAVE_API_KEY` exists. It uses conservative
+   free-mode admission by default (1 RPS local pacing plus observed quota
+   windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
+   `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
+   configured metered Brave.
 4. No automatic Exa or Parallel selection. They require a provider hint and
    metered opt-in.
 5. No fallback after auth, rate-limit, transient, malformed, unsupported, or

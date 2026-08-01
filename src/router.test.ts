@@ -56,9 +56,9 @@ describe("search provider router", () => {
 		expect(() => route({ query: "q", providerHint: "native" }, context("xai", "openai-responses"))).toThrow(/Native grounding is metered/);
 	});
 
-	it("does not select Brave from a key alone or after known quota exhaustion", () => {
-		const unasserted = createSearchRouter({ brave, braveConfigured: true });
-		expect(() => unasserted({ query: "q" }, context("anthropic"))).toThrow(/free capacity/);
+	it("requires free-mode admission to be supplied by the construction boundary", () => {
+		const disabled = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: false });
+		expect(() => disabled({ query: "q" }, context("anthropic"))).toThrow(/free capacity/);
 		const capacity = { canAttempt: () => false, observe: () => {}, snapshot: () => ({ windows: [{ remaining: 0, resetAfterMs: 1000 }] }) };
 		const exhausted = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity });
 		expect(() => exhausted({ query: "q" }, context("anthropic"))).toThrow("Brave quota window is exhausted");

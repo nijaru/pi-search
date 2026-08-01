@@ -107,3 +107,8 @@ durable rationale belongs in `decisions.md`.
 - Closed the selective-provider and dynamic-page evaluation tasks. No open
   tasks remain; Perplexity, SearXNG, browser/remote extraction, and similar
   additions remain conditional on measured workflow gaps.
+- A fresh Pi smoke exposed a cutover regression: configured Brave was rejected
+  unless `PI_SEARCH_BRAVE_FREE_ONLY=1` was set, unlike the previous extension's
+  working default. The construction boundary now enables conservative Brave
+  free-mode admission by default, keeps one-second request pacing, and reserves
+  `PI_SEARCH_BRAVE_FREE_ONLY=0` for deliberate metered opt-in.

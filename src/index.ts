@@ -18,7 +18,11 @@ import { registerWebSearch } from "./search-tool";
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
-	const braveFreeOnly = process.env.PI_SEARCH_BRAVE_FREE_ONLY === "1";
+	// A configured Brave key should work like the previous extension by default.
+	// Free-mode admission is conservative: pace starts at 1 RPS and never claims
+	// to know the account's billing balance. Set `=0` only with explicit metered
+	// opt-in when that pacing is intentionally not wanted.
+	const braveFreeOnly = process.env.PI_SEARCH_BRAVE_FREE_ONLY !== "0";
 	const braveCapacity = new BraveQuotaTracker({ minimumIntervalMs: braveFreeOnly ? 1_000 : 0 });
 	const brave = createBraveProvider({ apiKey: braveKey, capacityTracker: braveCapacity });
 	const openai = createOpenAIProvider({ provider: "openai" });

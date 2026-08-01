@@ -28,7 +28,7 @@ Current portfolio:
 - OpenAI/Codex: native general search and highest correctness priority.
 - Gemini: Google-grounded alternative when explicitly metered.
 - xAI web and `xai-x`: model-mediated web/social context.
-- Brave: controlled general direct search with free-mode local pacing.
+- Brave: controlled general direct search with default free-mode local pacing when a key is configured.
 - Exa: semantic retrieval and highlights.
 - Parallel: objective-oriented context retrieval.
 - Official X API (`provider: "x"`): exact recent post/query/user retrieval,
@@ -61,8 +61,9 @@ evidence. No open tasks remain in `tk`.
 
 ## Next action
 
-Run explicit credential-gated smoke commands for providers whose live behavior
-needs confirmation, starting with OpenAI/Codex and the direct providers used in
-this environment. Refresh/restart any long-running Pi process first. Otherwise
-the package is ready for normal use; only measured future gaps should reopen
-the deferred work.
+The default Brave path was restored after a runtime smoke exposed that a
+configured key was rejected unless an optional flag was set. It now paces
+free-mode request starts by one second by default; `=0` requires deliberate
+metered opt-in. Refresh/restart any long-running Pi process after installing
+this change, then run the credentialed smoke checks. Only measured future gaps
+should reopen deferred work.

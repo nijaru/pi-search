@@ -11,10 +11,12 @@ The extension selects exactly one provider:
 2. Active Google Gemini and xAI Responses models use native grounding only
    when `PI_SEARCH_ALLOW_METERED=1` explicitly permits it. `xai-x` is explicit
    for X-specific retrieval.
-3. Other/local models use Brave only with `BRAVE_API_KEY` and
-   `PI_SEARCH_BRAVE_FREE_ONLY=1`. Free mode applies conservative local request
-   spacing and honors observed provider quota windows, but the flag is not an
-   account-billing check or a guarantee against paid overage.
+3. Other/local models use Brave when `BRAVE_API_KEY` is configured. The
+   default is conservative free-mode admission: local request starts are
+   spaced by one second and observed provider quota windows are honored.
+   `PI_SEARCH_BRAVE_FREE_ONLY=0` disables that pacing only for deliberate
+   metered use with `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account
+   billing or guarantees against paid overage.
 4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa,
    Parallel, and official X API search only when selected by provider hint.
 5. If nothing is eligible, search fails clearly.

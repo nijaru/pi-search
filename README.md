@@ -37,9 +37,12 @@ registry; it never logs keys.
 ```bash
 # Non-native/local-model search
 export BRAVE_API_KEY=...
-export PI_SEARCH_BRAVE_FREE_ONLY=1       # opt into conservative free-mode admission
-# Free mode spaces request starts by 1s and honors observed quota headers;
-# it does not inspect account billing or guarantee no paid overage.
+# Configured Brave uses conservative free-mode admission by default:
+# request starts are spaced by 1s and observed quota headers are honored.
+# This explicit setting is optional; set it to 0 only when deliberately using
+# metered Brave with the opt-in below.
+export PI_SEARCH_BRAVE_FREE_ONLY=1
+# Free mode does not inspect account billing or guarantee no paid overage.
 
 # Explicit metered providers and non-OpenAI native grounding
 export EXA_API_KEY=...
