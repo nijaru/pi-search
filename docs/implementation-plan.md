@@ -64,7 +64,9 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
 - Parallel Search API objective/excerpt normalization with explicit domain
   limitation.
 - Gemini grounding source extraction through Pi model-registry auth.
-- xAI web and X grounding through the Responses API.
+- xAI web grounding and semantic X grounding through the Responses API.
+- Official X recent search with direct post evidence and explicit metered
+  routing.
 - Explicit provider schemas and routing tests for local/non-native workflows.
 
 ## 7. Post-install maturity gates — next work
@@ -90,13 +92,17 @@ before calling the search surface production-mature:
    choose providers by capability, not create a universal vendor ranking.
 5. **Explicit option gate.** Add date, source-type, social-handle, or other
    provider-neutral options only when the evaluation shows a required gap.
-   Normal calls remain single-provider; comparison/fan-out is a future explicit
-   mode, never hidden behavior.
+   The current contract stays intentionally small: X query operators can be
+   passed through the query, while generic date/social fields wait for a
+   provider implementation and a second conformance fixture. Normal calls
+   remain single-provider; comparison/fan-out is a future explicit mode, never
+   hidden behavior.
 
 ### Long-term selective additions
 
-- Evaluate the official X API against xAI `x_search` for exact post, handle,
-  user, and date/archive workflows. Keep xAI as the current dedicated path.
+- Add the official X API as an explicit complementary provider for exact post,
+  query, user, and date/archive workflows; keep xAI `x_search` for
+  semantic/model-mediated social context.
 - Add Perplexity only if hard date/path/domain controls materially improve a
   required workflow beyond the shipped set.
 - Consider SearXNG only for an explicit self-hosted/privacy requirement.

@@ -16,10 +16,12 @@ export interface SearchRouterOptions {
 	readonly brave?: Provider;
 	readonly exa?: Provider;
 	readonly parallel?: Provider;
+	readonly x?: Provider;
 	/** Credential presence is supplied by the construction boundary. */
 	readonly braveConfigured?: boolean;
 	readonly exaConfigured?: boolean;
 	readonly parallelConfigured?: boolean;
+	readonly xConfigured?: boolean;
 	/** Explicit user assertion that Brave calls are covered by free capacity. */
 	readonly braveFreeCapacityConfigured?: boolean;
 	readonly braveCapacity?: BraveCapacityTracker;
@@ -100,6 +102,12 @@ function explicitProvider(
 		if (policy !== "allow-configured-metered") return unavailable("Parallel is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
 		if (!canServe(options.parallel, request)) return unavailable("Parallel cannot satisfy the requested search constraints", provider);
 		return options.parallel;
+	}
+	if (provider === "x") {
+		if (options.x === undefined || options.xConfigured !== true) return unavailable("X API search is not configured", provider);
+		if (policy !== "allow-configured-metered") return unavailable("X API search is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
+		if (!canServe(options.x, request)) return unavailable("X API search cannot satisfy the requested search constraints", provider);
+		return options.x;
 	}
 	if (provider === "brave") {
 		if (options.brave === undefined || options.braveConfigured !== true) return unavailable("Brave search is not configured", provider);

@@ -70,4 +70,6 @@ are acceptable. Hidden fan-out, paid fallback, and opaque synthesis remain
 out of contract. OpenAI/Codex correctness and direct fetch/PDF efficiency are
 P0; provider-role evaluation precedes overlapping additions; xAI `x_search` is
 the current dedicated X path while the official X API is a conditional
-candidate for exact post/user/date workflows.
+candidate for exact post/user/date workflows. Current official X documentation
+confirms that it complements rather than replaces xAI `x_search`; implement it
+only as an explicit, separately billed provider.

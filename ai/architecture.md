@@ -23,7 +23,8 @@ Provider adapters normalize their own HTTP or model-mediated payloads:
 - `xai.ts`: xAI web and X grounding;
 - `brave.ts`: keyword/freshness/domain search and quota observations;
 - `exa.ts`: semantic search, highlights, domains, and reported cost; and
-- `parallel.ts`: objective-oriented search and bounded excerpts.
+- `parallel.ts`: objective-oriented search and bounded excerpts;
+- `x.ts`: explicit official X recent search with post-level evidence.
 
 ## Fetch path
 

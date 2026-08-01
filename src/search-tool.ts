@@ -18,7 +18,7 @@ import {
 } from "./search";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const) as TUnsafe<"auto" | "keyword" | "fresh">;
-const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "xai" | "xai-x">;
+const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x">;
 
 export const WebSearchParameters = Type.Object({
 	query: Type.String({ minLength: 1, maxLength: MAX_QUERY_LENGTH, description: "Natural-language or keyword search query" }),

@@ -6,14 +6,15 @@ import { registerWebFetch } from "./fetch-tool";
 import { createOpenAIProvider } from "./openai";
 import { createParallelProvider } from "./parallel";
 import { createSearchRouter } from "./router";
+import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 
 /**
  * Native grounding is selected for supported active models. Brave is optional
- * for local/non-native models, while Exa and Parallel are explicit metered
- * providers; no provider failure triggers a fallback.
+ * for local/non-native models, while Exa, Parallel, and the official X API
+ * are explicit metered providers; no provider failure triggers a fallback.
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
@@ -27,8 +28,10 @@ export default function (pi: ExtensionAPI): void {
 	const xaiX = createXAIProvider({ tool: "x_search" });
 	const exaKey = process.env.EXA_API_KEY;
 	const parallelKey = process.env.PARALLEL_API_KEY;
+	const xToken = process.env.X_API_BEARER_TOKEN;
 	const exa = createExaProvider({ apiKey: exaKey });
 	const parallel = createParallelProvider({ apiKey: parallelKey });
+	const x = createXProvider({ bearerToken: xToken });
 	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1" ? "allow-configured-metered" : "free-only";
 	const braveFreeCapacityConfigured = braveFreeOnly;
 	const route = createSearchRouter({
@@ -39,10 +42,12 @@ export default function (pi: ExtensionAPI): void {
 		xaiX,
 		exa,
 		parallel,
+		x,
 		brave,
 		braveConfigured: braveKey !== undefined && braveKey.trim().length > 0,
 		exaConfigured: exaKey !== undefined && exaKey.trim().length > 0,
 		parallelConfigured: parallelKey !== undefined && parallelKey.trim().length > 0,
+		xConfigured: xToken !== undefined && xToken.trim().length > 0,
 		braveFreeCapacityConfigured,
 		braveCapacity,
 		billingPolicy,

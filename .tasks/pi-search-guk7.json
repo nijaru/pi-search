@@ -3,7 +3,7 @@
   "ref": "guk7",
   "title": "Evaluate dedicated X API versus xAI X search",
   "description": "Compare xAI x_search with the official X API for exact post/user/handle/date/query retrieval, citations, cost, rate limits, and auth boundaries. Keep xAI as the current dedicated path; add a second adapter only if a measured workflow needs controls or coverage it cannot provide.",
-  "status": "open",
+  "status": "done",
   "priority": 2,
   "labels": [
     "social",
@@ -16,9 +16,14 @@
   ],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T19:54:02.542828Z",
+      "msg": "Current official X docs confirm a complementary gap: xAI x_search is best for semantic/model-mediated X context with handles/dates/media understanding; official X API provides exact query operators, direct post text/IDs/timestamps, recent and full-archive endpoints, pagination, distinct rate limits, and pay-per-resource billing. Decision: implement an explicit X API adapter behind separate credentials and metered policy; do not replace or auto-fallback from xAI."
+    }
+  ],
   "created_at": "2026-08-01T18:40:10.910089Z",
-  "updated_at": "2026-08-01T18:40:20.373501Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T19:54:02.553315Z",
+  "completed_at": "2026-08-01T19:54:02.553315Z",
   "external": {}
 }

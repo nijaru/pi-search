@@ -15,7 +15,7 @@ import { providerContextFromPi } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
 import { searchUrlIdentity } from "./search-cleanup";
 
-const ResearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "xai" | "xai-x">;
+const ResearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x">;
 export const MAX_RESEARCH_OUTPUT_CHARS = 45_000;
 const RESEARCH_OUTPUT_OVERHEAD_CHARS = 150;
 

@@ -44,11 +44,12 @@ export PI_SEARCH_BRAVE_FREE_ONLY=1       # opt into conservative free-mode admis
 # Explicit metered providers and non-OpenAI native grounding
 export EXA_API_KEY=...
 export PARALLEL_API_KEY=...
+export X_API_BEARER_TOKEN=...         # explicit official X API search
 export PI_SEARCH_ALLOW_METERED=1
 ```
 
 Gemini and xAI credentials come from the active Pi model's authentication
-context. A provider hint such as `provider: "exa"`, `"parallel"`, or
+context. A provider hint such as `provider: "exa"`, `"parallel"`, `"x"`, or
 `"xai-x"` is strict and never falls through to another provider.
 
 ## Fetch coverage

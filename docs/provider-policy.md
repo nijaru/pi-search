@@ -15,8 +15,8 @@ The extension selects exactly one provider:
    `PI_SEARCH_BRAVE_FREE_ONLY=1`. Free mode applies conservative local request
    spacing and honors observed provider quota windows, but the flag is not an
    account-billing check or a guarantee against paid overage.
-4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa, and
-   Parallel only when Exa or Parallel is explicitly selected by provider hint.
+4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa,
+   Parallel, and official X API search only when selected by provider hint.
 5. If nothing is eligible, search fails clearly.
 
 A provider error never starts a second provider call. There are no hidden
@@ -33,6 +33,7 @@ retries, paid fallback chains, or automatic multi-provider searches.
 | Brave | Non-native/local fallback path | Conservative free-mode spacing or explicit metered opt-in; provider quota guarded | `BRAVE_API_KEY` |
 | Exa | Semantic retrieval and highlights | Explicit `exa` plus metered opt-in | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel` plus metered opt-in | `PARALLEL_API_KEY` |
+| Official X API | Exact post/query/user/recent search | Explicit `x` plus metered opt-in; no automatic fallback | `X_API_BEARER_TOKEN` |
 
 The word “fallback” for Brave means fallback in model *selection* when no
 native provider applies. It does not mean fallback after a provider failure.
@@ -47,9 +48,11 @@ citation semantics.
 Brave is the cost-controlled general option for local and other models. Exa
 and Parallel are useful specialized, metered choices but are never silently
 used. Exa is strongest for semantic retrieval/highlights; Parallel is useful
-for objective-oriented research and excerpts. Neither provides a reliable
-fixed per-call estimate for a hard research cost ceiling, so a cost ceiling is
-rejected before calls to those providers.
+for objective-oriented research and excerpts. The official X API is a separate
+exact post/query/user retrieval path, while xAI X remains the semantic,
+model-mediated path. None of these direct providers provides a reliable fixed
+per-call estimate for every hard research cost ceiling, so unsupported cost
+ceilings are rejected before calls.
 
 ## Search constraints
 

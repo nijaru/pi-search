@@ -27,6 +27,7 @@ describe("search provider router", () => {
 	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true });
 	const exa = provider("exa", { keyword: true, freshness: true, semantic: true, domainFilter: true });
 	const parallel = provider("parallel", { keyword: true, freshness: true, semantic: true });
+	const x = provider("x", { keyword: true, freshness: true, excerpts: true, social: true });
 	const brave = provider("brave", { keyword: true, freshness: true, domainFilter: true });
 
 	it("keeps native OpenAI/Codex selection strict and first", () => {
@@ -75,12 +76,14 @@ describe("search provider router", () => {
 		expect(() => route({ query: "q" }, context("openai", "openai-completions"))).toThrow(/does not use the OpenAI Responses API/);
 	});
 
-	it("requires metered opt-in for explicit Exa and Parallel selection", () => {
-		const freeRoute = createSearchRouter({ exa, parallel, exaConfigured: true, parallelConfigured: true });
+	it("requires metered opt-in for explicit direct providers", () => {
+		const freeRoute = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true });
 		expect(() => freeRoute({ query: "q", providerHint: "exa" }, context("local"))).toThrow(/metered/);
 		expect(() => freeRoute({ query: "q", providerHint: "parallel" }, context("local"))).toThrow(/metered/);
-		const meteredRoute = createSearchRouter({ exa, parallel, exaConfigured: true, parallelConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(() => freeRoute({ query: "q", providerHint: "x" }, context("local"))).toThrow(/metered/);
+		const meteredRoute = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true, billingPolicy: "allow-configured-metered" });
 		expect(meteredRoute({ query: "q", providerHint: "exa" }, context("local")).id).toBe("exa");
 		expect(meteredRoute({ query: "q", providerHint: "parallel" }, context("local")).id).toBe("parallel");
+		expect(meteredRoute({ query: "q", providerHint: "x" }, context("local")).id).toBe("x");
 	});
 });

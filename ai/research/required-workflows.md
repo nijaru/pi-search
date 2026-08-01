@@ -21,7 +21,8 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Search for local/non-native models | Brave plus explicit Exa/Parallel; shipped | Offline adapters, billing-policy tests, live smoke where credentials exist |
 | Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; metered opt-in |
 | xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; metered opt-in |
-| Dedicated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
+| Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
+| Exact post/query/user X search | `x`; shipped as explicit metered adapter | Direct post URLs/text/IDs, bounded recent search, rate-limit fixtures |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, live diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |

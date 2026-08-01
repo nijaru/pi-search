@@ -10,7 +10,8 @@ export interface JsonRequestOptions {
 	readonly provider: ProviderId;
 	readonly url: string;
 	readonly headers: Readonly<Record<string, string>>;
-	readonly body: unknown;
+	readonly body?: unknown;
+	readonly method?: "GET" | "POST";
 	readonly signal: AbortSignal;
 	readonly fetchImpl: SearchHttpFetch;
 	readonly maxResponseBytes?: number;
@@ -62,9 +63,10 @@ function resetFromHeader(value: string | null): Pick<ProviderRateLimitWindow, "r
 
 /** Parse standard quota headers without assuming provider-specific plans. */
 export function parseProviderRateLimits(headers: Headers): ProviderRateLimitInfo | undefined {
-	const limits = (headers.get("x-ratelimit-limit") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
-	const remaining = (headers.get("x-ratelimit-remaining") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
-	const resets = (headers.get("x-ratelimit-reset") ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const header = (standard: string, xApi: string): string => headers.get(standard) ?? headers.get(xApi) ?? "";
+	const limits = header("x-ratelimit-limit", "x-rate-limit-limit").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const remaining = header("x-ratelimit-remaining", "x-rate-limit-remaining").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const resets = header("x-ratelimit-reset", "x-rate-limit-reset").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
 	const windows: ProviderRateLimitWindow[] = [];
 	const count = Math.max(limits.length, remaining.length, resets.length);
 	for (let index = 0; index < count; index += 1) {
@@ -101,11 +103,16 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 		throw createProviderError({ provider: options.provider, kind: "canceled", message: "Search canceled", retryable: false });
 	}
 	let response: Response;
+	const method = options.method ?? "POST";
 	try {
 		response = await options.fetchImpl(options.url, {
-			method: "POST",
-			headers: { ...options.headers, accept: "application/json", "content-type": "application/json" },
-			body: JSON.stringify(options.body),
+			method,
+			headers: {
+				...options.headers,
+				accept: "application/json",
+				...(method === "POST" ? { "content-type": "application/json" } : {}),
+			},
+			...(options.body === undefined ? {} : { body: method === "POST" ? JSON.stringify(options.body) : undefined }),
 			signal: options.signal,
 		});
 	} catch (error) {
@@ -155,6 +162,10 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 		if (isProviderError(error)) throw error;
 		throw createProviderError({ provider: options.provider, kind: "malformed", message: `${options.provider} returned malformed or oversized JSON`, retryable: false, cause: error, ...metadata });
 	}
+}
+
+export function getJson(options: Omit<JsonRequestOptions, "body" | "method">): Promise<JsonResponse> {
+	return postJson({ ...options, method: "GET" });
 }
 
 export function requireApiKey(provider: ProviderId, apiKey: string | undefined): string {

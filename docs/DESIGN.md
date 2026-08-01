@@ -30,6 +30,7 @@ Shipped search adapters:
 | Brave | Other/local model when explicitly free-enabled | `brave` | Keyword/fresh/domain filters |
 | Exa | — | `exa` with metered opt-in | Semantic retrieval and domains |
 | Parallel | — | `parallel` with metered opt-in | Search objective/excerpts; no stable domain filter |
+| Official X API | — | `x` with metered opt-in | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
 
 Native/model-mediated failures are final. Direct provider failures are final.
 No adapter retries or silently changes providers.

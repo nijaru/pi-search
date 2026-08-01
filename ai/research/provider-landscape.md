@@ -87,7 +87,7 @@ again before an adapter is enabled.
 | --- | --- | --- | --- | --- |
 | OpenAI/Codex | Pi model registry; model/provider billing | Native Responses search; allowed and blocked domains are supported and post-filtered | Citations and source records; no dedicated X path | Keep as native default; highest correctness priority |
 | Gemini | Pi model registry; grounding can be metered | Fresh/current grounding, but no hard domain-filter contract | Grounding chunks and URL annotations; no dedicated X path | Keep; report domain limitation |
-| xAI web/X | Pi model registry; metered tool and token usage | Web allowed/excluded domains; X has a separate contract and no web-domain filters | Structured citations; `xai-x` is the strongest dedicated X path currently | Keep explicit; add handle/date options only after fixture and live checks |
+| xAI web/X | Pi model registry; metered tool and token usage | Web allowed/excluded domains; X has a separate contract and no web-domain filters | Structured citations; `xai-x` is the strongest semantic/model-mediated X path currently | Keep explicit; add handle/date options only after fixture and live checks |
 | Brave | API key; quota and paid usage must be explicit | Freshness and domain operators, with post-filtering | URL, title, snippet, publication metadata; no reliable dedicated X path | Keep as controlled general direct provider |
 | Exa | API key; usage-based and reports cost | Domains and documented date filters; current adapter does not yet send exact dates | Highlights, text, score, publication date, cost metadata; no dedicated X path | Keep explicit; evaluate date-filter gap |
 | Parallel | API key; metered and objective-oriented | No stable domain-filter contract | URL, title, excerpts, dates, search ID; no reliable dedicated X path | Keep explicit and specialized |
@@ -134,14 +134,26 @@ These current provider documents refine, but do not replace, the matrix above:
 ## X/social access
 
 The shipped package already has explicit xAI X search (`xai-x`) through the xAI
-Responses API. The reviewed extensions do not establish a provider-neutral X
-contract. General web providers may find `x.com` URLs when asked, but that is
-not equivalent to dedicated social retrieval. Keep social/X as a capability
-declared by a provider, not a generic search option. Add another social adapter
-only when it provides stable source URLs, inspectable citations, bounded cost,
-rate-limit evidence, and deterministic fixtures. Current confidence is high
-for the xAI capability and moderate for domain-filtered social results from
-other providers; no live provider calls have been run yet.
+Responses API. Current xAI documentation gives it semantic, keyword, user, and
+thread retrieval plus handle/date filters and optional image/video
+understanding. It is the best current path for model-mediated social context
+and citations.
+
+The official X API is complementary, not a replacement. Its Recent Search
+endpoint covers the last seven days for all developers; Full-Archive Search
+covers the complete archive for pay-per-use or Enterprise customers. It exposes
+exact query operators (`from:`, `to:`, `lang:`, `has:`, `is:`), direct post text,
+author metadata, timestamps, pagination, and deterministic post URLs. Current
+pay-per-use documentation lists per-resource post reads, a monthly post-read
+cap, and separate per-endpoint rate limits. That makes it the better path for
+exact post/user/date/archive retrieval, but it introduces a separate bearer
+credential and direct usage billing.
+
+Implement the official X API only as an explicit provider with a separate cost
+and credential policy. Keep social/X as a capability declared by a provider,
+not a generic search option or automatic fallback. Both adapters require stable
+source URLs, inspectable provenance, bounded pagination, rate-limit evidence,
+and deterministic fixtures.
 
 ## Applied
 
@@ -155,8 +167,9 @@ other providers; no live provider calls have been run yet.
 
 ## Open Questions
 
-- Does any candidate provider offer stable, documented X/social search with
-  inspectable URLs, excerpts, request IDs, and bounded cost metadata?
+- The official X API offers stable post URLs, text, timestamps, query
+  operators, request limits, and explicit billing; implement it as a
+  complementary explicit adapter after the capability contract gate.
 - Should Anthropic native search, Claude bridge, ZAI, SearXNG, DuckDuckGo, or
   Perplexity be added, and what is the cost/auth policy for each?
 - Is Markdown content negotiation common enough to add before browser
@@ -179,6 +192,11 @@ other providers; no live provider calls have been run yet.
 - https://ai.google.dev/gemini-api/docs/google-search
 - https://docs.x.ai/developers/tools/web-search
 - https://docs.x.ai/developers/tools/x-search
+- https://docs.x.com/x-api/posts/search/introduction
+- https://docs.x.com/x-api/posts/search/quickstart/full-archive-search
+- https://docs.x.com/x-api/getting-started/pricing
+- https://docs.x.com/x-api/fundamentals/post-cap
+- https://docs.x.com/x-api/fundamentals/rate-limits
 - https://docs.perplexity.ai/api-reference/search-post
 - https://docs.perplexity.ai/docs/search/filters/domain-filter
 - https://docs.perplexity.ai/docs/search/filters/date-time-filters
