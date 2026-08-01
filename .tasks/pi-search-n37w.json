@@ -1,0 +1,22 @@
+{
+  "project": "pi-search",
+  "ref": "n37w",
+  "title": "Plan credential-gated live smoke tests",
+  "description": "Define deterministic fixture coverage plus explicit live checks for each configured provider, native model-registry auth, cancellation, limits, citations, domains, and X/social behavior. Keep live calls out of default tests.",
+  "status": "open",
+  "priority": 2,
+  "labels": [
+    "testing",
+    "providers"
+  ],
+  "assignees": null,
+  "parent": "pi-search-qt8a",
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T13:24:54.059003Z",
+  "updated_at": "2026-08-01T13:24:54.059003Z",
+  "completed_at": null,
+  "external": {}
+}

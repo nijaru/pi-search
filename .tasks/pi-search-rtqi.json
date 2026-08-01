@@ -1,0 +1,23 @@
+{
+  "project": "pi-search",
+  "ref": "rtqi",
+  "title": "Design bounded fetch and result-cleanup pipeline",
+  "description": "Compare direct HTTP, Markdown content negotiation, Readability/Turndown, PDF, browser/JS fallbacks, caching, and API-result normalization. Define a minimal layered design without weakening SSRF, untrusted-content, byte, deadline, or cost boundaries.",
+  "status": "open",
+  "priority": 1,
+  "labels": [
+    "architecture",
+    "fetch",
+    "security"
+  ],
+  "assignees": null,
+  "parent": "pi-search-qt8a",
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-01T13:24:54.04985Z",
+  "updated_at": "2026-08-01T13:24:54.04985Z",
+  "completed_at": null,
+  "external": {}
+}

@@ -1,0 +1,27 @@
+{
+  "project": "pi-search",
+  "ref": "6nw8",
+  "title": "Audit reference extensions and provider implementations",
+  "description": "Read pi-web-access, pi-web-providers, pi-search-hub, pi-native-search, pi-simple-web-tools, pi-web, and pi-deep-research. Record reusable patterns, conflicts with pi-search policy, licenses, and source locations.",
+  "status": "done",
+  "priority": 1,
+  "labels": [
+    "research",
+    "providers"
+  ],
+  "assignees": null,
+  "parent": "pi-search-qt8a",
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-01T13:26:34.083902Z",
+      "msg": "Reviewed pi-web-access, pi-web-providers, pi-search-hub, pi-native-search, pi-simple-web-tools, pi-web, and pi-deep-research. Findings recorded in ai/research/provider-landscape.md."
+    }
+  ],
+  "created_at": "2026-08-01T13:24:54.031059Z",
+  "updated_at": "2026-08-01T13:26:34.092908Z",
+  "completed_at": "2026-08-01T13:26:34.092908Z",
+  "external": {}
+}

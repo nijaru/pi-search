@@ -4,8 +4,14 @@ Standalone Pi extension for provider-neutral web search and content fetching.
 
 ## Current status
 
-This repository is an intentional scaffold. `src/index.ts` is a safe no-op
-until the first provider-neutral contracts and tool implementation are ready.
+The cost-controlled core is implemented. `src/index.ts` registers the three
+public tools: `web_search`, `web_fetch`, and `web_research`. Shipped search
+adapters cover OpenAI/Codex, Gemini, xAI web/X, Brave, Exa, and Parallel.
+Direct fetching includes bounded HTTP, SSRF/redirect protection, local HTML
+extraction, PDF text, and YouTube captions.
+
+The next work is provider-landscape research, live credential-gated smoke
+coverage, and carefully selected integrations from existing Pi extensions.
 Do not add placeholder providers or speculative features just to fill out the
 package.
 
