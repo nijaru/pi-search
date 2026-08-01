@@ -50,6 +50,22 @@ export function searchUrlIdentity(value: unknown): string | undefined {
 	return normalizeSearchUrl(value)?.url;
 }
 
+/** Match a canonical result hostname against an exact host or its subdomains. */
+export function matchesSearchDomain(hostname: string, domain: string): boolean {
+	const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
+	const normalizedDomain = domain.toLowerCase().replace(/\.$/, "");
+	return normalizedHostname === normalizedDomain || normalizedHostname.endsWith(`.${normalizedDomain}`);
+}
+
+function resultMatchesDomainFilter(result: SearchResult, request: SearchRequest): boolean {
+	const include = request.domains?.include;
+	const exclude = request.domains?.exclude;
+	if (include !== undefined && include.length > 0 && !include.some((domain) => matchesSearchDomain(result.domain ?? "", domain))) {
+		return false;
+	}
+	return exclude === undefined || !exclude.some((domain) => matchesSearchDomain(result.domain ?? "", domain));
+}
+
 function optionalTimestamp(value: unknown): string | undefined {
 	const candidate = boundedString(value, 100);
 	return candidate !== undefined && Number.isFinite(Date.parse(candidate)) ? candidate : undefined;
@@ -107,10 +123,15 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 	const candidates = Array.isArray(response.results) ? response.results : [];
 	const results = new Map<string, SearchResult>();
 	let discarded = Array.isArray(response.results) ? 0 : 1;
+	let domainDiscarded = 0;
 	for (const value of candidates) {
 		const normalized = normalizeResult(value, request, provider);
 		if (normalized === undefined) {
 			discarded += 1;
+			continue;
+		}
+		if (!resultMatchesDomainFilter(normalized, request)) {
+			domainDiscarded += 1;
 			continue;
 		}
 		const current = results.get(normalized.url);
@@ -123,11 +144,22 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 			message: `Search discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}`,
 		});
 	}
+	if (domainDiscarded > 0) {
+		warnings.push({
+			code: "partial-results",
+			message: `Search removed ${domainDiscarded} result entr${domainDiscarded === 1 ? "y" : "ies"} outside the requested domain constraints`,
+		});
+	}
+	const appliedOptions = [...response.appliedOptions];
+	if ((request.domains?.include?.length ?? 0) > 0 || (request.domains?.exclude?.length ?? 0) > 0) {
+		if (!appliedOptions.includes("domains")) appliedOptions.push("domains");
+	}
 	return {
 		...response,
 		query: request.query,
 		provider,
 		results: [...results.values()].slice(0, request.maxResults ?? 10),
+		appliedOptions,
 		warnings,
 	};
 }

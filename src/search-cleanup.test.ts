@@ -69,6 +69,29 @@ describe("search result cleanup", () => {
 		expect(cleaned.warnings.at(-1)).toMatchObject({ code: "partial-results" });
 	});
 
+	it("enforces include and exclude domains after provider normalization", () => {
+		const request = validateSearchRequest({
+			query: "q",
+			domains: { include: ["example.com"], exclude: ["blocked.example.com"] },
+		});
+		const cleaned = cleanupSearchResponse({
+			query: "q",
+			provider: "brave",
+			results: [
+				{ url: "https://sub.example.com/ok", provider: "brave", searchQuery: "q" },
+				{ url: "https://blocked.example.com/no", provider: "brave", searchQuery: "q" },
+				{ url: "https://example.com.evil.test/no", provider: "brave", searchQuery: "q" },
+				{ url: "https://other.test/no", provider: "brave", searchQuery: "q" },
+			],
+			appliedOptions: [],
+			warnings: [],
+		}, request, "brave");
+
+		expect(cleaned.results.map((result) => result.url)).toEqual(["https://sub.example.com/ok"]);
+		expect(cleaned.appliedOptions).toContain("domains");
+		expect(cleaned.warnings.at(-1)).toMatchObject({ code: "partial-results", message: expect.stringContaining("3 result entries") });
+	});
+
 	it("uses the same conservative identity for research fetch deduplication", () => {
 		expect(searchUrlIdentity("https://EXAMPLE.com:443/page#part")).toBe("https://example.com/page");
 		expect(searchUrlIdentity("https://example.com/page")).toBe("https://example.com/page");

@@ -97,9 +97,15 @@ function unsupported(provider: OpenAIProviderId, message: string): never {
 	});
 }
 
-function sanitizeErrorDiagnostic(body: string, secret?: string): string | undefined {
+function sanitizeErrorDiagnostic(body: string, secrets: readonly string[] = []): string | undefined {
 	let text = body.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
-	if (secret !== undefined && secret.length > 0) text = text.split(secret).join("[redacted]");
+	for (const secret of [...secrets].filter((value) => value.trim().length > 0).sort((left, right) => right.length - left.length)) {
+		text = text.split(secret).join("[redacted]");
+	}
+	// Header-only auth may not expose a separate API key. Never preserve a
+	// bearer value echoed by a provider, even when its exact header value was
+	// not available to the caller.
+	text = text.replace(/\bBearer\s+[^\s,}"']+/gi, "Bearer [redacted]");
 	if (text.length === 0) return undefined;
 	try {
 		const parsed = JSON.parse(text) as unknown;
@@ -120,10 +126,10 @@ function sanitizeErrorDiagnostic(body: string, secret?: string): string | undefi
 	return text.slice(0, MAX_ERROR_DIAGNOSTIC_CHARS);
 }
 
-async function readErrorDiagnostic(response: Response, secret?: string, signal?: AbortSignal): Promise<string | undefined> {
+async function readErrorDiagnostic(response: Response, secrets: readonly string[] = [], signal?: AbortSignal): Promise<string | undefined> {
 	try {
 		const body = await readBoundedResponseText(response, MAX_ERROR_BODY_BYTES, signal);
-		return sanitizeErrorDiagnostic(body, secret);
+		return sanitizeErrorDiagnostic(body, secrets);
 	} catch {
 		await cancelResponseBody(response);
 		return undefined;
@@ -670,6 +676,11 @@ export class OpenAIProvider implements Provider {
 		if (!headers.has("authorization")) {
 			throw createProviderError({ provider: this.id, kind: "auth", message: "Pi model authentication returned no authorization header", retryable: false });
 		}
+		const diagnosticSecrets = [
+			execution.auth.apiKey,
+			...Object.entries(execution.model.headers ?? {}).filter(([key]) => /authorization|api[-_]?key|token|secret|cookie/i.test(key)).map(([, value]) => value),
+			...Object.entries(execution.auth.headers ?? {}).filter(([key]) => /authorization|api[-_]?key|token|secret|cookie/i.test(key)).map(([, value]) => value),
+		].filter((value): value is string => typeof value === "string");
 		headers.set("accept", "text/event-stream");
 		headers.set("content-type", "application/json");
 		if (this.id === "openai-codex") {
@@ -704,15 +715,15 @@ export class OpenAIProvider implements Provider {
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
 		const retryAfterMs = parseRetryAfter(response.headers);
 		if (response.status === 401 || response.status === 403) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
+			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
 			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: false });
 		}
 		if (response.status === 429) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
+			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
 			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: true });
 		}
 		if (response.status < 200 || response.status >= 300) {
-			const diagnostic = await readErrorDiagnostic(response, execution.auth.apiKey, signal);
+			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
 			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
 		}
 
@@ -722,6 +733,7 @@ export class OpenAIProvider implements Provider {
 		const normalizedResponse = normalizeOpenAIResponse(payload, normalized, this.id);
 		return {
 			...normalizedResponse,
+			...(normalizedResponse.requestId === undefined && requestId === undefined ? {} : { requestId: normalizedResponse.requestId ?? requestId }),
 			appliedOptions: plan.appliedOptions,
 			warnings: plan.warnings,
 		};

@@ -14,6 +14,7 @@ import type {
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
+import { matchesSearchDomain } from "./search-cleanup";
 
 export const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 export const DEFAULT_BRAVE_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -149,20 +150,14 @@ function normalizedUrl(value: unknown): { url: string; domain: string } {
 	}
 }
 
-function domainMatches(hostname: string, domain: string): boolean {
-	const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
-	const normalizedDomain = domain.toLowerCase().replace(/\.$/, "");
-	return normalizedHostname === normalizedDomain || normalizedHostname.endsWith(`.${normalizedDomain}`);
-}
-
 function resultAllowed(result: SearchResult, request: SearchRequest): boolean {
 	const include = request.domains?.include;
 	const exclude = request.domains?.exclude;
 	const domain = result.domain ?? new URL(result.url).hostname.toLowerCase();
-	if (include !== undefined && include.length > 0 && !include.some((candidate) => domainMatches(domain, candidate))) {
+	if (include !== undefined && include.length > 0 && !include.some((candidate) => matchesSearchDomain(domain, candidate))) {
 		return false;
 	}
-	return exclude === undefined || !exclude.some((candidate) => domainMatches(domain, candidate));
+	return exclude === undefined || !exclude.some((candidate) => matchesSearchDomain(domain, candidate));
 }
 
 function resultFromPayload(value: unknown, query: string): SearchResult {

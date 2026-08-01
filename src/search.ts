@@ -5,6 +5,9 @@ import { cleanupSearchResponse } from "./search-cleanup";
 export const DEFAULT_MAX_RESULTS = 10;
 export const MAX_RESULTS = 20;
 export const MAX_QUERY_LENGTH = 2_000;
+export const MAX_SEARCH_DOMAIN_LENGTH = 253;
+export const MAX_SEARCH_DOMAIN_COUNT = 20;
+export const MAX_SEARCH_DOMAIN_BYTES = 4_096;
 /** Native model-mediated search can spend tens of seconds grounding a query. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
 
@@ -16,7 +19,7 @@ export function normalizeSearchDomain(value: string, field = "domain"): string {
 	const domain = value.trim().toLowerCase();
 	if (
 		domain.length === 0 ||
-		domain.length > 253 ||
+		domain.length > MAX_SEARCH_DOMAIN_LENGTH ||
 		!domain.includes(".") ||
 		domain.includes("..") ||
 		!domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
@@ -33,11 +36,20 @@ function normalizeDomainList(value: readonly string[] | undefined, field: string
 	if (!Array.isArray(value)) {
 		throw invalidRequest(`Search ${field} must be an array of domain strings`);
 	}
+	if (value.length > MAX_SEARCH_DOMAIN_COUNT) {
+		throw invalidRequest(`Search ${field} must contain at most ${MAX_SEARCH_DOMAIN_COUNT} domains`);
+	}
+	let totalBytes = 0;
 	const domains = value.map((domain, index) => {
 		if (typeof domain !== "string" || domain.trim().length === 0) {
 			throw invalidRequest(`Search ${field}[${index}] must be a non-empty string`);
 		}
-		return normalizeSearchDomain(domain, `${field}[${index}]`);
+		const normalized = normalizeSearchDomain(domain, `${field}[${index}]`);
+		totalBytes += new TextEncoder().encode(normalized).byteLength;
+		if (totalBytes > MAX_SEARCH_DOMAIN_BYTES) {
+			throw invalidRequest(`Search ${field} exceeds the ${MAX_SEARCH_DOMAIN_BYTES}-byte aggregate limit`);
+		}
+		return normalized;
 	});
 	return [...new Set(domains)];
 }

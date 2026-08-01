@@ -194,7 +194,12 @@ export class GeminiProvider implements Provider {
 			maxResponseBytes: this.maxResponseBytes,
 		});
 		const response = normalizeGeminiResponse(result.payload, normalized);
-		return { ...response, appliedOptions: plan.appliedOptions, warnings: [...plan.warnings, ...response.warnings] };
+		return {
+			...response,
+			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
+			appliedOptions: plan.appliedOptions,
+			warnings: [...plan.warnings, ...response.warnings],
+		};
 	}
 }
 

@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type { ProviderContext } from "./contracts";
 import { createXAIProvider } from "./xai";
 
-function response(body: unknown, status = 200): Response {
-	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+function response(body: unknown, status = 200, headers: Record<string, string> = { "content-type": "application/json" }): Response {
+	return new Response(JSON.stringify(body), { status, headers });
 }
 
 function context(): ProviderContext {
@@ -28,12 +28,12 @@ describe("XAIProvider", () => {
 		const provider = createXAIProvider({ tool: "web_search", endpoint: "https://xai.test/v1", fetchImpl: async (_input, init) => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			seenHeaders = new Headers(init?.headers);
-			return response(payload);
+			return response({ ...payload, id: undefined }, 200, { "content-type": "application/json", "x-request-id": "xai-header" });
 		} });
 		const result = await provider.search({ query: "latest news", domains: { include: ["example.com"] } }, new AbortController().signal, context());
 		expect(seenBody).toMatchObject({ model: "grok-4.5", input: "latest news", tools: [{ type: "web_search", allowed_domains: ["example.com"] }] });
 		expect(seenHeaders?.get("authorization")).toBe("Bearer xai-test");
-		expect(result).toMatchObject({ provider: "xai", requestId: "xai-1", usage: { billedUnits: 20, billedUnit: "tokens" } });
+		expect(result).toMatchObject({ provider: "xai", requestId: "xai-header", usage: { billedUnits: 20, billedUnit: "tokens" } });
 		expect(result.results).toHaveLength(2);
 	});
 

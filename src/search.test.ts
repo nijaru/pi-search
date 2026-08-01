@@ -40,6 +40,13 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "q", domains: { include: ["example.com"], exclude: ["example.com"] } })).toThrow(
 			"both included and excluded",
 		);
+		expect(() => validateSearchRequest({ query: "q", domains: { include: Array.from({ length: 21 }, () => "example.com") } })).toThrow(
+			"at most 20 domains",
+		);
+		expect(() => validateSearchRequest({
+			query: "q",
+			domains: { include: Array.from({ length: 17 }, () => `example${"a".repeat(240)}.com`) },
+		})).toThrow("aggregate limit");
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {

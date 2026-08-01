@@ -214,6 +214,21 @@ describe("OpenAIProvider", () => {
 		expect(calls).toBe(1);
 	});
 
+	it("redacts header-only authentication from provider diagnostics", async () => {
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response({ error: { message: "authorization Bearer header-only was rejected" } }, 401)) as OpenAIFetch,
+		});
+		const headerOnly: ProviderContext = {
+			model: model(),
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, headers: { Authorization: "Bearer header-only" } }) },
+		};
+		await expect(provider.search({ query: "q" }, new AbortController().signal, headerOnly)).rejects.toMatchObject({
+			kind: "auth",
+			message: expect.not.stringContaining("header-only"),
+		});
+	});
+
 	it("rejects hard constraints that native search cannot enforce", async () => {
 		const provider = createOpenAIProvider({
 			provider: "openai",

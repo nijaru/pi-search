@@ -8,7 +8,14 @@ import {
 import { Type, type Static, type TUnsafe } from "typebox";
 import type { Provider, ProviderContext, ProviderModel, SearchRequest, SearchResponse } from "./contracts";
 import { toSearchToolError } from "./errors";
-import { DEFAULT_SEARCH_TIMEOUT_MS, executeSearch, MAX_QUERY_LENGTH, MAX_RESULTS } from "./search";
+import {
+	DEFAULT_SEARCH_TIMEOUT_MS,
+	executeSearch,
+	MAX_QUERY_LENGTH,
+	MAX_RESULTS,
+	MAX_SEARCH_DOMAIN_COUNT,
+	MAX_SEARCH_DOMAIN_LENGTH,
+} from "./search";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const) as TUnsafe<"auto" | "keyword" | "fresh">;
 const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "xai" | "xai-x">;
@@ -21,8 +28,8 @@ export const WebSearchParameters = Type.Object({
 	mode: Type.Optional(SearchModeSchema),
 	domains: Type.Optional(
 		Type.Object({
-			include: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-			exclude: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+			include: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT })),
+			exclude: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT })),
 		}),
 	),
 	provider: Type.Optional(SearchProviderSchema),
