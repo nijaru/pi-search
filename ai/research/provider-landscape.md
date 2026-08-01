@@ -106,6 +106,37 @@ billing. SearXNG is useful for self-hosting/privacy, not for universal
 coverage. Tavily, a Claude bridge, and DuckDuckGo do not justify core
 complexity yet.
 
+## Current pricing and observed behavior
+
+Pricing is account-, tier-, mode-, and model-dependent. These are the current
+official published rates checked during this review, not permanent defaults:
+
+| Provider/path | Published direct-search price and allowance | Operational implication |
+| --- | --- | --- |
+| Brave Search API | $5 / 1,000 requests with $5 monthly credits automatically applied; actual plan headers are authoritative | Our account returned 1 request/second and 2,000/month. It was the fastest of the same-query live comparison (about 594ms) and is the cost-controlled general path. |
+| Exa Search API | $7 / 1,000 searches (up to 10 results), $1 / 1,000 additional results; official pricing currently says $20 new-account credits and $10 monthly Free Tier credits | A live five-result constrained search passed in about 1.7s and reported $0.007. It returns semantic/highlight evidence, but this review has not established a relevance win across a task corpus. |
+| Parallel Search API | `turbo` $1 / 1,000 requests, `basic`/`advanced` $5 / 1,000 requests for the default 10 results; marketing pricing currently says up to 5,000 requests/month free and $5 monthly credits | Official docs position turbo for low-cost/high-volume search, basic for most agents, and advanced for higher quality. Our current adapter uses advanced for `auto`, so it has not yet tested the $0.001 turbo path. One advanced live call passed in about 4.0s. |
+| Gemini Google Search grounding | Current Gemini pricing table lists 5,000 free grounding queries/month on the paid tier, then $14 / 1,000 queries; model input/output tokens are priced separately, and one request may issue multiple Google queries | The grounding allowance does not include token charges. Current Gemini 3.x free tier marks Google Search grounding unavailable. It is native to an active Gemini model, not a transparent search backend for an OpenRouter DeepSeek call. |
+| Tavily Search | 1,000 free credits/month; basic search costs 1 credit and advanced costs 2; pay-as-you-go is $0.008/credit | More expensive than the current Brave/Exa/Parallel search rates for ordinary search; not a current default candidate. |
+| Perplexity Search/Agent web search | Current pricing page lists $5 / 1,000 standalone searches and $0.0025 per Agent API web-search invocation, with separate model/tool pricing | Potentially useful for hard date/path/domain controls, but endpoint semantics and all-in cost need a dedicated adapter audit before comparison. |
+
+The same query was run once through Brave, Exa, and Parallel using the current
+adapters. All returned inspectable official OpenAI documentation, but this is
+only a smoke comparison: it does not establish semantic relevance, freshness,
+or general quality. Automatic provider preference must wait for the task
+corpus described in `docs/provider-evaluation.md`.
+
+Sources:
+
+- https://api-dashboard.search.brave.com/documentation/pricing
+- https://api-dashboard.search.brave.com/documentation/guides/rate-limiting
+- https://exa.ai/pricing?tab=api
+- https://docs.parallel.ai/getting-started/pricing
+- https://docs.parallel.ai/search/modes
+- https://ai.google.dev/gemini-api/docs/pricing
+- https://docs.tavily.com/documentation/api-credits
+- https://docs.perplexity.ai/docs/getting-started/pricing
+
 ## Current official capability notes
 
 These current provider documents refine, but do not replace, the matrix above:
