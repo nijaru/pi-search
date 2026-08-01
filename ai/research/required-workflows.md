@@ -19,10 +19,10 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Native OpenAI Responses search | `src/openai.ts`; shipped | Pi model-registry auth, SSE fixtures, live smoke |
 | Native OpenAI Codex search | `src/openai.ts`; shipped | Correct ChatGPT endpoint, fresh-process live smoke |
 | Search for local/non-native models | Brave plus explicit Exa/Parallel; shipped | Offline adapters, billing-policy tests, live smoke where credentials exist |
-| Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; metered opt-in |
-| xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; metered opt-in |
+| Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; active model selection |
+| xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; active model selection |
 | Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
-| Exact post/query/user X search | `x`; shipped as explicit metered adapter | Direct post URLs/text/IDs, bounded recent search, rate-limit fixtures |
+| Exact post/query/user X search | `x`; shipped as explicit provider | Direct post URLs/text/IDs, bounded recent search, rate-limit fixtures |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, live diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |

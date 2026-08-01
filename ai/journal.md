@@ -112,3 +112,8 @@ durable rationale belongs in `decisions.md`.
   working default. The construction boundary now enables conservative Brave
   free-mode admission by default, keeps one-second request pacing, and reserves
   `PI_SEARCH_BRAVE_FREE_ONLY=0` for deliberate metered opt-in.
+- The same UX audit found that a global `PI_SEARCH_ALLOW_METERED=1` gate also
+  blocked active Gemini/xAI models and explicitly selected Exa, Parallel, and
+  official X providers. Active model selection or an explicit provider hint is
+  already user intent, so those redundant gates were removed; credentials and
+  strict single-provider routing remain required.

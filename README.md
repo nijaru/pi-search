@@ -16,14 +16,12 @@ Pi tools:
 
 - Active OpenAI Responses and OpenAI Codex Responses models use native search
   first. Native failures are final; they never trigger another provider.
-- Active Gemini models use Google Search grounding when
-  `PI_SEARCH_ALLOW_METERED=1` permits model-mediated search.
-- Active xAI Responses models use xAI web search under the same explicit
-  metered opt-in. Select `xai-x` explicitly when the task requires X search.
-- Other/local models use Brave only when its free-capacity assertion is
-  enabled.
-- Exa, Parallel, and the official X API are available only through explicit
-  provider selection and `PI_SEARCH_ALLOW_METERED=1`.
+- Active Gemini models use Google Search grounding automatically.
+- Active xAI Responses models use xAI web search automatically; select `xai-x`
+  explicitly when the task requires X search.
+- Other/local models use configured Brave with conservative free-mode pacing.
+- Exa, Parallel, and the official X API require only explicit provider
+  selection and their credentials; they are never chosen automatically.
 - There are no hidden retries, provider fan-out, or paid fallback chains.
 
 All providers normalize into the same evidence-first result shape. Provider
@@ -44,11 +42,13 @@ export BRAVE_API_KEY=...
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
 
-# Explicit metered providers and non-OpenAI native grounding
+# Explicit providers (provider selection is the metered-call opt-in)
 export EXA_API_KEY=...
 export PARALLEL_API_KEY=...
 export X_API_BEARER_TOKEN=...         # explicit official X API search
-export PI_SEARCH_ALLOW_METERED=1
+# Optional: to deliberately disable Brave's default free-mode pacing:
+# export PI_SEARCH_BRAVE_FREE_ONLY=0
+# export PI_SEARCH_ALLOW_METERED=1
 ```
 
 Gemini and xAI credentials come from the active Pi model's authentication

@@ -8,17 +8,19 @@ records current routing and spending policy, not a permanent provider ranking.
 The extension selects exactly one provider:
 
 1. Active OpenAI Responses and Codex Responses models use native OpenAI search.
-2. Active Google Gemini and xAI Responses models use native grounding only
-   when `PI_SEARCH_ALLOW_METERED=1` explicitly permits it. `xai-x` is explicit
-   for X-specific retrieval.
+2. Active Google Gemini and xAI Responses models use native grounding
+   automatically; selecting that active model is the user's metered-call
+   decision. `xai-x` is explicit for X-specific retrieval.
 3. Other/local models use Brave when `BRAVE_API_KEY` is configured. The
    default is conservative free-mode admission: local request starts are
    spaced by one second and observed provider quota windows are honored.
    `PI_SEARCH_BRAVE_FREE_ONLY=0` disables that pacing only for deliberate
    metered use with `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account
    billing or guarantees against paid overage.
-4. `PI_SEARCH_ALLOW_METERED=1` permits configured metered Brave, Exa,
-   Parallel, and official X API search only when selected by provider hint.
+4. Exa, Parallel, and official X API search require configured credentials
+   and an explicit provider hint. The hint is the metered-call decision; they
+   are never selected automatically. `PI_SEARCH_ALLOW_METERED=1` is only
+   needed when deliberately disabling Brave's default free-mode pacing.
 5. If nothing is eligible, search fails clearly.
 
 A provider error never starts a second provider call. There are no hidden
@@ -29,13 +31,13 @@ retries, paid fallback chains, or automatic multi-provider searches.
 | Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
 | OpenAI/Codex | Native default for compatible active provider | One authenticated same-provider Responses model; no fallback | Pi model registry |
-| Gemini | Native Google Search grounding for active Gemini | One grounding call; no fallback | Pi model registry |
-| xAI | Native web grounding for active xAI Responses | One Responses call; no fallback | Pi model registry |
+| Gemini | Native Google Search grounding for active Gemini | Active model selects it; no fallback | Pi model registry |
+| xAI | Native web grounding for active xAI Responses | Active model selects it; no fallback | Pi model registry |
 | xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
-| Brave | Non-native/local fallback path | Conservative free-mode spacing or explicit metered opt-in; provider quota guarded | `BRAVE_API_KEY` |
-| Exa | Semantic retrieval and highlights | Explicit `exa` plus metered opt-in | `EXA_API_KEY` |
-| Parallel | Objective-oriented search and excerpts | Explicit `parallel` plus metered opt-in | `PARALLEL_API_KEY` |
-| Official X API | Exact post/query/user/recent search | Explicit `x` plus metered opt-in; no automatic fallback | `X_API_BEARER_TOKEN` |
+| Brave | Non-native/local fallback path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
+| Exa | Semantic retrieval and highlights | Explicit `exa`; no automatic selection | `EXA_API_KEY` |
+| Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
+| Official X API | Exact post/query/user/recent search | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
 The word “fallback” for Brave means fallback in model *selection* when no
 native provider applies. It does not mean fallback after a provider failure.

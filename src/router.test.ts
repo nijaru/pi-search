@@ -39,10 +39,11 @@ describe("search provider router", () => {
 	it("uses configured Brave for free-capacity general search", () => {
 		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).id).toBe("brave");
+		expect(route({ query: "q" }, context("openrouter", "openai-completions")).id).toBe("brave");
 	});
 
-	it("selects active Gemini and xAI grounding before Brave", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "allow-configured-metered" });
+	it("selects configured native grounding before Brave without an extra opt-in", () => {
+		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q" }, context("google", "google-generative-ai")).id).toBe("gemini");
 		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).id).toBe("gemini");
 		expect(route({ query: "q" }, context("xai", "openai-responses")).id).toBe("xai");
@@ -50,15 +51,15 @@ describe("search provider router", () => {
 		expect(route({ query: "q", mode: "keyword", providerHint: "xai" }, context("xai", "openai-responses")).id).toBe("xai");
 	});
 
-	it("does not allow metered native grounding through the native alias", () => {
+	it("allows the explicit native alias for configured grounded models", () => {
 		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI });
-		expect(() => route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai"))).toThrow(/Native grounding is metered/);
-		expect(() => route({ query: "q", providerHint: "native" }, context("xai", "openai-responses"))).toThrow(/Native grounding is metered/);
+		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).id).toBe("gemini");
+		expect(route({ query: "q", providerHint: "native" }, context("xai", "openai-responses")).id).toBe("xai");
 	});
 
 	it("requires free-mode admission to be supplied by the construction boundary", () => {
 		const disabled = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: false });
-		expect(() => disabled({ query: "q" }, context("anthropic"))).toThrow(/free capacity/);
+		expect(() => disabled({ query: "q" }, context("anthropic"))).toThrow(/free-mode admission/);
 		const capacity = { canAttempt: () => false, observe: () => {}, snapshot: () => ({ windows: [{ remaining: 0, resetAfterMs: 1000 }] }) };
 		const exhausted = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity });
 		expect(() => exhausted({ query: "q" }, context("anthropic"))).toThrow("Brave quota window is exhausted");
@@ -76,14 +77,11 @@ describe("search provider router", () => {
 		expect(() => route({ query: "q" }, context("openai", "openai-completions"))).toThrow(/does not use the OpenAI Responses API/);
 	});
 
-	it("requires metered opt-in for explicit direct providers", () => {
-		const freeRoute = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true });
-		expect(() => freeRoute({ query: "q", providerHint: "exa" }, context("local"))).toThrow(/metered/);
-		expect(() => freeRoute({ query: "q", providerHint: "parallel" }, context("local"))).toThrow(/metered/);
-		expect(() => freeRoute({ query: "q", providerHint: "x" }, context("local"))).toThrow(/metered/);
-		const meteredRoute = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(meteredRoute({ query: "q", providerHint: "exa" }, context("local")).id).toBe("exa");
-		expect(meteredRoute({ query: "q", providerHint: "parallel" }, context("local")).id).toBe("parallel");
-		expect(meteredRoute({ query: "q", providerHint: "x" }, context("local")).id).toBe("x");
+	it("uses explicitly selected direct providers when configured", () => {
+		const route = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true });
+		expect(route({ query: "q", providerHint: "exa" }, context("local")).id).toBe("exa");
+		expect(route({ query: "q", providerHint: "parallel" }, context("local")).id).toBe("parallel");
+		expect(route({ query: "q", providerHint: "x" }, context("local")).id).toBe("x");
+		expect(() => createSearchRouter({ exa })({ query: "q", providerHint: "exa" }, context("local"))).toThrow(/not configured/);
 	});
 });

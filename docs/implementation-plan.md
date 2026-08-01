@@ -65,7 +65,7 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
   limitation.
 - Gemini grounding source extraction through Pi model-registry auth.
 - xAI web grounding and semantic X grounding through the Responses API.
-- Official X recent search with direct post evidence and explicit metered
+- Official X recent search with direct post evidence and explicit provider
   routing.
 - Explicit provider schemas and routing tests for local/non-native workflows.
 

@@ -27,10 +27,10 @@ Shipped search adapters:
 | Gemini grounding | Active Google Gemini model | `gemini` | No hard domain filter |
 | xAI web grounding | Active xAI Responses model | `xai` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` | Social/X search; no web-domain filter |
-| Brave | Other/local model when explicitly free-enabled | `brave` | Keyword/fresh/domain filters |
-| Exa | — | `exa` with metered opt-in | Semantic retrieval and domains |
-| Parallel | — | `parallel` with metered opt-in | Search objective/excerpts; no stable domain filter |
-| Official X API | — | `x` with metered opt-in | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
+| Brave | Other/local model with configured key; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
+| Exa | — | `exa` with configured key | Semantic retrieval and domains |
+| Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
+| Official X API | — | `x` with configured bearer token | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
 
 Native/model-mediated failures are final. Direct provider failures are final.
 No adapter retries or silently changes providers.
@@ -41,15 +41,17 @@ Normal `web_search` selects one provider:
 
 1. OpenAI Responses or Codex Responses native search when that is the active
    compatible model.
-2. Gemini or xAI grounding only when `PI_SEARCH_ALLOW_METERED=1` explicitly
-   permits model-mediated search for those active models.
+2. Gemini or xAI grounding when that provider is the active model; selecting
+   the model is the user's metered-call decision. `xai-x` remains explicit for
+   X-specific grounding.
 3. Brave for other models when `BRAVE_API_KEY` exists. It uses conservative
    free-mode admission by default (1 RPS local pacing plus observed quota
    windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
    `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
    configured metered Brave.
-4. No automatic Exa or Parallel selection. They require a provider hint and
-   metered opt-in.
+4. No automatic Exa, Parallel, or official X API selection. They require a
+   provider hint and configured credentials; the hint is the metered-call
+   decision.
 5. No fallback after auth, rate-limit, transient, malformed, unsupported, or
    cancellation errors.
 

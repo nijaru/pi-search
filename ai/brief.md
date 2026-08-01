@@ -31,8 +31,8 @@ Current portfolio:
 - Brave: controlled general direct search with default free-mode local pacing when a key is configured.
 - Exa: semantic retrieval and highlights.
 - Parallel: objective-oriented context retrieval.
-- Official X API (`provider: "x"`): exact recent post/query/user retrieval,
-  explicit bearer credential, and explicit metered opt-in.
+- Official X API (`provider: "x"`): exact recent post/query/user retrieval
+  with an explicit bearer credential and provider selection.
 
 Direct local fetching remains the default for individual pages and PDFs. Pi,
 Bash, `read`, `git`, `gh`, `yt-dlp`, `ffmpeg`, and vision workflows remain the
@@ -64,6 +64,7 @@ evidence. No open tasks remain in `tk`.
 The default Brave path was restored after a runtime smoke exposed that a
 configured key was rejected unless an optional flag was set. It now paces
 free-mode request starts by one second by default; `=0` requires deliberate
-metered opt-in. Refresh/restart any long-running Pi process after installing
-this change, then run the credentialed smoke checks. Only measured future gaps
-should reopen deferred work.
+metered opt-in. Active Gemini/xAI models and explicitly selected direct
+providers likewise no longer require a redundant global metered flag. Refresh
+or restart any long-running Pi process after installing this change. Only
+measured future gaps should reopen deferred work.

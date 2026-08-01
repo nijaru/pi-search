@@ -63,11 +63,8 @@ function explicitProvider(
 	if (provider === "native") {
 		if (nativeModelCompatible("openai", context.model) && options.openai !== undefined) return options.openai;
 		if (nativeModelCompatible("openai-codex", context.model) && options.openaiCodex !== undefined) return options.openaiCodex;
-		if (policy === "allow-configured-metered" && nativeModelCompatible("gemini", context.model) && options.gemini !== undefined) return options.gemini;
-		if (policy === "allow-configured-metered" && nativeModelCompatible("xai", context.model) && options.xai !== undefined) return options.xai;
-		if (nativeModelCompatible("gemini", context.model) || nativeModelCompatible("xai", context.model)) {
-			return unavailable("Native grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
-		}
+		if (nativeModelCompatible("gemini", context.model) && options.gemini !== undefined) return options.gemini;
+		if (nativeModelCompatible("xai", context.model) && options.xai !== undefined) return options.xai;
 		return unavailable("Native search requires an active supported grounded model", provider);
 	}
 	if (provider === "openai") {
@@ -79,13 +76,11 @@ function explicitProvider(
 		return options.openaiCodex;
 	}
 	if (provider === "gemini") {
-		if (policy !== "allow-configured-metered") return unavailable("Gemini grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
 		if (!nativeModelCompatible("gemini", context.model) || options.gemini === undefined) return unavailable("Gemini grounding requires an active Gemini model", provider);
 		if (!canServe(options.gemini, request)) return unavailable("Gemini grounding cannot satisfy the requested search constraints", provider);
 		return options.gemini;
 	}
 	if (provider === "xai" || provider === "xai-x") {
-		if (policy !== "allow-configured-metered") return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} grounding is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it`, provider);
 		const selected = provider === "xai" ? options.xai : options.xaiX;
 		if (!nativeModelCompatible(provider, context.model) || selected === undefined) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search requires an active xAI Responses model`, provider);
 		if (!canServe(selected, request)) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search cannot satisfy the requested search constraints`, provider);
@@ -93,25 +88,22 @@ function explicitProvider(
 	}
 	if (provider === "exa") {
 		if (options.exa === undefined || options.exaConfigured !== true) return unavailable("Exa search is not configured", provider);
-		if (policy !== "allow-configured-metered") return unavailable("Exa is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
 		if (!canServe(options.exa, request)) return unavailable("Exa cannot satisfy the requested search constraints", provider);
 		return options.exa;
 	}
 	if (provider === "parallel") {
 		if (options.parallel === undefined || options.parallelConfigured !== true) return unavailable("Parallel search is not configured", provider);
-		if (policy !== "allow-configured-metered") return unavailable("Parallel is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
 		if (!canServe(options.parallel, request)) return unavailable("Parallel cannot satisfy the requested search constraints", provider);
 		return options.parallel;
 	}
 	if (provider === "x") {
 		if (options.x === undefined || options.xConfigured !== true) return unavailable("X API search is not configured", provider);
-		if (policy !== "allow-configured-metered") return unavailable("X API search is metered; set PI_SEARCH_ALLOW_METERED=1 before selecting it", provider);
 		if (!canServe(options.x, request)) return unavailable("X API search cannot satisfy the requested search constraints", provider);
 		return options.x;
 	}
 	if (provider === "brave") {
 		if (options.brave === undefined || options.braveConfigured !== true) return unavailable("Brave search is not configured", provider);
-		if (policy !== "allow-configured-metered" && options.braveFreeCapacityConfigured !== true) return unavailable("Brave free capacity is not explicitly enabled", provider);
+		if (policy !== "allow-configured-metered" && options.braveFreeCapacityConfigured !== true) return unavailable("Brave free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", provider);
 		if (options.braveCapacity !== undefined && !options.braveCapacity.canAttempt()) {
 			const info = options.braveCapacity.snapshot();
 			throw createProviderError({ provider: "brave", kind: "rateLimit", message: "Brave quota window is exhausted", retryable: true, rateLimits: info, retryAfterMs: info?.retryAfterMs });
@@ -140,11 +132,11 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 			if (options.openai === undefined) return unavailable("OpenAI native search is not registered", "openai");
 			return options.openai;
 		}
-		if (policy === "allow-configured-metered" && context.model?.provider === "google" && nativeModelCompatible("gemini", context.model)) {
+		if (context.model?.provider === "google" && nativeModelCompatible("gemini", context.model)) {
 			if (options.gemini === undefined) return unavailable("Gemini grounding is not registered", "gemini");
 			return options.gemini;
 		}
-		if (policy === "allow-configured-metered" && context.model?.provider === "xai" && nativeModelCompatible("xai", context.model)) {
+		if (context.model?.provider === "xai" && nativeModelCompatible("xai", context.model)) {
 			if (options.xai === undefined) return unavailable("xAI web search is not registered", "xai");
 			return options.xai;
 		}
@@ -161,11 +153,11 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 			return options.brave!;
 		}
 		if (braveConfigured && !braveAllowed) {
-			return unavailable("Brave is configured but free capacity is not explicitly enabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "router");
+			return unavailable("Brave is configured but free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "router");
 		}
 		if (braveConfigured && mode !== "auto" && options.brave !== undefined && !braveCanMatchMode) {
 			return unavailable(`Brave cannot satisfy ${mode} search semantics`, "brave");
 		}
-		return unavailable("No eligible search provider is configured; enable Brave free capacity or use an active grounded model", "router");
+		return unavailable("No eligible search provider is configured; configure a provider or use an active grounded model", "router");
 	};
 }

@@ -12,9 +12,9 @@ import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 
 /**
- * Native grounding is selected for supported active models. Brave is optional
- * for local/non-native models, while Exa, Parallel, and the official X API
- * are explicit metered providers; no provider failure triggers a fallback.
+ * Native grounding is selected for supported active models. Brave is the
+ * configured local/non-native default, while Exa, Parallel, and the official X
+ * API require explicit provider selection; no provider failure triggers a fallback.
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
