@@ -4,7 +4,7 @@
 
 `pi-search` is a public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and remote are clean at
-`ad3be38`; the installed package still needs a refresh after the latest fixes.
+`18e820c`; the installed package still needs a refresh after the latest fixes.
 The public surface is exactly `web_search`, `web_fetch`, and `web_research`.
 
 Shipped search adapters are OpenAI/Codex, Gemini, xAI web and X, Brave, Exa,
@@ -27,25 +27,25 @@ capabilities are implemented, and live provider/Pi integration checks pass.
 
 ## Review blockers
 
-- The live Codex smoke context uses the wrong endpoint.
-- Some usage/rate-limit metadata is still dropped.
-- Search output needs an explicit untrusted-data fence.
 - Credentialed provider calls and representative Pi workflows remain unverified.
+- The prior package is still installed as a temporary migration aid.
 
 The shared hard-domain boundary, bounded domain inputs, header-only auth
-redaction, and successful request-ID fallback are now implemented and tested.
+redaction, successful request IDs, token usage, standard rate-limit metadata,
+Codex smoke endpoint, and response-level search trust fence are implemented
+and tested.
 
 ## Verification
 
-Offline verification currently passes: 114 tests, 264 assertions, TypeScript,
-`git diff --check`, and provider/tool fixtures. Live smoke dry-run and
-fail-closed credential checks pass. Actual provider calls, representative Pi
-workflows, and the final single-extension cutover remain unverified.
+Offline verification currently passes: 116 tests, 270 assertions, TypeScript,
+`git diff --check`, provider/tool fixtures, and the Codex endpoint assertion.
+Live smoke dry-run and fail-closed credential checks pass. Actual provider
+calls, representative Pi workflows, installed-package refresh, and the final
+single-extension cutover remain unverified.
 
 ## Next action
 
-Use `ai/research/required-workflows.md` as the cutover checklist. Finish the
-Codex smoke endpoint, metadata and trust-fence fixes, then install the latest
-Git package and run credentialed live/Pi acceptance for every required row.
-Only after those gates pass should `pi-web-access` be removed from the active
-runtime.
+Use `ai/research/required-workflows.md` as the cutover checklist. Refresh the
+installed Git package, run credentialed live/Pi acceptance for every required
+row, and record any provider-specific skips or failures. Only after those
+gates pass should `pi-web-access` be removed from the active runtime.

@@ -67,3 +67,10 @@ durable rationale belongs in `decisions.md`.
   history storage, GitHub cloning, media vision/OCR, browser/remote extraction,
   caching, and extra overlapping providers as deferred or Pi/Bash-owned rather
   than silently requiring parity with `pi-web-access`.
+- Fixed and pushed `671f255`: Codex live smoke now uses
+  `https://chatgpt.com/backend-api`, guarded by an offline endpoint test.
+- Fixed and pushed `18e820c`: provider usage now preserves OpenAI input/output/
+  total tokens, research aggregates token/quota observations, and standard
+  rate-limit headers propagate through JSON adapters. Search output now has an
+  explicit untrusted-data prefix while remaining within the serialized bound.
+  Verification: 116 tests and 270 assertions pass with TypeScript.
