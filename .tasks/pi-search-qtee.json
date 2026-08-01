@@ -3,7 +3,7 @@
   "ref": "qtee",
   "title": "Build provider quality and cost evaluation harness",
   "description": "Create a deterministic provider-role evaluation surface plus explicit credential-gated live cases. Compare evidence quality, freshness, hard filters, social coverage, excerpts/context, latency, token/request cost, rate-limit metadata, and failure behavior. Benchmark shipped providers by capability instead of ranking vendors globally; no default fan-out.",
-  "status": "open",
+  "status": "done",
   "priority": 2,
   "labels": [
     "providers",
@@ -18,9 +18,14 @@
   ],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-01T19:49:01.679924Z",
+      "msg": "Added scripts/provider-eval.ts and deterministic tests. The evaluator measures inspectable evidence, provenance, hard constraints, excerpt/date/social coverage, usage, latency, and explicit case requirements without ranking relevance or issuing network fan-out. Added docs/provider-evaluation.md; existing credential-gated live-smoke remains the one-provider observation source. Tests and typecheck pass."
+    }
+  ],
   "created_at": "2026-08-01T18:40:10.883494Z",
-  "updated_at": "2026-08-01T18:40:20.332128Z",
-  "completed_at": null,
+  "updated_at": "2026-08-01T19:49:01.691517Z",
+  "completed_at": "2026-08-01T19:49:01.691517Z",
   "external": {}
 }
