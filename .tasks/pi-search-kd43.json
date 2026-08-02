@@ -75,6 +75,10 @@
     {
       "ts": "2026-08-02T16:47:23Z",
       "msg": "Reproduced the auth discrepancy safely: Google accepts the fnox key with only x-goog-api-key (HTTP 200) but returns HTTP 401 API_KEY_SERVICE_BLOCKED when Authorization: Bearer is also present. The shared model-auth helper was adding that generic bearer header to Gemini. Fixed in 18775fc, added a regression assertion, refreshed the installed checkout, and verified 166 tests / 397 assertions. Full Pi restart is required before the corrective Lite smoke."
+    },
+    {
+      "ts": "2026-08-02T17:18:12Z",
+      "msg": "After the 18775fc reload, Gemini Lite grounding passed with three Google sources and two provider search queries, confirming the auth-header fix. The response finished with MAX_TOKENS because the adapter's arbitrary 512-token cap was too low. Reference review found pi-web-access omits generationConfig entirely and resolves Google grounding redirect URLs with bounded HEAD requests. Raised our bounded cap to 2,048 in 22bf461; offline check remains 166 tests / 397 assertions. One post-fix live smoke and canonical URL resolution remain open."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",

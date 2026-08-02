@@ -75,7 +75,7 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 166 tests and 396 assertions, with TypeScript clean.
+`bun run check` passes: 166 tests and 397 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
@@ -96,30 +96,31 @@ through the extension even though the fnox key worked directly. The root cause
 was a real adapter bug: generic model auth added `Authorization: Bearer` beside
 Google's `x-goog-api-key`; Google rejects that combination with
 `API_KEY_SERVICE_BLOCKED`. Fixed in `18775fc` by disabling the generic bearer
-header for Gemini, added a regression assertion, and refreshed the installed
-checkout. Full Pi restart is required before the corrective Lite smoke.
-OpenRouter/DeepSeek still has the separate earlier `401 User not found`
-credential/session blocker. No provider comparison calls were made.
+header for Gemini. After reload, Lite grounding passed with three sources and
+two search queries, but the 512-token cap caused `MAX_TOKENS`; `22bf461` raises
+that bounded cap to 2,048. The installed checkout is refreshed; one post-fix
+smoke remains. OpenRouter/DeepSeek still has the separate earlier `401 User not
+found` credential/session blocker. No provider comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
   design and implementation are materially complete offline. OpenAI/Codex,
-  Exa, xAI web/X, and fetch smokes pass. Gemini is credential-blocked by HTTP
-  401; a constrained xAI X request produced no citations and remains an
-  evidence-first investigation item. OpenRouter/DeepSeek remains blocked by
-  its separate credential/session failure.
+  Exa, xAI web/X, fetch, and Gemini Lite grounding smokes pass. Gemini still
+  needs one post-`22bf461` smoke to confirm the larger output bound; Google
+  grounding redirect URLs also remain a cleanup follow-up. A constrained xAI X
+  request produced no citations and remains an evidence-first investigation
+  item. OpenRouter/DeepSeek remains blocked by its separate credential/session
+  failure.
 
 ## Next sequence
 
-1. Reload Pi once more after `33b8409` if we want to verify the numeric xAI
-   citation-label rendering fix in the actual tool process. Do not spend more
-   paid calls on the constrained X case without a raw response or a specific
-   no-match test hypothesis.
-2. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
-   one deliberate `gemini-flash-lite-latest` smoke against `18775fc`. Confirm
-   the response has Google grounding citations and no auth error.
+1. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
+   one deliberate `gemini-flash-lite-latest` smoke against `22bf461`. Confirm
+   it completes without `MAX_TOKENS` and retains Google grounding citations.
+2. Implement bounded resolution of Google's `grounding-api-redirect` URLs to
+   canonical source URLs, following the mature reference's single HEAD
+   redirect check without issuing another search.
 3. Decide whether the constrained xAI X no-citation result is provider-side
    no-match behavior or a response-shape gap, then add a deterministic fixture
-   or parser fix. Keep `pi-search-kd43` open until that decision and the
-   credential-gated acceptance requirements are resolved.
+   or parser fix. Keep `pi-search-kd43` open until these gates are resolved.

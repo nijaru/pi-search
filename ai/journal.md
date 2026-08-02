@@ -225,3 +225,12 @@ durable rationale belongs in `decisions.md`.
   Google entry, which is normal for environment-based Google auth. The key is
   therefore present but rejected or not the credential the running Pi process
   resolves. No billable Gemini request was made.
+- 2026-08-02: Reviewed the mature `nicobailon/pi-web-access` Gemini path and
+  official GenerateContent reference. The reference sends `google_search`
+  without a `generationConfig` cap, extracts the answer from candidate parts,
+  and resolves Google's `grounding-api-redirect` URLs with bounded HEAD
+  requests. Our initial 512-token cap was arbitrary and produced a live
+  `MAX_TOKENS` warning on an otherwise successful Lite grounding call. Raised
+  the bounded cap to 2,048 in `22bf461`; offline verification remains 166
+  tests / 397 assertions. Canonical grounding-URL resolution remains a
+  follow-up, not another search provider call.
