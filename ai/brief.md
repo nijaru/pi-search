@@ -91,8 +91,10 @@ calls, not a comparison, but xAI search is materially metered and should not
 be retried or made an unbudgeted fallback. The current search recommendation
 is the Pi-available `gemini-flash-lite-latest` model alias; full Flash/Pro and
 legacy Gemini model IDs are not used for search smoke or examples. A test with
-`gemini-3.6-flash` reached the adapter but returned HTTP 401 because direct
-Google authentication is not configured. OpenRouter/DeepSeek still has the
+`gemini-3.6-flash` and, after reload, `gemini-flash-lite-latest` both reached
+the adapter but returned HTTP 401. `GEMINI_API_KEY` is present in the shell and
+distinct from the OpenRouter key, so direct Google credential validity or Pi
+process resolution remains the blocker. OpenRouter/DeepSeek still has the
 separate earlier `401 User not found` credential/session blocker. No provider
 comparison calls were made.
 

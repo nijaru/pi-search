@@ -63,6 +63,10 @@
     {
       "ts": "2026-08-02T16:09:08Z",
       "msg": "Gemini search model policy corrected: do not use legacy or full Flash/Pro models for search-only grounding. Current examples and deterministic fixtures use the Pi-available gemini-flash-lite-latest alias; runtime never silently substitutes an execution model. A corrective gemini-3.6-flash request also returned HTTP 401, confirming the direct Google auth gate; no paid Flash or Lite request was made."
+    },
+    {
+      "ts": "2026-08-02T16:19:04Z",
+      "msg": "After Pi reload, a direct gemini-flash-lite-latest smoke still returned HTTP 401. GEMINI_API_KEY is set in the shell and distinct from OPENROUTER_API_KEY; auth.json has no Google entry, which is normal for environment-based Google auth. Treat direct Google key validity or process resolution as the remaining blocker; no billable Gemini request was made."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",

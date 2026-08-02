@@ -204,3 +204,9 @@ durable rationale belongs in `decisions.md`.
   registry model and never substitutes one silently. A corrective live call
   with current `gemini-3.6-flash` also returned HTTP 401, so direct Google
   authentication remains unavailable; no paid Flash or Lite request was made.
+- 2026-08-02: After Pi was reloaded, the direct Google
+  `gemini-flash-lite-latest` smoke still returned HTTP 401. The shell has a
+  `GEMINI_API_KEY` set, distinct from the OpenRouter key; Pi's auth file has no
+  Google entry, which is normal for environment-based Google auth. The key is
+  therefore present but rejected or not the credential the running Pi process
+  resolves. No billable Gemini request was made.
