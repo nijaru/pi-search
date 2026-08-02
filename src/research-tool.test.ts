@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Provider, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
-import { executeResearch, renderResearchResponse } from "./research-tool";
+import { createWebResearchTool, executeResearch, renderResearchResponse } from "./research-tool";
 
 function context(): never {
 	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
@@ -77,6 +77,14 @@ describe("web_research", () => {
 		expect(rendered).toContain("Search evidence:");
 		expect(rendered).toContain("URL: https://example.com/1");
 		expect(rendered).not.toContain('"results"');
+	});
+
+	it("keeps the complete model-visible research result within its budget", async () => {
+		const tool = createWebResearchTool(() => provider());
+		const result = await tool.execute("call-1", { question: "q".repeat(2_000), budget: { ...budget, maxOutputChars: 1_000 } }, undefined, undefined, context());
+		const text = result.content[0];
+		expect(text.type).toBe("text");
+		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(1_000);
 	});
 
 	it("bounds the serialized research response", async () => {
