@@ -47,6 +47,15 @@ describe("XAIProvider", () => {
 		expect(result.answer).toMatchObject({ text: "Answer", contentTrust: "untrusted", citations: [{ url: "https://example.org/other" }] });
 	});
 
+	it("drops numeric inline citation labels instead of exposing them as titles", async () => {
+		const provider = createXAIProvider({ tool: "x_search", fetchImpl: async () => response({
+			...payload,
+			output: [{ type: "message", content: [{ type: "output_text", text: "Answer", annotations: [{ type: "url_citation", url: "https://example.org/other", title: "2" }] }] }],
+		}) });
+		const result = await provider.search({ query: "q" }, new AbortController().signal, context());
+		expect(result.results[1]?.title).toBeUndefined();
+	});
+
 	it("supports explicit X search and rejects web-only domain filters", async () => {
 		const provider = createXAIProvider({ tool: "x_search", fetchImpl: async () => response(payload) });
 		const result = await provider.search({ query: "what are people saying?" }, new AbortController().signal, context());

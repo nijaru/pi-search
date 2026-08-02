@@ -102,6 +102,14 @@ function authHeaders(execution: ModelExecution, provider: "xai" | "xai-x"): Read
 	return Object.fromEntries(headers.entries());
 }
 
+function citationTitle(value: unknown): string | undefined {
+	const title = optionalString(value, 500);
+	// Responses API inline-citation labels are often numeric display indexes
+	// ("1", "2", ...), not useful source titles. Let the renderer fall back to
+	// the source domain instead of exposing those labels as titles.
+	return title !== undefined && !/^\d+$/.test(title.trim()) ? title : undefined;
+}
+
 function appendCitation(results: SearchResult[], seen: Set<string>, value: unknown, query: string, title?: string): boolean {
 	const raw = typeof value === "string" ? value : value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>).url : undefined;
 	const parsed = httpSource(raw, "xai");
@@ -157,7 +165,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 					}
 					const annotation = annotationValue as Record<string, unknown>;
 					const parsed = httpSource(annotation.url, "xai");
-					if (parsed === undefined || !appendCitation(results, seen, parsed.url, normalized.query, optionalString(annotation.title, 500))) {
+					if (parsed === undefined || !appendCitation(results, seen, parsed.url, normalized.query, citationTitle(annotation.title))) {
 						discarded += 1;
 					} else {
 						answerCitationUrls.add(parsed.url);
