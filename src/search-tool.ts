@@ -183,11 +183,16 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	for (const result of response.results.slice(0, limit)) {
 		text += `\n${theme.fg("accent", searchResultPreview(result).split("\n")[0]!)}`;
 		text += `\n${theme.fg("dim", `  ${result.url}`)}`;
+		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${result.domain}`)}`;
+		if (expanded && result.publishedAt !== undefined) text += `\n${theme.fg("muted", `  Published: ${result.publishedAt}`)}`;
+		if (expanded && result.sourceId !== undefined) text += `\n${theme.fg("muted", `  Source ID: ${result.sourceId}`)}`;
 		if (result.excerpt !== undefined) text += `\n${theme.fg("muted", `  ${compactText(result.excerpt, expanded ? 400 : 240)}`)}`;
 	}
 	if (!expanded && count > limit) text += `\n${theme.fg("muted", `… ${count - limit} more; expand for details`)}`;
 	if (expanded) {
 		for (const warning of response.warnings) text += `\n${theme.fg("warning", `Warning: ${compactText(warning.message, 300)}`)}`;
+		if (response.appliedOptions.length > 0) text += `\n${theme.fg("dim", `Applied: ${response.appliedOptions.join(", ")}`)}`;
+		if (response.requestId !== undefined) text += `\n${theme.fg("dim", `Request ID: ${response.requestId}`)}`;
 		const usage = compactUsage(response.usage);
 		if (usage !== undefined) text += `\n${theme.fg("dim", `Usage: ${usage}`)}`;
 	}
