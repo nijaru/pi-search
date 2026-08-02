@@ -160,3 +160,8 @@ durable rationale belongs in `decisions.md`.
   OpenAI chat-completions model is treated as non-grounded and falls through
   to registry/native or direct routing instead of failing before the normal
   path. Offline verification remains 148 tests and 357 assertions.
+- 2026-08-01: After updating the installed package to `61e71f9`, a fresh Pi
+  process with active Codex and explicit `provider: exa` made exactly one
+  `web_search` call and returned three concise Markdown source links, with no
+  raw JSON. Exa direct and installed tool-path smoke gates now pass; the
+  OpenRouter/DeepSeek non-native gate remains blocked by the earlier 401.

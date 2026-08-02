@@ -47,10 +47,14 @@
     {
       "ts": "2026-08-02T02:51:33.753501Z",
       "msg": "Published 61e71f9 and updated installed git package to 61e71f9. The package is active in pi; local source and main are clean/synced after the follow-up context commit."
+    },
+    {
+      "ts": "2026-08-02T02:52:13.818993Z",
+      "msg": "Fresh installed-package Pi smoke passed with active Codex plus explicit provider=exa: exactly one web_search call returned three concise Markdown source links and no raw JSON. Exa adapter smoke and installed tool-path formatting are now verified; only non-native OpenRouter/DeepSeek acceptance remains blocked by 401 User not found."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T02:51:33.753501Z",
+  "updated_at": "2026-08-02T02:52:13.818993Z",
   "completed_at": null,
   "external": {}
 }

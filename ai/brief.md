@@ -72,26 +72,27 @@ PDF, captions, cancellation, provider, and renderer fixtures. `git diff
 --check` passes. A fresh Codex Pi process completed a live search with concise
 cited output and no raw JSON. A fresh OpenRouter/DeepSeek process failed before
 tool execution with `401 User not found`; this is an OpenRouter credential or
-session blocker and does not validate the search path. One explicit Exa live
-smoke passed with bounded IANA evidence, no warnings, and provider-reported
-cost of $0.007. No comparison calls were made.
+session blocker and does not validate the search path. One direct Exa smoke
+passed with bounded IANA evidence, no warnings, a request ID, and
+provider-reported cost of $0.007; a fresh installed Pi smoke then returned
+three concise Exa source links with no raw JSON. No comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
-  implementation pass is complete; Exa's direct smoke passed, but deliberate
-  installed non-native end-to-end validation and final acceptance remain open.
+  implementation pass is complete; Exa direct and installed tool-path smokes
+  passed, but non-native OpenRouter/DeepSeek acceptance remains blocked by its
+  credential/session failure.
 
 ## Next sequence
 
-1. Resolve the OpenRouter/DeepSeek credential or session issue if that
-   workflow is still required, then exercise the installed package with the
-   non-native model and confirm registry-native or Exa routing. Automatic
-   routing now skips incompatible OpenAI chat-completions models instead of
-   failing before the normal registry/direct path.
-2. If dedicated credentials are intentionally available, run one explicit
-   live smoke per remaining native/direct path and record skipped paths; do not
+1. Repair the OpenRouter/DeepSeek credential or session issue if that
+   workflow is still required, then run one installed non-native smoke and
+   confirm automatic Exa routing. Automatic routing now skips incompatible
+   OpenAI chat-completions models instead of failing before the normal
+   registry/direct path.
+2. If dedicated credentials are intentionally available, run only the
+   remaining deliberate native/direct smoke needed for acceptance; do not
    benchmark latency or compare providers with paid calls.
-3. Re-read failures from that exercise and fix only concrete correctness or UX
-   defects. Then update the required-workflow/task docs and consider closing
-   `pi-search-kd43`.
+3. Re-read any concrete failure, update the required-workflow/task docs, and
+   close `pi-search-kd43` if the non-native gate passes.
