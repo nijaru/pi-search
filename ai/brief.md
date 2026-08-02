@@ -2,82 +2,89 @@
 
 ## Objective
 
-Re-establish whether `pi-search` can become a reliable, high-quality sole
-web extension for Pi. The prior `pi-web-access` extension is the current
-operational baseline; do not assume provider count or the current evidence-only
-policy is sufficient. Preserve bounded fetch/PDF/caption extraction and
-readable output while investigating concrete parity gaps first.
+Make `pi-search` a reliable, high-quality sole web extension for Pi. The
+prior `pi-web-access` extension remains the operational reference, but this
+package must improve on its task usefulness without importing unbounded
+fan-out, opaque storage, or unsafe remote extraction.
 
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`d79f217`; renderer, output, Exa-routing, research-bound, provenance, and
-expanded-metadata fixes are committed; the revised quality requirements and
-rebaseline task are saved. The user plans to return
-to `pi-web-access` operationally for now; no package switch was performed.
-The active Pi runtime currently exposes exactly
-`web_search`, `web_fetch`, and `web_research`. The search description now
-matches automatic Exa routing for non-native models.
+`a8dc15f`; the installed package at
+`/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is also at `a8dc15f`.
+The active runtime exposes exactly `web_search`, `web_fetch`, and
+`web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
-Shipped adapters: OpenAI/Codex Responses, Gemini grounding, xAI web and X,
-Brave, Exa, Parallel, and explicit official X recent search. Fetching includes
-pinned DNS/SSRF and redirect checks, streamed limits, local HTML/Markdown
-extraction, bounded PDF text, and bounded YouTube captions. Research is a
-single-provider, sequential, budgeted workflow with optional direct fetches.
+The search-plane design and first implementation pass are complete:
+
+- `web_search` returns a bounded typed provider answer with citations when a
+  native backend supplies one, otherwise readable evidence; answer text and
+  fetched pages are explicitly untrusted.
+- automatic routing uses active native OpenAI/Codex/Gemini/xAI first, then an
+  authenticated OpenAI/Codex Responses model available in Pi's registry even
+  when another model is active, then configured Exa, then paced Brave;
+  Parallel and exact X remain explicit.
+- automatic routing permits at most one visible fallback after an
+  availability-like failure. Explicit provider hints, malformed/unsupported
+  requests, and cancellation remain final.
+- `web_search` can opt into bounded source enrichment through the existing
+  local SSRF-safe fetcher with count, length, deadline, and cancellation
+  limits.
+- OpenAI/Codex, Gemini, and xAI native adapters preserve bounded grounded
+  answer text, citations, execution model, and evidence metadata.
+
+Fetching remains direct/local with pinned DNS/SSRF and redirect validation,
+streamed limits, cancellation, Readability/Markdown extraction, bounded PDF
+text, and bounded YouTube captions. Research remains explicit, sequential, and
+budgeted; it uses one selected provider and does not use search fallbacks.
 
 ## Decisions in force
 
 - Do not run provider-comparison calls. Use existing extension source,
-  authoritative documentation, and the user's actual workflows to identify
-  gaps; live calls are reserved for deliberate correctness smoke tests.
-- Treat `pi-web-access` as the operational baseline until a parity plan is
-  accepted. Its source confirms cross-provider OpenAI/Codex registry search,
-  answer synthesis, broader routing, and curator/fetch workflows that
-  `pi-search` does not currently match.
-- The current `pi-search` native-first/Exa route is an implementation state,
-  not a final product decision. Revisit cross-provider native search and
-  optional answer synthesis before claiming replacement readiness.
-- Keep safety, bounds, provenance, cancellation, and readable output as
-  candidate advantages; prove they matter against actual workflows.
-- The next implementation must redesign the search plane before patching
-  adapters: task-useful answer/evidence output, capability-based backend
-  resolution, bounded visible resilience, and optional source enrichment.
-  Preserve the fetcher, safety boundary, provider adapters, and deterministic
-  fixtures unless the design review finds a concrete defect.
-
-## Output status
-
-All three tools now emit bounded readable model content instead of raw JSON
-and provide compact default Pi renderers with expanded evidence/details.
-Search shows three sources collapsed and complete metadata expanded; fetch
-shows status/extraction and content; research shows stop status/counts and
-expands source summaries. Deterministic renderer/output tests cover the new
-behavior. A running Pi session can retain older code at startup, so start a
-fresh session after reload.
+authoritative documentation, and the user's workflows for portfolio decisions;
+live calls are only deliberate correctness smoke tests.
+- Built-in OpenAI/Codex search is preferred when Pi has an authenticated
+Responses model, including cross-provider registry selection. This is an
+intentional use of credentials already configured in Pi and is reported in
+response metadata.
+- Normal automatic search makes at most two provider calls total: one primary
+and one visible alternative for availability-like failures. There is no hidden
+retry loop, paid fan-out, or fallback for explicit provider hints.
+- Provider answers are optional and typed, cited, bounded, and marked
+untrusted. Evidence remains the public source of truth; direct providers need
+not synthesize answers.
+- Source enrichment is explicit (`includeContent`) and uses the existing safe
+fetch boundary. Browser/remote extraction, persistent cache/history, and
+curator storage remain deferred until a concrete workflow requires them.
+- Preserve fetch safety and deterministic offline coverage. Do not add
+providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-The latest full check passed: 141 tests, 336 assertions, TypeScript clean;
-that check preceded documentation-only requirement updates.
-Deterministic coverage includes OpenAI/Codex parsing and cancellation, provider
-errors, domain constraints, fetch/PDF bounds, Brave pacing, Exa partial
-responses, readable search/fetch/research output, compact renderers, and
-provider metrics. One credentialed smoke each passed for Brave, Exa, and
-Parallel; direct OpenAI, Gemini, xAI, and official X live rows remain
-unverified. Do not repeat paid requests merely to measure latency.
+`bun run check` passes: 145 tests and 349 assertions, with TypeScript clean.
+Coverage now includes registry-driven cross-provider native selection, answer
+normalization/citation alignment, bounded fallback behavior, optional source
+enrichment through an injected fetcher, output bounds, and existing safety,
+PDF, captions, cancellation, provider, and renderer fixtures. `git diff
+--check` passes. No new live/provider-comparison calls were made in this pass;
+credentialed native live quality remains an explicit next gate.
 
 ## Active tasks
 
-- `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior
-  before further implementation.
+- `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
+  implementation pass is complete, but deliberate live/end-to-end validation
+  and final acceptance remain open.
 
 ## Next sequence
 
-1. Use the prior extension for the user's current work if desired; do not
-   switch packages automatically.
-2. Finish the search-plane design: evidence/answer contract, backend resolver,
-   bounded fallback policy, and optional source enrichment.
-3. Implement the design in focused slices with fake Pi integration tests before
-   any deliberate live smoke. Do not benchmark providers or add adapters merely
-   because they exist.
+1. Start a fresh Pi process and exercise the installed package with a normal
+   non-native model plus any configured OpenAI/Codex registry credentials;
+   confirm the tool output is answer-first/citation-bearing rather than raw
+   JSON.
+2. If dedicated credentials are intentionally available, run one explicit
+   live smoke per native/direct path and record skipped paths; do not benchmark
+   latency or compare providers with paid calls.
+3. Re-read failures from that exercise and fix only concrete correctness or UX
+   defects. Then update the required-workflow/task docs and consider closing
+   `pi-search-kd43`.

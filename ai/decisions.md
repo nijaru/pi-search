@@ -110,3 +110,25 @@ parity/advantage plan before further implementation. The one-provider,
 bounded-network, evidence-first constraints remain provisional until that plan
 resolves whether cross-provider native search and optional answer synthesis
 are required.
+
+### 2026-08-01 — search-plane design correction
+
+The source rebaseline showed two product-level gaps rather than only adapter
+bugs: normal search discarded useful native answers, and routing followed only
+the active model even when Pi already had authenticated OpenAI/Codex search
+models. The implementation now uses a typed untrusted `SearchAnswer` aligned to
+normalized citations, searches the Pi registry for an available native
+Responses model, and reports the execution model. This supersedes the earlier
+active-model-only/evidence-only policy while preserving evidence, provenance,
+and safety as the source boundary.
+
+Automatic routing now carries at most one alternative and may use it only for
+availability-like failures. The result records attempted providers and a
+`provider-fallback` warning. Explicit provider hints and invalid,
+unsupported, malformed, or canceled calls remain final. This is the bounded
+middle ground between the old extension's broad fallback chain and the earlier
+no-fallback policy.
+
+`web_search` now has opt-in bounded source enrichment through the existing
+local fetcher (`includeContent`, bounded count/length/deadline). No remote
+extractor, browser, persistent history, or provider-comparison mode was added.

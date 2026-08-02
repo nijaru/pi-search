@@ -1,9 +1,9 @@
 # Provider consolidation and fetch plan
 
-Status: superseded pending rebaseline. This planning surface is not an
-implementation contract. The prior extension is the operational baseline, and
-no provider-comparison calls or further provider additions are planned until
-actual parity gaps are reviewed and accepted by the project owner.
+Status: design baseline implemented in `a8dc15f`; live Pi acceptance remains
+open. The prior extension remains the operational reference. No provider-
+comparison calls or provider additions are planned until a concrete coverage
+gap is identified.
 
 ## Goals
 
@@ -77,10 +77,11 @@ explicit credential-gated smoke case.
 
 ## Priority order
 
-The earlier provider-first priority is paused. The next priority is a source
-and workflow quality review against `pi-web-access` and the required-workflow
-inventory. The items below are historical implementation context until that
-review is complete.
+The earlier provider-first priority is superseded. The search-plane quality
+review is implemented: typed answer/evidence output, registry-driven native
+resolution, one visible fallback, and opt-in safe source enrichment. The
+remaining priority is fresh-Pi and credential-gated acceptance, not provider
+comparison.
 
 ### Rebaseline quality gates
 
@@ -180,7 +181,7 @@ constraints continue to fail before network access.
    with a bounded in-memory cache keyed by canonical URL plus extraction
    options, with TTL, size, invalidation, and explicit freshness bypass.
 
-## Phase 3 — selective provider additions
+## Phase 3 — selective provider additions (deferred)
 
 The explicit live-smoke harness is now available at
 `scripts/live-smoke.ts`; use it only with dedicated credentials and the
