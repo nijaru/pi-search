@@ -190,6 +190,9 @@ durable rationale belongs in `decisions.md`.
   retained until the raw response or a reproducible no-match contract is
   available. The live xAI response exposed numeric inline-citation labels as
   source titles; `33b8409` drops those labels so rendering falls back to the
-  source domain, with offline coverage. Verification is 166 tests / 396
-  assertions; the installed checkout is now `33b8409` with its unrelated
-  local `bun.lock` change preserved.
+  source domain, with offline coverage. The xAI web and X smokes reported
+  47,360 and 26,693 total tokens respectively; these were single correctness
+  calls, not a comparison, but they confirm that model-mediated xAI search is
+  materially metered and should not be retried or made an unbudgeted fallback.
+  Verification is 166 tests / 396 assertions; the installed checkout is now
+  `33b8409` with its unrelated local `bun.lock` change preserved.

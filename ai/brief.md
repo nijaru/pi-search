@@ -85,11 +85,13 @@ fresh installed Pi process completed live smokes for active OpenAI/Codex,
 explicit Exa, xAI web search, xAI X search, and bounded Readability fetch; all
 returned clean bounded output except the constrained xAI X request, which
 completed without parseable citations and was correctly rejected by the
-evidence-first boundary. Exa reported $0.007 for its smoke. Explicit Gemini
-`gemini-2.5-flash` reached the adapter but returned HTTP 401 because direct
-Google authentication is not configured. OpenRouter/DeepSeek still has the
-separate earlier `401 User not found` credential/session blocker. No provider
-comparison calls were made.
+evidence-first boundary. Exa reported $0.007 for its smoke. The xAI web and
+X smokes reported 47,360 and 26,693 total tokens; these were single correctness
+calls, not a comparison, but xAI search is materially metered and should not
+be retried or made an unbudgeted fallback. Explicit Gemini `gemini-2.5-flash`
+reached the adapter but returned HTTP 401 because direct Google authentication
+is not configured. OpenRouter/DeepSeek still has the separate earlier `401 User
+not found` credential/session blocker. No provider comparison calls were made.
 
 ## Active tasks
 
