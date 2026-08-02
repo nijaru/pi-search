@@ -11,20 +11,23 @@ and bounded model-visible output.
 
 `src/contracts.ts` defines requests, evidence, capabilities, usage, rate-limit
 metadata, and normalized errors. `src/router.ts` selects exactly one provider
-using the active Pi model, explicit hints, capability constraints, and billing
-policy. `src/search.ts` validates requests, combines caller cancellation with a
-hard deadline, and maps failures to stable tool errors.
+using the active Pi model, explicit hints, hard capability constraints, and
+billing policy. `src/model-selection.ts` resolves an active or explicitly
+requested compatible Gemini, xAI, or OpenAI/Codex model through the supplied Pi
+registry; it never reads auth state globally. `src/search.ts` validates
+requests, combines caller cancellation with a hard deadline, and maps failures
+to stable tool errors.
 
 Provider adapters normalize their own HTTP or model-mediated payloads:
 
 - `openai.ts`: OpenAI and Codex Responses search, SSE parsing, model-registry
   auth, citation/source normalization;
-- `gemini.ts`: Google Search grounding;
-- `xai.ts`: xAI web and X grounding;
+- `gemini.ts`: Google Search grounding, support-linked citations, and explicit model selection;
+- `xai.ts`: xAI web and X grounding, documented handle/date/media options, and explicit model selection;
 - `brave.ts`: keyword/freshness/domain search and quota observations;
-- `exa.ts`: semantic search, highlights, domains, and reported cost; and
-- `parallel.ts`: objective-oriented search and bounded excerpts;
-- `x.ts`: explicit official X recent search with post-level evidence.
+- `exa.ts`: semantic search, highlights, domains/date ranges, and reported cost; and
+- `parallel.ts`: objective-oriented search and bounded excerpts with explicit constraint rejection;
+- `x.ts`: explicit official X recent search with post-level evidence, OR-grouped handle filters, and date ranges.
 
 ## Fetch path
 

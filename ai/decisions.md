@@ -132,3 +132,25 @@ no-fallback policy.
 `web_search` now has opt-in bounded source enrichment through the existing
 local fetcher (`includeContent`, bounded count/length/deadline). No remote
 extractor, browser, persistent history, or provider-comparison mode was added.
+
+### 2026-08-02 — explicit model-mediated Gemini/xAI and safe constraints
+
+Official provider documentation confirms that Gemini Google Search and xAI
+web/X search are tools attached to a selected model, not standalone result
+APIs. Pi 0.83 supplies Gemini/API-key and xAI subscription/API-key credentials
+through its model registry. Keep active Gemini/xAI models automatic, but allow
+explicit `provider` hints to select a compatible registry model with a required
+`executionModel`; do not discover Gemini/xAI cross-provider credentials
+implicitly because search and model-token billing can both apply.
+
+Keep Gemini `generateContent` for now: Google documents it as fully supported,
+while the newer Interactions API is recommended for new projects but would not
+fix the current adapter's routing or citation problems. Derive Gemini answer
+citations from `groundingSupports`, not every retrieved chunk. Distinguish
+Gemini search-query usage from token usage.
+
+Map documented xAI X handle/date/image/video options into the typed request
+contract. Keep xAI X and the official X recent-search API explicit. Automatic
+fallback now only follows authentication, rate-limit, or unavailable failures
+known not to have produced a billable result; network, timeout, and
+post-dispatch HTTP failures have uncertain effects and remain final.

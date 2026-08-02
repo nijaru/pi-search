@@ -19,14 +19,14 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | --- | --- | --- |
 | Task-useful web search | **Implemented; live quality gate open**: typed cited provider answers when available, readable evidence otherwise | A normal question yields a concise, citation-bearing answer or clearly usable evidence for the active model; no raw JSON or unexplained snippets |
 | Automatic backend resolution | **Implemented; fresh Pi integration gate open**: active native first, authenticated registry OpenAI/Codex next, Exa, then Brave | Normal search uses an available suitable native/direct backend without unnecessary manual provider selection; cross-provider use and billing are explicit in policy and diagnostics |
-| Bounded search resilience | **Implemented**: one visible automatic alternative for availability-like failures; explicit/invalid paths remain final | A bounded, visible availability/fallback policy handles unavailable backends without unbounded fan-out, duplicate paid calls, or masking the original failure |
+| Bounded search resilience | **Implemented**: one visible automatic alternative only for safe authentication/rate-limit/unavailable failures; outcome-unknown failures remain final | A bounded, visible policy handles rejected/unavailable backends without unbounded fan-out, duplicate paid calls, or masking uncertain effects |
 | Native OpenAI Responses search | `src/openai.ts`; registry routing, typed answer/citations, fixtures, and one fresh Codex Pi smoke pass | Pi model-registry auth, current Responses fixtures, one deliberate live smoke, usable answer/citations |
 | Native OpenAI Codex search | `src/openai.ts`; parser, ChatGPT endpoint, typed citations, and fresh-process smoke pass shipped | Correct ChatGPT endpoint, fresh-process live smoke, usable answer/citations |
 | Search for local/non-native models | Exa/Brave/Parallel adapters shipped; workflow quality gap remains | Works with normal active models, returns useful evidence/context, and exposes bounded cost/provenance |
-| Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; active model selection |
-| xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; active model selection |
-| Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
-| Official X recent search | `x`; shipped as explicit provider | Query operators, direct post URLs/text/IDs, bounded recent search, rate-limit fixtures; dedicated lookup/archive endpoints remain deferred |
+| Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth, explicit `executionModel`, support-linked citations, active model selection; live smoke open |
+| xAI web search | `src/xai.ts`; shipped | Model-registry/API/OAuth auth, citation fixtures, explicit model selection; live smoke open |
+| Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider, bounded handles/date/media options, citation fixtures; no web-domain promise; live OAuth smoke open |
+| Official X recent search | `x`; shipped as explicit provider | Query operators, bounded handle/date options, direct post URLs/text/IDs, rate-limit fixtures; dedicated lookup/archive endpoints remain deferred |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
 | Source depth and context | **Implemented**: explicit `includeContent` uses the local safe fetcher with bounded count/length/deadline | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |

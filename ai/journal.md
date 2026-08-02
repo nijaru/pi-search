@@ -165,3 +165,14 @@ durable rationale belongs in `decisions.md`.
   `web_search` call and returned three concise Markdown source links, with no
   raw JSON. Exa direct and installed tool-path smoke gates now pass; the
   OpenRouter/DeepSeek non-native gate remains blocked by the earlier 401.
+- 2026-08-02: Official Gemini and xAI documentation review confirmed their
+  web/X search features are model-mediated tools. Added explicit registry-backed
+  `executionModel` selection for Gemini, xAI/X, and OpenAI/Codex, with xAI OAuth
+  flowing through Pi's model registry. Grounding citations now align with
+  Gemini `groundingSupports` and xAI annotations; all encountered sources stay
+  evidence. Added typed X handle/date/media options, Exa published-date filters,
+  research execution-model propagation, and separate search-query/token usage.
+  Unsupported hard constraints are rejected by both routing and adapters, and
+  automatic fallback is limited to safe auth/rate-limit/unavailable failures.
+  Offline verification: 165 tests / 395 assertions, TypeScript clean, no live
+  provider calls made in this pass; Gemini/xAI/X live acceptance remains open.

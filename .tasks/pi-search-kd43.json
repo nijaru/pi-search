@@ -51,10 +51,14 @@
     {
       "ts": "2026-08-02T02:52:13.818993Z",
       "msg": "Fresh installed-package Pi smoke passed with active Codex plus explicit provider=exa: exactly one web_search call returned three concise Markdown source links and no raw JSON. Exa adapter smoke and installed tool-path formatting are now verified; only non-native OpenRouter/DeepSeek acceptance remains blocked by 401 User not found."
+    },
+    {
+      "ts": "2026-08-02T05:20:35.30047Z",
+      "msg": "2026-08-02: Reviewed official Gemini/xAI docs and current provider implementations. Model-mediated search now resolves explicit registry models; Gemini support-linked citations and xAI annotation citations are aligned; xAI X handle/date/media options, Exa date filters, official X handle/date filters, research executionModel propagation, usage-query/token accounting, and hard-constraint rejection at adapter boundaries are covered. Offline check: 165 tests / 395 assertions, TypeScript clean. No live Gemini/xAI/X requests made; live acceptance remains open."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T02:52:13.818993Z",
+  "updated_at": "2026-08-02T05:20:35.30047Z",
   "completed_at": null,
   "external": {}
 }
