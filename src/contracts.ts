@@ -119,6 +119,8 @@ export interface ProviderUsage {
 	readonly costUsd?: number;
 	readonly billedUnits?: number;
 	readonly billedUnit?: string;
+	/** Number of provider-side search queries when exposed separately from token usage. */
+	readonly searchQueries?: number;
 	/** Provider-reported input/prompt token count, when available. */
 	readonly inputTokens?: number;
 	/** Provider-reported output/completion token count, when available. */
@@ -144,8 +146,14 @@ export interface ProviderCapabilities {
 	readonly excerpts?: boolean;
 	/** Supports domain include/exclude filters. */
 	readonly domainFilter?: boolean;
+	/** Supports provider-enforced date ranges. */
+	readonly dateFilter?: boolean;
 	/** Searches social sources such as X. */
 	readonly social?: boolean;
+	/** Supports provider-enforced social-handle filters. */
+	readonly handleFilter?: boolean;
+	/** Supports provider-side image/video understanding during search. */
+	readonly mediaUnderstanding?: boolean;
 	/** Uses a model's native grounding/search tool. */
 	readonly nativeGrounding?: boolean;
 }
@@ -177,6 +185,20 @@ export interface DomainFilter {
 	readonly exclude?: readonly string[];
 }
 
+/** Provider-enforced temporal bounds for providers that support them. */
+export interface SearchDateRange {
+	readonly from?: string;
+	readonly to?: string;
+}
+
+/** Provider-enforced social/X constraints. */
+export interface SocialSearchOptions {
+	readonly includeHandles?: readonly string[];
+	readonly excludeHandles?: readonly string[];
+	readonly understandImages?: boolean;
+	readonly understandVideos?: boolean;
+}
+
 /**
  * Provider-neutral search request. Every field is optional except `query`
  * so that a caller can start with a bare string and refine as needed.
@@ -196,6 +218,12 @@ export interface SearchRequest {
 	readonly maxResults?: number;
 	/** Restrict/exclude hosts. */
 	readonly domains?: DomainFilter;
+	/** Provider-enforced date range, when supported. */
+	readonly dateRange?: SearchDateRange;
+	/** Provider-enforced social/X constraints, when supported. */
+	readonly social?: SocialSearchOptions;
+	/** Select a model-mediated execution model; requires a compatible provider hint when cross-provider. */
+	readonly executionModel?: string;
 	/** Include a provider-grounded answer when the backend supplies one. */
 	readonly answerMode?: SearchAnswerMode;
 	/** Fetch a small number of selected result URLs through the safe local fetcher. */
@@ -213,7 +241,7 @@ export interface SearchRequest {
 }
 
 /** Options whose handling must be visible in the normalized response. */
-export type SearchOption = "mode" | "maxResults" | "domains";
+export type SearchOption = "mode" | "maxResults" | "domains" | "dateRange" | "social" | "executionModel";
 
 export interface SearchCitation {
 	/** URL of a normalized search result cited by the answer. */
@@ -325,6 +353,8 @@ export interface ResearchRequest {
 	readonly budget: ResearchBudget;
 	/** Select one provider strictly for the whole invocation. */
 	readonly provider?: "native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x";
+	/** Explicit model id for a model-mediated provider. */
+	readonly executionModel?: string;
 	/** Number of result URLs to fetch after search, bounded by budget.maxFetches. */
 	readonly fetchResults?: number;
 }
@@ -335,6 +365,8 @@ export interface ResearchResponse {
 	readonly question: string;
 	/** The single provider selected for the whole research invocation. */
 	readonly provider: ProviderId;
+	/** Model used when the selected provider is model-mediated. */
+	readonly executionModel?: string;
 	readonly results: readonly SearchResult[];
 	readonly fetched: readonly FetchedContent[];
 	readonly stepsCompleted: number;

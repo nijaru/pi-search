@@ -28,6 +28,15 @@ describe("X API provider", () => {
 		expect(plan.appliedOptions).toEqual(["maxResults", "mode"]);
 	});
 
+	it("maps bounded X handles and date ranges to recent search", () => {
+		const plan = buildXRequest({ query: "protocols", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["@alice", "bob"], excludeHandles: ["carol"] } });
+		const url = new URL(plan.url);
+		expect(url.searchParams.get("query")).toBe("protocols (from:alice OR from:bob) -from:carol");
+		expect(url.searchParams.get("start_time")).toBe("2026-01-01T00:00:00.000Z");
+		expect(url.searchParams.get("end_time")).toBe("2026-01-02T23:59:59.999Z");
+		expect(plan.appliedOptions).toEqual(["maxResults", "mode", "dateRange", "social"]);
+	});
+
 	it("normalizes post text, authors, timestamps, and canonical post URLs", async () => {
 		let seenUrl = "";
 		let seenMethod = "";
@@ -55,8 +64,9 @@ describe("X API provider", () => {
 		]);
 	});
 
-	it("rejects web-domain filters instead of dropping a hard constraint", async () => {
+	it("rejects web-domain and media constraints instead of dropping hard constraints", async () => {
 		await expect(provider().search({ query: "q", domains: { include: ["example.com"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "x", kind: "unsupported" });
+		await expect(provider().search({ query: "q", social: { understandVideos: true } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "x", kind: "unsupported" });
 	});
 
 	it("returns empty results for a valid no-match response and rejects missing auth", async () => {

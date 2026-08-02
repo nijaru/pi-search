@@ -292,6 +292,9 @@ export interface BraveRequestPlan {
 /** Build one bounded Brave request; no pagination or hidden follow-up calls. */
 export function buildBraveRequest(request: SearchRequest, endpoint = BRAVE_SEARCH_ENDPOINT): BraveRequestPlan {
 	const normalized = validateSearchRequest(request);
+	if (normalized.dateRange !== undefined || normalized.social !== undefined) {
+		throw createProviderError({ provider: "brave", kind: "unsupported", message: "Brave Search does not provide exact date-range or dedicated social/X constraints", retryable: false });
+	}
 	const appliedOptions: SearchOption[] = ["maxResults"];
 	const warnings: SearchWarning[] = [];
 	const params = new URLSearchParams({

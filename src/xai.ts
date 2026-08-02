@@ -12,6 +12,7 @@ import type {
 } from "./contracts";
 import { createProviderError } from "./errors";
 import { httpSource, objectValue, optionalString, postJson, type SearchHttpFetch } from "./provider-http";
+import { selectModelExecution, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const XAI_RESPONSES_ENDPOINT = "https://api.x.ai/v1";
@@ -34,8 +35,8 @@ const profiles: Record<XAITool, ProviderProfile> = {
 
 function capabilities(tool: XAITool): ProviderCapabilities {
 	return tool === "x_search"
-		? { semantic: true, freshness: true, excerpts: true, social: true, nativeGrounding: true }
-		: { semantic: true, freshness: true, excerpts: true, domainFilter: true, nativeGrounding: true };
+		? { semantic: true, freshness: true, social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true, nativeGrounding: true }
+		: { semantic: true, freshness: true, domainFilter: true, nativeGrounding: true };
 }
 
 export interface XAIRequestPlan {
@@ -49,21 +50,43 @@ export function buildXAIRequest(request: SearchRequest, tool: XAITool): XAIReque
 	if (tool === "x_search" && (normalized.domains?.include?.length || normalized.domains?.exclude?.length)) {
 		throw createProviderError({ provider: "xai-x", kind: "unsupported", message: "xAI X search does not accept web domain filters", retryable: false });
 	}
+	if (tool === "web_search" && (normalized.dateRange !== undefined || normalized.social !== undefined)) {
+		throw createProviderError({ provider: "xai", kind: "unsupported", message: "xAI web search does not accept X date, handle, or media constraints", retryable: false });
+	}
+	if (tool === "x_search" && normalized.social?.includeHandles !== undefined && normalized.social.excludeHandles !== undefined) {
+		throw createProviderError({ provider: "xai-x", kind: "unsupported", message: "xAI X search cannot combine included and excluded handles", retryable: false });
+	}
 	const warnings: SearchWarning[] = [];
 	if (normalized.mode === "keyword") warnings.push({ code: "unsupported-option", option: "mode", message: `xAI ${tool === "x_search" ? "X" : "web"} search is semantic and does not guarantee keyword-only ranking` });
 	if (normalized.mode === "fresh") warnings.push({ code: "unsupported-option", option: "mode", message: `xAI ${tool === "x_search" ? "X" : "web"} search can use current sources but does not guarantee a freshness-only ranking` });
 	const searchTool: Record<string, unknown> = { type: tool };
 	if (tool === "web_search") {
-		if (normalized.domains?.include?.length) searchTool.allowed_domains = [...normalized.domains.include];
-		if (normalized.domains?.exclude?.length) searchTool.excluded_domains = [...normalized.domains.exclude];
+		const filters = {
+			...(normalized.domains?.include?.length ? { allowed_domains: [...normalized.domains.include] } : {}),
+			...(normalized.domains?.exclude?.length ? { excluded_domains: [...normalized.domains.exclude] } : {}),
+		};
+		if (Object.keys(filters).length > 0) searchTool.filters = filters;
+	} else {
+		if (normalized.social?.includeHandles !== undefined) searchTool.allowed_x_handles = [...normalized.social.includeHandles];
+		if (normalized.social?.excludeHandles !== undefined) searchTool.excluded_x_handles = [...normalized.social.excludeHandles];
+		if (normalized.dateRange?.from !== undefined) searchTool.from_date = normalized.dateRange.from;
+		if (normalized.dateRange?.to !== undefined) searchTool.to_date = normalized.dateRange.to;
+		if (normalized.social?.understandImages === true) searchTool.enable_image_understanding = true;
+		if (normalized.social?.understandVideos === true) searchTool.enable_video_understanding = true;
 	}
 	return {
 		body: {
 			model: "",
-			input: normalized.mode === "fresh" ? `Prefer current sources. ${normalized.query}` : normalized.query,
+			input: [{ role: "user", content: normalized.mode === "fresh" ? `Prefer current sources. ${normalized.query}` : normalized.query }],
 			tools: [searchTool],
 		},
-		appliedOptions: ["maxResults", "mode", ...(normalized.domains?.include?.length || normalized.domains?.exclude?.length ? ["domains" as const] : [])],
+		appliedOptions: [
+			"maxResults",
+			"mode",
+			...(normalized.domains?.include?.length || normalized.domains?.exclude?.length ? ["domains" as const] : []),
+			...(normalized.dateRange === undefined ? [] : ["dateRange" as const]),
+			...(normalized.social === undefined ? [] : ["social" as const]),
+		],
 		warnings,
 	};
 }
@@ -73,25 +96,8 @@ function endpointFor(model: ProviderModel, override?: string): string {
 	return base.endsWith("/responses") ? base : `${base}/responses`;
 }
 
-async function authHeaders(context: ProviderContext, provider: "xai" | "xai-x"): Promise<Readonly<Record<string, string>>> {
-	const model = context.model;
-	if (model === undefined || model.provider !== "xai" || model.api !== "openai-responses") {
-		throw createProviderError({ provider, kind: "unsupported", message: "Active Pi model is not an xAI Responses model", retryable: false });
-	}
-	if (context.modelRegistry === undefined) throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
-	let auth;
-	try {
-		auth = await context.modelRegistry.getApiKeyAndHeaders(model);
-	} catch (error) {
-		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
-	}
-	if (!auth.ok) throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is not configured", retryable: false });
-	const headers = new Headers();
-	for (const source of [model.headers, auth.headers]) {
-		if (source === undefined) continue;
-		for (const [key, value] of Object.entries(source)) headers.set(key, value);
-	}
-	if (auth.apiKey !== undefined && auth.apiKey.trim().length > 0) headers.set("authorization", `Bearer ${auth.apiKey}`);
+function authHeaders(execution: ModelExecution, provider: "xai" | "xai-x"): Readonly<Record<string, string>> {
+	const headers = modelAuthHeaders(execution);
 	if (!headers.has("authorization")) throw createProviderError({ provider, kind: "auth", message: "xAI authentication returned no authorization header", retryable: false });
 	return Object.fromEntries(headers.entries());
 }
@@ -115,6 +121,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 	}
 	const results: SearchResult[] = [];
 	const answerParts: string[] = [];
+	const answerCitationUrls = new Set<string>();
 	const seen = new Set<string>();
 	let discarded = 0;
 	if (Array.isArray(root.citations)) {
@@ -149,24 +156,39 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 						continue;
 					}
 					const annotation = annotationValue as Record<string, unknown>;
-					if (!appendCitation(results, seen, annotation.url, normalized.query, optionalString(annotation.title, 500))) discarded += 1;
+					const parsed = httpSource(annotation.url, "xai");
+					if (parsed === undefined || !appendCitation(results, seen, parsed.url, normalized.query, optionalString(annotation.title, 500))) {
+						discarded += 1;
+					} else {
+						answerCitationUrls.add(parsed.url);
+					}
 				}
 			}
 		}
 	}
-	if (discarded > 0 && results.length === 0) {
-			throw createProviderError({ provider: tool === "x_search" ? "xai-x" : "xai", kind: "malformed", message: "xAI returned no parseable citation URLs", retryable: false });
+	if (results.length === 0) {
+		throw createProviderError({ provider: tool === "x_search" ? "xai-x" : "xai", kind: "malformed", message: "xAI returned no parseable citation URLs", retryable: false });
 	}
 	const provider = tool === "x_search" ? "xai-x" : "xai";
 	const warnings: SearchWarning[] = discarded > 0 ? [{ code: "partial-results", message: `xAI discarded ${discarded} malformed citation entr${discarded === 1 ? "y" : "ies"}` }] : [];
 	const normalizedResults = results.slice(0, normalized.maxResults ?? 10).map((result) => ({ ...result, provider }));
 	const answerText = answerParts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_XAI_ANSWER_LENGTH);
-	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && normalizedResults.length > 0
-		? { text: answerText, contentTrust: "untrusted" as const, provider, citations: normalizedResults.map((result) => ({ url: result.url, ...(result.title === undefined ? {} : { title: result.title }) })) }
+	const answerCitations = normalizedResults.filter((result) => answerCitationUrls.has(result.url)).map((result) => ({ url: result.url, ...(result.title === undefined ? {} : { title: result.title }) }));
+	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && answerCitations.length > 0
+		? { text: answerText, contentTrust: "untrusted" as const, provider, citations: answerCitations }
 		: undefined;
 	const usage = root.usage;
 	const usageRecord = usage !== null && typeof usage === "object" && !Array.isArray(usage) ? usage as Record<string, unknown> : undefined;
-	const billedUnits = typeof usageRecord?.total_tokens === "number" && Number.isFinite(usageRecord.total_tokens) ? usageRecord.total_tokens : undefined;
+	const inputTokens = typeof usageRecord?.input_tokens === "number" && Number.isFinite(usageRecord.input_tokens) ? usageRecord.input_tokens : undefined;
+	const outputTokens = typeof usageRecord?.output_tokens === "number" && Number.isFinite(usageRecord.output_tokens) ? usageRecord.output_tokens : undefined;
+	const totalTokens = typeof usageRecord?.total_tokens === "number" && Number.isFinite(usageRecord.total_tokens) ? usageRecord.total_tokens : undefined;
+	const usageDetails = inputTokens === undefined && outputTokens === undefined && totalTokens === undefined
+		? undefined
+		: {
+			...(inputTokens === undefined ? {} : { inputTokens }),
+			...(outputTokens === undefined ? {} : { outputTokens }),
+			...(totalTokens === undefined ? {} : { totalTokens, billedUnits: totalTokens, billedUnit: "tokens" }),
+		};
 	return {
 		query: normalized.query,
 		results: normalizedResults,
@@ -175,7 +197,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 		appliedOptions: [],
 		warnings,
 		...(optionalString(root.id, 500) === undefined ? {} : { requestId: optionalString(root.id, 500) }),
-		...(billedUnits === undefined ? {} : { usage: { billedUnits, billedUnit: "tokens", totalTokens: billedUnits } }),
+		...(usageDetails === undefined ? {} : { usage: usageDetails }),
 	};
 }
 
@@ -201,13 +223,13 @@ export class XAIProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildXAIRequest(normalized, this.tool);
-		const model = context.model;
-		if (model === undefined || model.provider !== "xai" || model.api !== "openai-responses") throw createProviderError({ provider: this.id, kind: "unsupported", message: "Active Pi model is not an xAI Responses model", retryable: false });
+		if (signal.aborted) throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
+		const execution = await selectModelExecution({ searchProvider: this.id, modelProvider: "xai", api: "openai-responses", request: normalized, context });
 		const result = await postJson({
 			provider: this.id,
-			url: endpointFor(model, this.endpoint),
-			headers: await authHeaders(context, this.id),
-			body: { ...plan.body, model: model.id },
+			url: endpointFor(execution.model, this.endpoint),
+			headers: authHeaders(execution, this.id),
+			body: { ...plan.body, model: execution.model.id },
 			signal,
 			fetchImpl: this.fetchImpl,
 			maxResponseBytes: this.maxResponseBytes,
@@ -218,10 +240,10 @@ export class XAIProvider implements Provider {
 			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
 		return {
 			...response,
-			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: model.id } }),
+			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: execution.model.id } }),
 			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
 			...(usage === undefined ? {} : { usage }),
-			executionModel: model.id,
+			executionModel: execution.model.id,
 			appliedOptions: plan.appliedOptions,
 			warnings: [...plan.warnings, ...response.warnings],
 		};

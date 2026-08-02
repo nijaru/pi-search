@@ -26,8 +26,10 @@ Pi tools:
 - When Exa is unavailable, configured Brave is the conservative paced
   keyword/fresh path. Parallel and the official X API remain explicit
   providers.
-- Automatic routing permits at most one visible fallback after an
-  availability-like failure. Explicit provider hints never fall through;
+- Automatic routing permits at most one visible fallback after a safe
+  authentication, rate-limit, or unavailable failure. Network, timeout, and
+  post-dispatch HTTP failures remain final because their effects are uncertain.
+  Explicit provider hints never fall through;
   there are no retry loops or provider fan-out.
 
 All providers normalize into the same evidence-first result shape. Provider
@@ -60,19 +62,27 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 # export PI_SEARCH_ALLOW_METERED=1
 ```
 
-Gemini and xAI credentials come from the active Pi model's authentication
-context. A provider hint such as `provider: "exa"`, `"parallel"`, `"x"`, or
-`"xai-x"` is strict and never falls through to another provider. Without a
-hint, the router selects available native search first, then Exa, then Brave
-when the corresponding credentials and hard constraints permit it. Set
-`includeContent: true` on `web_search` only when bounded excerpts from selected
-source pages are needed; this reuses the safe local fetch path.
+Gemini and xAI credentials come from Pi's model-registry authentication
+context. Active Gemini/xAI models use native search automatically. Explicit
+`provider: "gemini"`, `"xai"`, or `"xai-x"` can use a compatible registry model
+with `executionModel` even when another model is active; this makes model and
+billing choice visible. Pi's `/login xai` subscription flow is supported by the
+registry for Grok web/X search. A provider hint such as `provider: "exa"`,
+`"parallel"`, or `"x"` is strict and never falls through to another provider.
+Without a hint, the router selects available native search first, then Exa,
+then Brave when the corresponding credentials and hard constraints permit it.
+Set `includeContent: true` on `web_search` only when bounded excerpts from
+selected source pages are needed; this reuses the safe local fetch path. For
+`web_research`, use `executionModel` with an explicit model-mediated `provider`
+when a multi-query run should use a specific Gemini, xAI, or OpenAI model.
 
 ## Fetch coverage
 
 Tool results use compact readable model content and a compact Pi display;
 expanded tool details retain the normalized metadata and source evidence.
-Native grounded answers include citations. `web_search` can opt into bounded
+Native grounded answers include citations. xAI X search accepts bounded handle,
+date-range, and opt-in image/video-understanding constraints. `web_search` can
+opt into bounded
 fetching of selected result pages with `includeContent`, `contentResults`, and
 `contentMaxLength`; fetched pages remain untrusted.
 `web_fetch` owns direct HTTPS/HTTP fetching with SSRF protection, redirect

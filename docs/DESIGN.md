@@ -26,17 +26,19 @@ Shipped search adapters:
 | Adapter | Active/default use | Explicit use | Hard constraints |
 | --- | --- | --- | --- |
 | OpenAI/Codex Responses | Active supported OpenAI model | `openai`/`openai-codex` | Responses APIs only; allowed and blocked domains |
-| Gemini grounding | Active Google Gemini model | `gemini` | No hard domain filter |
-| xAI web grounding | Active xAI Responses model | `xai` | Web domain filters supported |
-| xAI X grounding | — | `xai-x` | Social/X search; no web-domain filter |
+| Gemini grounding | Active Google Gemini model | `gemini` plus optional `executionModel` | No hard domain filter; grounding citations required for typed answers |
+| xAI web grounding | Active xAI Responses model | `xai` plus optional `executionModel` | Web domain filters supported |
+| xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
 | Exa | Other/local model with configured key | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model when Exa is unavailable; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
 | Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
 Explicit provider failures are final. Automatic routing may use one visible
-fallback after an availability-like failure; there are no adapter retries or
-hidden provider changes.
+fallback only after an authentication, rate-limit, or unavailable failure that
+is known not to have produced a billable result; network, timeout, and
+post-dispatch HTTP failures remain final because their effects are uncertain.
+There are no adapter retries or hidden provider changes.
 
 ## Routing and billing
 
@@ -49,8 +51,9 @@ at most one visible fallback:
    available through Pi's model registry is eligible, preserving built-in
    search without requiring a model switch.
 3. Gemini or xAI grounding when that provider is the active model; selecting
-   the model is the user's metered-call decision. `xai-x` remains explicit for
-   X-specific grounding.
+   the model is the user's metered-call decision. Explicit `gemini`, `xai`, and
+   `xai-x` hints may use a compatible Pi-registry model via `executionModel`;
+   `xai-x` remains explicit for X-specific grounding.
 4. Exa for other models when `EXA_API_KEY` exists and its hard constraints
    are supported. Exa is selected before Brave because it supplies semantic
    retrieval, highlights, and reported cost.
@@ -62,11 +65,13 @@ at most one visible fallback:
 6. Parallel and official X API remain explicit until their quality/role
    evaluation justifies default routing.
 
-A primary failure may use one fallback only for automatic availability-like
-failures. Explicit provider hints, invalid/unsupported/malformed requests,
-and cancellation remain final. There are no retry loops, paid fan-out, or
-provider comparisons. Provider profile usage and selected execution model are
-surfaced when available. A research cost ceiling is rejected when a provider
+A primary failure may use one fallback only for authentication, rate-limit,
+or unavailable failures known not to have produced a billable result.
+Network, timeout, and post-dispatch HTTP failures remain final because their
+effects are uncertain. Explicit provider hints, invalid/unsupported/malformed
+requests, and cancellation remain final. There are no retry loops, paid
+fan-out, or provider comparisons. Provider profile usage and selected execution
+model are surfaced when available. A research cost ceiling is rejected when a provider
 cannot provide a reliable per-call estimate; this prevents a false guarantee
 for native grounding, Exa, and Parallel.
 
@@ -125,11 +130,12 @@ this same fetcher; it never uses an implicit remote extraction service.
 
 ## Research limits
 
-`web_research` accepts caller-supplied queries and an optional strict provider
-hint. It selects one provider once, runs searches sequentially, optionally
-fetches result URLs in order, counts search/fetch/step limits separately, uses
-one deadline, bounds output, and reports partial failures. It performs no
-query planning, synthesis, retry, or provider fan-out.
+`web_research` accepts caller-supplied queries, an optional strict provider
+hint, and an optional explicit `executionModel` for model-mediated providers.
+It selects one provider once, runs searches sequentially, optionally fetches
+result URLs in order, counts search/fetch/step limits separately, uses one
+deadline, bounds output, and reports partial failures. It performs no query
+planning, synthesis, retry, or provider fan-out.
 
 ## Runtime ownership
 

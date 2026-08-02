@@ -22,11 +22,18 @@ describe("ExaProvider", () => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			return response(payload, 200, { "content-type": "application/json", "x-request-id": "exa-header", "x-ratelimit-limit": "10", "x-ratelimit-remaining": "7", "x-ratelimit-reset": "60" });
 		} });
-		const result = await configured.search({ query: "latest TypeScript release", maxResults: 1, domains: { include: ["example.com"] } }, new AbortController().signal, {});
+		const result = await configured.search({ query: "latest TypeScript release", maxResults: 1, domains: { include: ["example.com"] }, dateRange: { from: "2026-01-01", to: "2026-01-02" } }, new AbortController().signal, {});
 		expect(configured.profile.estimatedCostUsd).toBe(0.007);
-		expect(seenBody).toMatchObject({ query: "latest TypeScript release", numResults: 1, includeDomains: ["example.com"], contents: { highlights: true } });
-		expect(result).toMatchObject({ provider: "exa", requestId: "exa-header", usage: { costUsd: 0.007, rateLimits: { windows: [{ limit: 10, remaining: 7, resetAfterMs: 60_000 }] } }, appliedOptions: ["maxResults", "mode", "domains"] });
+		expect(seenBody).toMatchObject({ query: "latest TypeScript release", numResults: 1, includeDomains: ["example.com"], startPublishedDate: "2026-01-01T00:00:00.000Z", endPublishedDate: "2026-01-02T23:59:59.999Z", contents: { highlights: true } });
+		expect(result).toMatchObject({ provider: "exa", requestId: "exa-header", usage: { costUsd: 0.007, rateLimits: { windows: [{ limit: 10, remaining: 7, resetAfterMs: 60_000 }] } }, appliedOptions: ["maxResults", "mode", "domains", "dateRange"] });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "A useful excerpt.", sourceId: "result-1" });
+	});
+
+	it("rejects unsupported social constraints before network access", async () => {
+		let calls = 0;
+		const configured = provider({ fetchImpl: async () => { calls += 1; return response(payload); } });
+		await expect(configured.search({ query: "q", social: { includeHandles: ["xai"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "exa", kind: "unsupported" });
+		expect(calls).toBe(0);
 	});
 
 	it("keeps valid results when another result is malformed", async () => {

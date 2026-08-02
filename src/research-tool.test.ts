@@ -36,6 +36,30 @@ describe("web_research", () => {
 		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
 	});
 
+	it("propagates an explicit execution model through every research query", async () => {
+		const seenModels: string[] = [];
+		const selected: Provider = {
+			...provider(),
+			id: "gemini",
+			search: async (request) => {
+				seenModels.push(request.executionModel ?? "missing");
+				return {
+					query: request.query,
+					results: [{ url: "https://example.com/1", provider: "gemini", searchQuery: request.query }],
+					provider: "gemini",
+					executionModel: request.executionModel,
+					usage: { billedUnits: 2, billedUnit: "requests", costUsd: 0.1 },
+					appliedOptions: [],
+					warnings: [],
+				};
+			},
+		};
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], provider: "gemini", executionModel: "gemini-3.5-flash", budget }, () => selected, context());
+		expect(seenModels).toEqual(["gemini-3.5-flash", "gemini-3.5-flash"]);
+		expect(result.executionModel).toBe("gemini-3.5-flash");
+		expect(result.usage).toMatchObject({ costUsd: 0.2, billedUnits: 4, billedUnit: "requests" });
+	});
+
 	it("returns a bounded partial result on provider failure", async () => {
 		const result = await executeResearch({ question: "main", budget }, () => provider(true), context());
 		expect(result.stopReason).toBe("provider-error");

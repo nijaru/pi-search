@@ -31,6 +31,8 @@ const capabilities: ProviderCapabilities = {
 	freshness: true,
 	excerpts: true,
 	social: true,
+	dateFilter: true,
+	handleFilter: true,
 };
 
 const profile: ProviderProfile = {
@@ -53,7 +55,17 @@ function postUrl(id: string): string {
 }
 
 function buildQuery(request: SearchRequest): string {
-	return request.query;
+	const terms = [request.query];
+	const included = request.social?.includeHandles ?? [];
+	if (included.length === 1) terms.push(`from:${included[0]}`);
+	if (included.length > 1) terms.push(`(${included.map((handle) => `from:${handle}`).join(" OR ")})`);
+	for (const handle of request.social?.excludeHandles ?? []) terms.push(`-from:${handle}`);
+	return terms.join(" ");
+}
+
+function xDate(value: string, endOfDay: boolean): string {
+	if (value.includes("T")) return value;
+	return `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
 }
 
 /** Build one bounded recent-search request. Pagination is intentionally explicit and absent. */
@@ -61,6 +73,9 @@ export function buildXRequest(request: SearchRequest, endpoint = X_RECENT_SEARCH
 	const normalized = validateSearchRequest(request);
 	if (normalized.domains?.include?.length || normalized.domains?.exclude?.length) {
 		throw createProviderError({ provider: "x", kind: "unsupported", message: "X API post search does not provide web-domain filters", retryable: false });
+	}
+	if (normalized.social?.understandImages === true || normalized.social?.understandVideos === true) {
+		throw createProviderError({ provider: "x", kind: "unsupported", message: "X API post search does not provide media understanding", retryable: false });
 	}
 	const params = new URLSearchParams({
 		query: buildQuery(normalized),
@@ -70,8 +85,10 @@ export function buildXRequest(request: SearchRequest, endpoint = X_RECENT_SEARCH
 		tweet_fields: "created_at,author_id,public_metrics",
 		expansions: "author_id",
 		user_fields: "username,name",
+		...(normalized.dateRange?.from === undefined ? {} : { start_time: xDate(normalized.dateRange.from, false) }),
+		...(normalized.dateRange?.to === undefined ? {} : { end_time: xDate(normalized.dateRange.to, true) }),
 	});
-	const appliedOptions: SearchOption[] = ["maxResults", "mode"];
+	const appliedOptions: SearchOption[] = ["maxResults", "mode", ...(normalized.dateRange === undefined ? [] : ["dateRange" as const]), ...(normalized.social?.includeHandles === undefined && normalized.social?.excludeHandles === undefined ? [] : ["social" as const])];
 	const warnings: SearchWarning[] = [];
 	if (normalized.mode === "fresh") {
 		warnings.push({ code: "unsupported-option", option: "mode", message: "X recent search is time-bounded by the endpoint; exact freshness ranking is not guaranteed" });

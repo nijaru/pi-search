@@ -150,6 +150,7 @@ export function summarizeProviderEvaluations(observations: readonly ProviderEval
 			...(total.inputTokens === undefined && entry.usage?.inputTokens === undefined ? {} : { inputTokens: (total.inputTokens ?? 0) + (entry.usage?.inputTokens ?? 0) }),
 			...(total.outputTokens === undefined && entry.usage?.outputTokens === undefined ? {} : { outputTokens: (total.outputTokens ?? 0) + (entry.usage?.outputTokens ?? 0) }),
 			...(total.totalTokens === undefined && entry.usage?.totalTokens === undefined ? {} : { totalTokens: (total.totalTokens ?? 0) + (entry.usage?.totalTokens ?? 0) }),
+			...(total.searchQueries === undefined && entry.usage?.searchQueries === undefined ? {} : { searchQueries: (total.searchQueries ?? 0) + (entry.usage?.searchQueries ?? 0) }),
 		}), {}),
 	}));
 }

@@ -30,6 +30,7 @@ describe("ParallelProvider", () => {
 		let calls = 0;
 		const configured = provider({ fetchImpl: async () => { calls += 1; return response(payload); } });
 		await expect(configured.search({ query: "q", domains: { include: ["example.com"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
+		await expect(configured.search({ query: "q", dateRange: { from: "2026-01-01" } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
 		expect(calls).toBe(0);
 	});
 

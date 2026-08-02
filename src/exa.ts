@@ -32,6 +32,7 @@ const capabilities: ProviderCapabilities = {
 	semantic: true,
 	excerpts: true,
 	domainFilter: true,
+	dateFilter: true,
 };
 
 const profile: ProviderProfile = {
@@ -47,6 +48,11 @@ function domainQuery(request: SearchRequest): Record<string, unknown> {
 	};
 }
 
+function exaDate(value: string, endOfDay: boolean): string {
+	if (value.includes("T")) return value;
+	return `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
+}
+
 export interface ExaRequestPlan {
 	readonly body: Record<string, unknown>;
 	readonly appliedOptions: readonly SearchOption[];
@@ -55,6 +61,9 @@ export interface ExaRequestPlan {
 
 export function buildExaRequest(request: SearchRequest): ExaRequestPlan {
 	const normalized = validateSearchRequest(request);
+	if (normalized.social !== undefined) {
+		throw createProviderError({ provider: "exa", kind: "unsupported", message: "Exa search does not provide a dedicated social/X constraint contract", retryable: false });
+	}
 	const warnings: SearchWarning[] = [];
 	const appliedOptions: SearchOption[] = ["maxResults", "mode"];
 	if (normalized.mode === "keyword") {
@@ -64,12 +73,15 @@ export function buildExaRequest(request: SearchRequest): ExaRequestPlan {
 		warnings.push({ code: "unsupported-option", option: "mode", message: "Exa search can return recent sources but this request does not impose a date cutoff" });
 	}
 	if (normalized.domains?.include !== undefined || normalized.domains?.exclude !== undefined) appliedOptions.push("domains");
+	if (normalized.dateRange !== undefined) appliedOptions.push("dateRange");
 	return {
 		body: {
 			query: normalized.query,
 			type: "auto",
 			numResults: normalized.maxResults,
 			contents: { highlights: true },
+			...(normalized.dateRange?.from === undefined ? {} : { startPublishedDate: exaDate(normalized.dateRange.from, false) }),
+			...(normalized.dateRange?.to === undefined ? {} : { endPublishedDate: exaDate(normalized.dateRange.to, true) }),
 			...domainQuery(normalized),
 		},
 		appliedOptions,

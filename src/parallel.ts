@@ -44,6 +44,9 @@ export interface ParallelRequestPlan {
 
 export function buildParallelRequest(request: SearchRequest): ParallelRequestPlan {
 	const normalized = validateSearchRequest(request);
+	if (normalized.dateRange !== undefined || normalized.social !== undefined) {
+		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search does not expose exact date-range or dedicated social/X constraints", retryable: false });
+	}
 	if (normalized.domains?.include?.length || normalized.domains?.exclude?.length) {
 		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search does not expose domain filters in the stable request contract", retryable: false });
 	}

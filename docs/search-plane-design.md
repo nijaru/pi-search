@@ -30,10 +30,12 @@ not only on the active model:
    Pi's model registry is eligible. This preserves the useful built-in search
    behavior without requiring the user to change models;
 3. an active Gemini or xAI Responses model uses its native grounding;
-4. configured Exa is the automatic direct path for other models;
-5. configured Brave is the last direct path when Exa is unavailable and its
+4. explicit `gemini`, `xai`, or `xai-x` hints may resolve a compatible registry
+   model through `executionModel` without changing the active model;
+5. configured Exa is the automatic direct path for other models;
+6. configured Brave is the last direct path when Exa is unavailable and its
    free-mode admission policy allows it;
-6. Parallel and exact X search remain explicit capabilities.
+7. Parallel and exact X search remain explicit capabilities.
 
 Cross-provider native search is an intentional use of credentials already
 configured in Pi. The selected execution provider and model are reported in
@@ -47,10 +49,12 @@ credential scan is added.
 ## Failure policy
 
 Automatic routing may carry at most one alternative backend. A failed primary
-may use that one alternative only for availability-like failures (auth,
-network, timeout, rate limit, HTTP, or unavailable), and only for automatic
-routing. Bad requests, unsupported constraints, malformed data, cancellation,
-and explicit provider hints remain final. The fallback is visible as a warning
+may use that one alternative only for failures known to be rejected or
+unavailable before a billable result can be produced (authentication, rate
+limit, or unavailable), and only for automatic routing. Network, timeout, and
+post-dispatch HTTP failures have unknown effects and remain final. Bad
+requests, unsupported constraints, malformed data, cancellation, and explicit
+provider hints also remain final. The fallback is visible as a warning
 with the failed provider and error class. There is no retry loop, fan-out,
 provider comparison, or fallback after a successful response.
 
@@ -80,8 +84,9 @@ identity, deduplication, hard domain filtering, and field bounds after adapter
 normalization. Model-mediated adapters must not read Pi auth state globally.
 
 The OpenAI/Codex adapter extracts the Responses message answer and URL
-annotations instead of discarding them. Gemini and xAI can add the same typed
-answer when their payload contains grounded text. Direct providers remain
+annotations instead of discarding them. Gemini derives answer citations from
+`groundingSupports`; xAI distinguishes all encountered citations from inline
+answer annotations. Direct providers remain
 evidence-first unless they expose a stable answer contract.
 
 ## Verification contract

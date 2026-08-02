@@ -38,6 +38,7 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "   " })).toThrow("must not be empty");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 0 })).toThrow("maxResults");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 21 })).toThrow("maxResults");
+		expect(() => validateSearchRequest({ query: "q", executionModel: 42 as never })).toThrow("executionModel must be a string");
 		expect(() => validateSearchRequest({ query: "q", domains: { include: ["example.com"], exclude: ["example.com"] } })).toThrow(
 			"both included and excluded",
 		);
@@ -48,6 +49,11 @@ describe("search boundary", () => {
 			query: "q",
 			domains: { include: Array.from({ length: 17 }, () => `example${"a".repeat(240)}.com`) },
 		})).toThrow("aggregate limit");
+		expect(validateSearchRequest({ query: "q", executionModel: " gemini-3.5-flash ", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["@xai"] } })).toMatchObject({ executionModel: "gemini-3.5-flash", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["xai"] } });
+		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-03", to: "2026-01-02" } })).toThrow("not be later");
+		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-02-30" } })).toThrow("ISO-8601");
+		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-01T12:00" } })).toThrow("ISO-8601");
+		expect(() => validateSearchRequest({ query: "q", social: { includeHandles: ["xai"], excludeHandles: ["@xai"] } })).toThrow("both included and excluded");
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {
@@ -105,7 +111,7 @@ describe("search boundary", () => {
 			id: "openai",
 			capabilities: {},
 			profile: { auth: "modelRegistry", costModel: "unknown" },
-			search: async () => { throw createProviderError({ provider: "openai", kind: "network", message: "primary unavailable", retryable: true }); },
+			search: async () => { throw createProviderError({ provider: "openai", kind: "auth", message: "primary unavailable", retryable: false }); },
 		};
 		const fallback: Provider = {
 			...makeProvider(async (request) => { fallbackCalls += 1; return successResponse(request.query); }),
@@ -116,6 +122,19 @@ describe("search boundary", () => {
 		expect(response.provider).toBe("exa");
 		expect(response.attemptedProviders).toEqual(["openai", "exa"]);
 		expect(response.warnings).toContainEqual(expect.objectContaining({ code: "provider-fallback", message: expect.stringContaining("bounded automatic fallback") }));
+	});
+
+	it("does not fallback after an outcome-unknown network failure", async () => {
+		let fallbackCalls = 0;
+		const primary: Provider = {
+			id: "openai",
+			capabilities: {},
+			profile: { auth: "modelRegistry", costModel: "unknown" },
+			search: async () => { throw createProviderError({ provider: "openai", kind: "network", message: "request outcome unknown", retryable: true }); },
+		};
+		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
+		await expect(executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" })).rejects.toMatchObject({ provider: "openai", kind: "network" });
+		expect(fallbackCalls).toBe(0);
 	});
 
 	it("enriches selected sources through the bounded fetch path only when requested", async () => {

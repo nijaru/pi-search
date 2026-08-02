@@ -388,13 +388,21 @@ function searchModelCandidates(provider: OpenAIProviderId, active: ProviderModel
 	return candidates;
 }
 
-async function selectSearchExecution(provider: OpenAIProviderId, active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"]): Promise<SearchExecution> {
+async function selectSearchExecution(provider: OpenAIProviderId, active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<SearchExecution> {
 	if (registry === undefined) {
 		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
 	}
-	const selected = searchModelCandidates(provider, active, registry)[0];
+	const candidates = searchModelCandidates(provider, active, registry);
+	const selected = request.executionModel === undefined ? candidates[0] : candidates.find((candidate) => candidate.id === request.executionModel);
 	if (selected === undefined) {
-		throw createProviderError({ provider, kind: "unsupported", message: `No ${provider} Responses model is available for native search`, retryable: false });
+		throw createProviderError({
+			provider,
+			kind: "unsupported",
+			message: request.executionModel === undefined
+				? `No ${provider} Responses model is available for native search`
+				: `Model ${request.executionModel} is not an available ${provider} Responses search model`,
+			retryable: false,
+		});
 	}
 	let auth: ProviderAuthResult;
 	try {
@@ -432,6 +440,9 @@ function buildInstructions(request: SearchRequest): string {
 /** Build a native OpenAI web-search request and surface unsupported hard options. */
 export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProviderId): OpenAIRequestPlan {
 	const normalized = validateSearchRequest(request);
+	if (normalized.dateRange !== undefined || normalized.social !== undefined) {
+		throw createProviderError({ provider, kind: "unsupported", message: "OpenAI native search does not expose exact date-range or dedicated social/X constraints", retryable: false });
+	}
 	const appliedOptions: SearchOption[] = ["maxResults"];
 	const warnings: SearchWarning[] = [];
 	if (normalized.mode === "auto" || normalized.mode === "keyword" || normalized.mode === "fresh") {
@@ -717,7 +728,7 @@ export class OpenAIProvider implements Provider {
 		if (signal.aborted) {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}
-		const execution = await selectSearchExecution(this.id, model, context.modelRegistry);
+		const execution = await selectSearchExecution(this.id, model, context.modelRegistry, normalized);
 		if (signal.aborted) {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}

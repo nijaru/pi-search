@@ -8,6 +8,10 @@ export const MAX_QUERY_LENGTH = 2_000;
 export const MAX_SEARCH_DOMAIN_LENGTH = 253;
 export const MAX_SEARCH_DOMAIN_COUNT = 20;
 export const MAX_SEARCH_DOMAIN_BYTES = 4_096;
+export const MAX_EXECUTION_MODEL_LENGTH = 500;
+export const MAX_SEARCH_HANDLE_COUNT = 20;
+export const MAX_SEARCH_HANDLE_LENGTH = 15;
+export const MAX_SEARCH_DATE_LENGTH = 64;
 /** Native model-mediated search can spend tens of seconds grounding a query. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
 export const DEFAULT_CONTENT_RESULTS = 2;
@@ -58,6 +62,79 @@ function normalizeDomainList(value: readonly string[] | undefined, field: string
 	return [...new Set(domains)];
 }
 
+function normalizeDate(value: unknown, field: string): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string" || value.trim().length === 0) throw invalidRequest(`Search ${field} must be an ISO-8601 date or date-time`);
+	const normalized = value.trim();
+	const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?(Z|[+-]\d{2}:?\d{2}))?$/.exec(normalized);
+	if (normalized.length > MAX_SEARCH_DATE_LENGTH || match === null) throw invalidRequest(`Search ${field} must be an ISO-8601 date or date-time`);
+	const [, yearText, monthText, dayText, hourText, minuteText, secondText, , offsetText] = match;
+	const year = Number(yearText);
+	const month = Number(monthText);
+	const day = Number(dayText);
+	const hour = hourText === undefined ? 0 : Number(hourText);
+	const minute = minuteText === undefined ? 0 : Number(minuteText);
+	const second = secondText === undefined ? 0 : Number(secondText);
+	const offset = offsetText === undefined || offsetText === "Z" ? undefined : offsetText.replace(":", "");
+	const offsetHour = offset === undefined ? 0 : Number(offset.slice(1, 3));
+	const offsetMinute = offset === undefined ? 0 : Number(offset.slice(3, 5));
+	const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+	if (
+		month < 1 || month > 12 || day < 1 || day > daysInMonth ||
+		hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59 ||
+		offsetHour > 23 || offsetMinute > 59 || !Number.isFinite(Date.parse(normalized))
+	) {
+		throw invalidRequest(`Search ${field} must be an ISO-8601 date or date-time`);
+	}
+	return normalized;
+}
+
+function normalizeDateRange(value: SearchRequest["dateRange"]): SearchRequest["dateRange"] | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search dateRange must be an object");
+	const from = normalizeDate(value.from, "dateRange.from");
+	const to = normalizeDate(value.to, "dateRange.to");
+	if (from !== undefined && to !== undefined && Date.parse(from) > Date.parse(to)) throw invalidRequest("Search dateRange.from must not be later than dateRange.to");
+	if (from === undefined && to === undefined) return undefined;
+	return { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
+}
+
+function normalizeHandles(value: readonly string[] | undefined, field: string): string[] | undefined {
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value)) throw invalidRequest(`Search ${field} must be an array of X handles`);
+	if (value.length > MAX_SEARCH_HANDLE_COUNT) throw invalidRequest(`Search ${field} must contain at most ${MAX_SEARCH_HANDLE_COUNT} handles`);
+	const handles = value.map((handle, index) => {
+		if (typeof handle !== "string") throw invalidRequest(`Search ${field}[${index}] must be a string`);
+		const normalized = handle.trim().replace(/^@/, "").toLowerCase();
+		if (normalized.length === 0 || normalized.length > MAX_SEARCH_HANDLE_LENGTH || !/^[A-Za-z0-9_]+$/.test(normalized)) {
+			throw invalidRequest(`Search ${field}[${index}] must be an X handle without spaces or punctuation`);
+		}
+		return normalized;
+	});
+	return [...new Set(handles)];
+}
+
+function normalizeSocial(value: SearchRequest["social"]): SearchRequest["social"] | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search social must be an object");
+	if (value.understandImages !== undefined && typeof value.understandImages !== "boolean") throw invalidRequest("Search social.understandImages must be a boolean");
+	if (value.understandVideos !== undefined && typeof value.understandVideos !== "boolean") throw invalidRequest("Search social.understandVideos must be a boolean");
+	const includeHandles = normalizeHandles(value.includeHandles, "social.includeHandles");
+	const excludeHandles = normalizeHandles(value.excludeHandles, "social.excludeHandles");
+	if (includeHandles !== undefined && excludeHandles !== undefined) {
+		const excluded = new Set(excludeHandles);
+		const overlap = includeHandles.find((handle) => excluded.has(handle));
+		if (overlap !== undefined) throw invalidRequest(`Search social handle cannot be both included and excluded: ${overlap}`);
+	}
+	if (includeHandles === undefined && excludeHandles === undefined && value.understandImages === undefined && value.understandVideos === undefined) return undefined;
+	return {
+		...(includeHandles === undefined ? {} : { includeHandles }),
+		...(excludeHandles === undefined ? {} : { excludeHandles }),
+		...(value.understandImages === undefined ? {} : { understandImages: value.understandImages }),
+		...(value.understandVideos === undefined ? {} : { understandVideos: value.understandVideos }),
+	};
+}
+
 /** Validate and normalize the public search request before any provider call. */
 export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (request === null || typeof request !== "object") {
@@ -78,6 +155,13 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > MAX_RESULTS) {
 		throw invalidRequest(`Search maxResults must be an integer between 1 and ${MAX_RESULTS}`);
 	}
+	if (request.executionModel !== undefined && typeof request.executionModel !== "string") throw invalidRequest("Search executionModel must be a string");
+	const executionModel = request.executionModel === undefined ? undefined : request.executionModel.trim();
+	if (executionModel !== undefined && (executionModel.length === 0 || executionModel.length > MAX_EXECUTION_MODEL_LENGTH)) {
+		throw invalidRequest(`Search executionModel must be between 1 and ${MAX_EXECUTION_MODEL_LENGTH} characters`);
+	}
+	const dateRange = normalizeDateRange(request.dateRange);
+	const social = normalizeSocial(request.social);
 	const answerMode = request.answerMode ?? "auto";
 	if (answerMode !== "auto" && answerMode !== "evidence") {
 		throw invalidRequest("Search answerMode must be auto or evidence");
@@ -113,6 +197,9 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		query,
 		mode: request.mode ?? "auto",
 		maxResults,
+		...(executionModel === undefined ? {} : { executionModel }),
+		...(dateRange === undefined ? {} : { dateRange }),
+		...(social === undefined ? {} : { social }),
 		answerMode,
 		includeContent,
 		contentResults,
@@ -209,7 +296,10 @@ export async function executeSearch(
 
 function canUseAutomaticFallback(error: unknown): boolean {
 	if (!(error instanceof SearchToolError)) return false;
-	return error.kind === "auth" || error.kind === "network" || error.kind === "timeout" || error.kind === "rateLimit" || error.kind === "http" || error.kind === "unavailable";
+	// A successful provider request can be billed before a network, timeout, or
+	// 5xx error reaches us. Only failures that are known to have been rejected
+	// or prevented from dispatching may consume the bounded alternative.
+	return error.kind === "auth" || error.kind === "rateLimit" || error.kind === "unavailable";
 }
 
 /** Execute an automatic selection with at most one visible alternative. */

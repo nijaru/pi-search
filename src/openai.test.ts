@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ProviderContext, SearchRequest } from "./contracts";
-import { createOpenAIProvider, normalizeOpenAIResponse, type OpenAIFetch } from "./openai";
+import { buildOpenAIRequest, createOpenAIProvider, normalizeOpenAIResponse, type OpenAIFetch } from "./openai";
 
 function model(provider: "openai" | "openai-codex" = "openai", api = provider === "openai" ? "openai-responses" : "openai-codex-responses") {
 	return {
@@ -140,6 +140,27 @@ describe("OpenAIProvider", () => {
 		expect(body?.model).toBe("gpt-5.5");
 	});
 
+	it("honors an explicitly selected OpenAI execution model", async () => {
+		let body: Record<string, unknown> | undefined;
+		const selected = { ...model("openai"), id: "gpt-5.5" };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q", executionModel: "gpt-5.5" }, new AbortController().signal, {
+			model: { ...model("openai"), id: "gpt-5.4" },
+			modelRegistry: {
+				getModels: () => [selected],
+				getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "registry-key" }),
+			},
+		});
+		expect(body?.model).toBe("gpt-5.5");
+	});
+
 	it("selects an authenticated same-provider search model", async () => {
 		let authenticatedModel = "";
 		let body: Record<string, unknown> | undefined;
@@ -269,6 +290,11 @@ describe("OpenAIProvider", () => {
 		});
 		await provider.search({ query: "q", domains: { include: ["allowed.example"], exclude: ["blocked.example"] } }, new AbortController().signal, context());
 		expect(body?.tools).toEqual([{ type: "web_search", filters: { allowed_domains: ["allowed.example"], blocked_domains: ["blocked.example"] } }]);
+	});
+
+	it("rejects unsupported hard date and social constraints", () => {
+		expect(() => buildOpenAIRequest({ query: "q", dateRange: { from: "2026-01-01" } }, "openai")).toThrow(/exact date-range/);
+		expect(() => buildOpenAIRequest({ query: "q", social: { includeHandles: ["xai"] } }, "openai")).toThrow(/social\/X/);
 	});
 
 	it("cancels a pending error body when the caller aborts", async () => {

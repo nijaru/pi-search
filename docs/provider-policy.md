@@ -14,7 +14,9 @@ call for automatic routing:
    active model.
 3. Active Google Gemini and xAI Responses models use native grounding
    automatically; selecting that active model is the user's metered-call
-   decision. `xai-x` is explicit for X-specific retrieval.
+   decision. Explicit `gemini`, `xai`, and `xai-x` hints may use a compatible
+   Pi-registry model through `executionModel`; `xai-x` is explicit for
+   X-specific retrieval.
 4. Other/local models use configured Exa automatically when its hard
    constraints are supported. Exa is preferred because it returns semantic
    evidence and highlights.
@@ -28,19 +30,21 @@ call for automatic routing:
 6. Parallel and official X API require an explicit provider hint.
 
 An automatic primary failure may use at most one eligible alternative for
-availability-like errors. The response reports the failed provider and
-fallback warning. Explicit provider hints, invalid/unsupported/malformed
-requests, and cancellation remain final. There are no retry loops, hidden
-fan-out, or provider comparisons.
+authentication, rate-limit, or unavailable errors known not to have produced a
+billable result. Network, timeout, and post-dispatch HTTP failures remain
+final because their effects are uncertain. The response reports the failed
+provider and fallback warning. Explicit provider hints, invalid/unsupported/
+malformed requests, and cancellation remain final. There are no retry loops,
+hidden fan-out, or provider comparisons.
 
 ## Shipped providers
 
 | Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
 | OpenAI/Codex | Native and registry-available built-in search | Active model first; one authenticated registry model may serve other models | Pi model registry |
-| Gemini | Native Google Search grounding for active Gemini | Active model selects it; one bounded automatic fallback may apply | Pi model registry |
-| xAI | Native web grounding for active xAI Responses | Active model selects it; one bounded automatic fallback may apply | Pi model registry |
-| xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
+| Gemini | Native Google Search grounding for active Gemini; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including Pi xAI/Gemini auth |
+| xAI | Native web grounding for active xAI Responses; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including xAI OAuth |
+| xAI X | Explicit social/X grounding with handle/date/media controls | Explicit `xai-x`; no fallback | Pi model registry, including xAI OAuth |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Selected automatically when configured; one visible fallback may use Brave | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
@@ -48,8 +52,8 @@ fan-out, or provider comparisons.
 
 The word “fallback” for Brave primarily means fallback in model *selection*
 when no native provider applies. Automatic routing also permits one visible
-alternative after an availability-like primary failure; explicit providers
-never use this behavior.
+alternative after a safe authentication, rate-limit, or unavailable failure;
+explicit providers never use this behavior.
 
 ## Why both native and direct providers exist
 
@@ -57,8 +61,10 @@ Native grounding is appropriate when the active model already owns a search
 capability, especially OpenAI/Codex, Gemini, and xAI. When another model is
 active, an already authenticated OpenAI/Codex model in Pi's registry can still
 provide the built-in search path; the response identifies that execution
-model. This avoids forcing a model switch while keeping credentials inside Pi's
-registry boundary.
+model. Explicit Gemini and xAI hints can use a registry model selected through
+`executionModel`, which supports Pi's subscription OAuth without silently
+spending it during automatic routing. This avoids forcing a model switch while
+keeping credentials inside Pi's registry boundary.
 
 Exa is the automatic semantic option for local and other models because it
 returns useful highlights and source evidence. Brave is the cost-controlled
@@ -78,9 +84,13 @@ Unsupported hard constraints are rejected or surfaced:
 - OpenAI/Codex Responses accept allowed and blocked domain filters; the shared
   cleanup boundary still enforces the returned evidence.
 - Gemini grounding has no hard domain-filter contract.
-- xAI web search supports allowed/excluded domains; xAI X search does not.
+- xAI web search supports allowed/excluded domains; xAI X search supports
+  bounded handles, ISO date ranges, and opt-in image/video understanding.
 - Parallel's stable Search API contract does not expose domain filters.
-- Exa and Brave apply domain filters and return normalized evidence.
+- Exa applies domain and published-date filters; Brave applies domain filters
+  and returns normalized evidence.
+- Official X recent search maps bounded date ranges and handle operators; it
+  does not provide provider-side image/video understanding.
 
 Freshness and keyword modes are retrieval hints for model-mediated or semantic
 providers. They produce an explicit warning when the provider cannot guarantee
@@ -108,9 +118,10 @@ capability; a general provider returning `x.com` links is not equivalent.
 
 ## Transient failures
 
-There are no same-provider retries. Authentication, network, timeout,
-rate-limit, HTTP, and unavailable failures may consume the single bounded
-alternative for automatic routing; the response records that decision.
+There are no same-provider retries. Authentication, rate-limit, and
+unavailable failures known not to have produced a billable result may consume
+the single bounded alternative for automatic routing. Network, timeout, and
+post-dispatch HTTP failures remain final because their effects are uncertain.
 Invalid requests, unsupported filters, malformed responses, and cancellation
 are not retried or rerouted. Failures remain visible with stable provider,
 status, request ID, retry timing, and retryability fields. A caller may retry

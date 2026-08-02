@@ -15,6 +15,7 @@ import { executeSearch } from "./search";
 import { providerContextFromPi } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
 import { searchUrlIdentity } from "./search-cleanup";
+import { MAX_EXECUTION_MODEL_LENGTH } from "./search";
 
 const ResearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x"] as const) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x">;
 export const MAX_RESEARCH_OUTPUT_CHARS = 45_000;
@@ -25,6 +26,7 @@ export const WebResearchParameters = Type.Object({
 	question: Type.String({ minLength: 1, maxLength: 2_000, description: "Research question" }),
 	queries: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 8, description: "Explicit search queries; defaults to the question" })),
 	provider: Type.Optional(ResearchProviderSchema),
+	executionModel: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_EXECUTION_MODEL_LENGTH, description: "Model id for an explicit model-mediated provider" })),
 	fetchResults: Type.Optional(Type.Integer({ minimum: 0, maximum: 10, description: "Number of result URLs to fetch after searching" })),
 	budget: Type.Object({
 		maxSteps: Type.Integer({ minimum: 1, maximum: 32 }),
@@ -68,12 +70,16 @@ function validateResearchRequest(request: ResearchRequest): ResearchRequest {
 	});
 	if (queries !== undefined && queries.length === 0) throw invalid("Research queries must not be empty");
 	if (request.budget.maxOutputChars > MAX_RESEARCH_OUTPUT_CHARS) throw budgetError(`maxOutputChars must be at most ${MAX_RESEARCH_OUTPUT_CHARS}`);
+	if (request.executionModel !== undefined && typeof request.executionModel !== "string") throw invalid("executionModel must be a string");
+	const executionModel = request.executionModel === undefined ? undefined : request.executionModel.trim();
+	if (executionModel !== undefined && (executionModel.length === 0 || executionModel.length > MAX_EXECUTION_MODEL_LENGTH)) throw invalid(`executionModel must be between 1 and ${MAX_EXECUTION_MODEL_LENGTH} characters`);
 	const fetchResults = request.fetchResults ?? 0;
 	if (!Number.isInteger(fetchResults) || fetchResults < 0 || fetchResults > 10) throw invalid("fetchResults must be between 0 and 10");
 	return {
 		...request,
 		question: request.question.trim(),
 		...(queries === undefined ? {} : { queries }),
+		...(executionModel === undefined ? {} : { executionModel }),
 		fetchResults,
 	};
 }
@@ -99,8 +105,9 @@ function researchUsage(usage: ProviderUsage | undefined): string | undefined {
 	if (usage === undefined) return undefined;
 	const parts: string[] = [];
 	if (usage.costUsd !== undefined) parts.push(`cost $${usage.costUsd.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`);
+	if (usage.billedUnits !== undefined && !(usage.billedUnit === "tokens" && usage.totalTokens === usage.billedUnits)) parts.push(`${usage.billedUnits} ${usage.billedUnit ?? "billed units"}`);
 	if (usage.totalTokens !== undefined) parts.push(`${usage.totalTokens} tokens`);
-	if (usage.billedUnits !== undefined) parts.push(`${usage.billedUnits} ${usage.billedUnit ?? "billed units"}`);
+	if (usage.searchQueries !== undefined) parts.push(`${usage.searchQueries} search quer${usage.searchQueries === 1 ? "y" : "ies"}`);
 	return parts.length === 0 ? undefined : parts.join("; ");
 }
 
@@ -108,7 +115,7 @@ function researchUsage(usage: ProviderUsage | undefined): string | undefined {
 export function renderResearchResponse(response: ResearchResponse, maxChars = MAX_RESEARCH_OUTPUT_CHARS): string {
 	const lines = [
 		`Question: ${compactText(response.question, 2_000)}`,
-		`Provider: ${response.provider}`,
+		`Provider: ${response.provider}${response.executionModel === undefined ? "" : `/${response.executionModel}`}`,
 		`Status: ${response.stopReason}`,
 		`Steps: ${response.stepsCompleted} · provider calls: ${response.providerCalls} · fetched: ${response.fetchesCompleted}/${response.fetchAttempts}`,
 	];
@@ -148,7 +155,8 @@ export function renderResearchResponse(response: ResearchResponse, maxChars = MA
 export function renderResearchResult(response: ResearchResponse, expanded: boolean, theme: Parameters<NonNullable<ToolDefinition["renderResult"]>>[2]): string {
 	const statusColor = response.stopReason === "completed" ? "success" : "warning";
 	let text = theme.fg(statusColor, `Research ${response.stopReason}`);
-	text += theme.fg("muted", ` · ${response.providerCalls} search${response.providerCalls === 1 ? "" : "es"} · ${response.results.length} result${response.results.length === 1 ? "" : "s"} · ${response.fetched.length} fetched`);
+	const providerLabel = response.executionModel === undefined ? response.provider : `${response.provider}/${response.executionModel}`;
+	text += theme.fg("muted", ` · ${providerLabel} · ${response.providerCalls} search${response.providerCalls === 1 ? "" : "es"} · ${response.results.length} result${response.results.length === 1 ? "" : "s"} · ${response.fetched.length} fetched`);
 	if (response.warnings.length > 0) text += theme.fg("warning", ` · ${response.warnings.length} warning${response.warnings.length === 1 ? "" : "s"}`);
 	if (expanded) {
 		for (const result of response.results.slice(0, 8)) text += `\n${theme.fg("accent", compactText(result.title ?? result.domain ?? result.url, 160))} ${theme.fg("dim", result.url)}`;
@@ -163,6 +171,7 @@ function boundedResponse(response: ResearchResponse, requestedMaxOutputChars: nu
 	let current: ResearchResponse = {
 		...response,
 		question: response.question.slice(0, 2_000),
+		...(response.executionModel === undefined ? {} : { executionModel: response.executionModel.slice(0, MAX_EXECUTION_MODEL_LENGTH) }),
 		warnings: response.warnings.slice(0, 8).map((item) => ({ ...item, message: item.message.slice(0, 500) })),
 	};
 	let truncated = false;
@@ -205,6 +214,7 @@ export async function executeResearch(
 	const firstRequest: SearchRequest = {
 		query: queries[0]!,
 		...(normalized.provider === undefined ? {} : { providerHint: normalized.provider }),
+		...(normalized.executionModel === undefined ? {} : { executionModel: normalized.executionModel }),
 	};
 	let provider: Provider;
 	try {
@@ -231,10 +241,15 @@ export async function executeResearch(
 	let inputTokens = 0;
 	let outputTokens = 0;
 	let totalTokens = 0;
+	let billedUnits = 0;
+	let billedUnit: string | undefined;
+	let billedUnitsConsistent = true;
+	let searchQueries = 0;
 	let hasInputTokens = false;
 	let hasOutputTokens = false;
 	let hasTotalTokens = false;
 	let latestRateLimits: ProviderUsage["rateLimits"];
+	let executionModel: string | undefined;
 	const results: SearchResult[] = [];
 	const fetched: FetchedContent[] = [];
 	const warnings: SearchWarning[] = [];
@@ -261,6 +276,7 @@ export async function executeResearch(
 				const response = await executeSearch(provider, {
 					query,
 					...(normalized.provider === undefined ? {} : { providerHint: normalized.provider }),
+					...(normalized.executionModel === undefined ? {} : { executionModel: normalized.executionModel }),
 				}, {
 					signal: deadlineController.signal,
 					timeoutMs: options.searchTimeoutMs ?? remaining(deadline),
@@ -268,6 +284,7 @@ export async function executeResearch(
 				});
 				results.push(...response.results);
 				warnings.push(...response.warnings);
+				if (response.executionModel !== undefined) executionModel = response.executionModel;
 				const responseUsage = response.usage;
 				costUsd += responseUsage?.costUsd ?? estimatedCost;
 				if (responseUsage?.inputTokens !== undefined) {
@@ -282,6 +299,17 @@ export async function executeResearch(
 					totalTokens += responseUsage.totalTokens;
 					hasTotalTokens = true;
 				}
+				if (responseUsage?.billedUnits !== undefined) {
+					const currentUnit = responseUsage.billedUnit ?? "billed units";
+					if (billedUnit !== undefined && billedUnit !== currentUnit) {
+						billedUnitsConsistent = false;
+						warnings.push(warning("Research provider reported mixed billing units; aggregate billed units were omitted"));
+					} else {
+						billedUnit = currentUnit;
+						billedUnits += responseUsage.billedUnits;
+					}
+				}
+				if (responseUsage?.searchQueries !== undefined) searchQueries += responseUsage.searchQueries;
 				if (responseUsage?.rateLimits !== undefined) latestRateLimits = responseUsage.rateLimits;
 				if (normalized.budget.maxCostUsd !== undefined && costUsd > normalized.budget.maxCostUsd) {
 					warnings.push(warning("Research stopped after reported provider usage exceeded maxCostUsd"));
@@ -336,12 +364,15 @@ export async function executeResearch(
 			...(costUsd > 0 ? { costUsd } : {}),
 			...(hasInputTokens ? { inputTokens } : {}),
 			...(hasOutputTokens ? { outputTokens } : {}),
-			...(hasTotalTokens ? { totalTokens, billedUnits: totalTokens, billedUnit: "tokens" } : {}),
+			...(hasTotalTokens ? { totalTokens } : {}),
+			...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
+			...(searchQueries > 0 ? { searchQueries } : {}),
 			...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
 		};
 		const response: ResearchResponse = {
 			question: normalized.question,
 			provider: provider.id,
+			...(executionModel === undefined ? {} : { executionModel }),
 			results,
 			fetched,
 			stepsCompleted,
@@ -367,7 +398,7 @@ export function createWebResearchTool(
 	return defineTool({
 		name: "web_research",
 		label: "Web Research",
-		description: "Run an explicit, bounded sequence of web searches and optional source fetches. No hidden provider fan-out or answer synthesis.",
+		description: "Run an explicit, bounded sequence of web searches and optional source fetches. Use provider plus executionModel for deliberate model-mediated selection. No hidden provider fan-out or answer synthesis.",
 		promptSnippet: "Run bounded multi-query web research using explicit queries and budgets",
 		parameters: WebResearchParameters,
 		async execute(_toolCallId, params, signal, _onUpdate, context) {
@@ -376,6 +407,7 @@ export function createWebResearchTool(
 					question: params.question,
 					...(params.queries === undefined ? {} : { queries: params.queries }),
 					...(params.provider === undefined ? {} : { provider: params.provider }),
+					...(params.executionModel === undefined ? {} : { executionModel: params.executionModel }),
 					...(params.fetchResults === undefined ? {} : { fetchResults: params.fetchResults }),
 					budget: params.budget,
 				}, providerResolver, context, options, signal);

@@ -32,6 +32,11 @@ describe("BraveProvider", () => {
 		expect(plan.warnings).toEqual([]);
 	});
 
+	it("rejects unsupported exact dates and social constraints", () => {
+		expect(() => buildBraveRequest({ query: "q", dateRange: { from: "2026-01-01" } })).toThrow(/exact date-range/);
+		expect(() => buildBraveRequest({ query: "q", social: { includeHandles: ["xai"] } })).toThrow(/social\/X/);
+	});
+
 	it("normalizes evidence and post-filters domains", () => {
 		const result = normalizeBraveResponse(
 			{

@@ -2,12 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Provider, SearchResponse } from "./contracts";
 import { createSearchRouter } from "./router";
 
-function provider(id: Provider["id"], capabilities: Provider["capabilities"] = {}): Provider {
+function provider(id: Provider["id"], capabilities: Provider["capabilities"] = {}, auth: "none" | "modelRegistry" = "none"): Provider {
 	const response: SearchResponse = { query: "q", results: [], provider: id, appliedOptions: [], warnings: [] };
 	return {
 		id,
 		capabilities,
-		profile: { auth: "none", costModel: "free" },
+		profile: { auth, costModel: "free" },
 		search: async () => response,
 	};
 }
@@ -28,9 +28,9 @@ function availableModel(provider: string, api: string, id = "gpt-5.5"): Record<s
 describe("search provider router", () => {
 	const nativeOpenAI = provider("openai", { keyword: true, freshness: true, domainFilter: true });
 	const nativeCodex = provider("openai-codex", { keyword: true, freshness: true, domainFilter: true });
-	const nativeGemini = provider("gemini", { freshness: true, semantic: true });
-	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true });
-	const exa = provider("exa", { keyword: true, freshness: true, semantic: true, domainFilter: true });
+	const nativeGemini = provider("gemini", { freshness: true, semantic: true }, "modelRegistry");
+	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true }, "modelRegistry");
+	const exa = provider("exa", { keyword: true, freshness: true, semantic: true, domainFilter: true, dateFilter: true });
 	const parallel = provider("parallel", { keyword: true, freshness: true, semantic: true });
 	const x = provider("x", { keyword: true, freshness: true, excerpts: true, social: true });
 	const brave = provider("brave", { keyword: true, freshness: true, domainFilter: true });
@@ -62,11 +62,33 @@ describe("search provider router", () => {
 	});
 
 	it("selects configured native grounding before Brave without an extra opt-in", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry"), brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
 		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
 		expect(route({ query: "q", mode: "keyword", providerHint: "gemini" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
 		expect(route({ query: "q", mode: "keyword", providerHint: "xai" }, context("xai", "openai-responses")).provider.id).toBe("xai");
+		expect(route({ query: "q", social: { includeHandles: ["xai"] } }, context("xai", "openai-responses")).provider.id).toBe("xai-x");
+	});
+
+	it("does not dispatch active Gemini when it cannot honor a hard domain filter", () => {
+		const route = createSearchRouter({ gemini: nativeGemini, exa, exaConfigured: true });
+		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("google", "google-generative-ai")).provider.id).toBe("exa");
+	});
+
+	it("does not silently drop hard date constraints on native OpenAI", () => {
+		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true });
+		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("openai", "openai-responses")).provider.id).toBe("exa");
+	});
+
+	it("allows explicit registry-backed Gemini and xAI execution", () => {
+		const route = createSearchRouter({ gemini: nativeGemini, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry") });
+		expect(route({ query: "q", providerHint: "gemini", executionModel: "gemini-3.5-flash" }, context("openrouter", "openai-completions", [availableModel("google", "google-generative-ai", "gemini-3.5-flash")])).provider.id).toBe("gemini");
+		expect(route({ query: "q", providerHint: "xai-x", executionModel: "grok-4.5" }, context("openrouter", "openai-completions", [availableModel("xai", "openai-responses", "grok-4.5")])).provider.id).toBe("xai-x");
+	});
+
+	it("requires an explicit provider for an execution model", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true });
+		expect(() => route({ query: "q", executionModel: "gemini-3.5-flash" }, context("openrouter"))).toThrow(/explicit model-mediated provider hint/);
 	});
 
 	it("allows the explicit native alias for configured grounded models", () => {

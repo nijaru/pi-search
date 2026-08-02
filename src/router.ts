@@ -37,9 +37,16 @@ function unavailable(message: string, provider: ProviderId = "router"): never {
 
 function canServe(provider: Provider, request: SearchRequest): boolean {
 	// Search modes are retrieval hints. Providers that cannot guarantee a hint
-	// must report that limitation in their response rather than being rejected
-	// during routing; domain filters remain hard constraints.
+	// must report that limitation in their response; hard constraints and
+	// explicit model-mediated options must not be silently dropped.
 	if ((request.domains?.include?.length || request.domains?.exclude?.length) && provider.capabilities.domainFilter !== true) return false;
+	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return false;
+	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return false;
+	if (request.social !== undefined) {
+		if (provider.capabilities.social !== true) return false;
+		if ((request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined) && provider.capabilities.handleFilter !== true) return false;
+		if ((request.social.understandImages === true || request.social.understandVideos === true) && provider.capabilities.mediaUnderstanding !== true) return false;
+	}
 	return true;
 }
 
@@ -52,16 +59,18 @@ function nativeModelCompatible(provider: ProviderId, model: ExtensionContext["mo
 	return false;
 }
 
-function availableNativeModel(provider: ProviderId, context: ExtensionContext): boolean {
-	if (nativeModelCompatible(provider, context.model)) return true;
+function availableNativeModel(provider: ProviderId, context: ExtensionContext, requestedModel?: string): boolean {
+	const compatible = (model: NonNullable<ExtensionContext["model"]>): boolean => {
+		if (provider === "openai") return model.provider === "openai" && model.api === "openai-responses";
+		if (provider === "openai-codex") return model.provider === "openai-codex" && model.api === "openai-codex-responses";
+		if (provider === "gemini") return model.provider === "google" && model.api === "google-generative-ai";
+		if (provider === "xai" || provider === "xai-x") return model.provider === "xai" && model.api === "openai-responses";
+		return false;
+	};
+	if (requestedModel !== undefined && context.model !== undefined && compatible(context.model)) return context.model.id === requestedModel;
+	if (requestedModel === undefined && nativeModelCompatible(provider, context.model)) return true;
 	try {
-		return context.modelRegistry.getAvailable().some((model) => {
-			if (provider === "openai") return model.provider === "openai" && model.api === "openai-responses";
-			if (provider === "openai-codex") return model.provider === "openai-codex" && model.api === "openai-codex-responses";
-			if (provider === "gemini") return model.provider === "google" && model.api === "google-generative-ai";
-			if (provider === "xai" || provider === "xai-x") return model.provider === "xai" && model.api === "openai-responses";
-			return false;
-		});
+		return context.modelRegistry.getAvailable().some((model) => compatible(model) && (requestedModel === undefined || model.id === requestedModel));
 	} catch {
 		return false;
 	}
@@ -98,26 +107,35 @@ function explicitProvider(
 ): SearchProviderSelection {
 	const provider = request.providerHint;
 	if (provider === undefined) return unavailable("No provider was selected");
+	if (request.executionModel !== undefined && provider === "native") return unavailable("executionModel requires an explicit model-mediated provider, not the native alias", provider);
 	if (provider === "native") {
-		if (nativeModelCompatible("openai", context.model) && options.openai !== undefined) return selection(options.openai, false);
-		if (nativeModelCompatible("openai-codex", context.model) && options.openaiCodex !== undefined) return selection(options.openaiCodex, false);
-		if (nativeModelCompatible("gemini", context.model) && options.gemini !== undefined) return selection(options.gemini, false);
-		if (nativeModelCompatible("xai", context.model) && options.xai !== undefined) return selection(options.xai, false);
-		return unavailable("Native search requires an active supported grounded model", provider);
+		if (nativeModelCompatible("openai", context.model) && options.openai !== undefined && canServe(options.openai, request)) return selection(options.openai, false);
+		if (nativeModelCompatible("openai-codex", context.model) && options.openaiCodex !== undefined && canServe(options.openaiCodex, request)) return selection(options.openaiCodex, false);
+		if (nativeModelCompatible("gemini", context.model) && options.gemini !== undefined && canServe(options.gemini, request)) return selection(options.gemini, false);
+		if (nativeModelCompatible("xai", context.model)) {
+			const selected = request.social !== undefined || request.dateRange !== undefined ? options.xaiX : options.xai;
+			if (selected !== undefined && canServe(selected, request)) return selection(selected, false);
+		}
+		return unavailable("Native search requires an active supported grounded model that can satisfy the requested constraints", provider);
 	}
 	if (provider === "openai" || provider === "openai-codex") {
 		const selected = provider === "openai" ? options.openai : options.openaiCodex;
-		if (selected === undefined || !availableNativeModel(provider, context)) return unavailable(`${provider === "openai" ? "OpenAI" : "Codex"} native search requires an available Responses model`, provider);
+		if (selected === undefined || !availableNativeModel(provider, context, request.executionModel)) return unavailable(`${provider === "openai" ? "OpenAI" : "Codex"} native search requires an available Responses model`, provider);
+		if (!canServe(selected, request)) return unavailable(`${provider === "openai" ? "OpenAI" : "Codex"} native search cannot satisfy the requested search constraints`, provider);
 		return selection(selected, false);
 	}
 	if (provider === "gemini") {
-		if (options.gemini === undefined || !nativeModelCompatible("gemini", context.model)) return unavailable("Gemini grounding requires an active Gemini model", provider);
+		if (options.gemini === undefined) return unavailable("Gemini grounding is not registered", provider);
+		if (!nativeModelCompatible("gemini", context.model) && request.executionModel === undefined) return unavailable("Cross-provider Gemini search requires an explicit executionModel", provider);
+		if (!availableNativeModel("gemini", context, request.executionModel)) return unavailable("Requested Gemini executionModel is not available", provider);
 		if (!canServe(options.gemini, request)) return unavailable("Gemini grounding cannot satisfy the requested search constraints", provider);
 		return selection(options.gemini, false);
 	}
 	if (provider === "xai" || provider === "xai-x") {
 		const selected = provider === "xai" ? options.xai : options.xaiX;
-		if (selected === undefined || !nativeModelCompatible(provider, context.model)) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search requires an active xAI Responses model`, provider);
+		if (selected === undefined) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search is not registered`, provider);
+		if (!nativeModelCompatible(provider, context.model) && request.executionModel === undefined) return unavailable(`Cross-provider ${provider === "xai" ? "xAI web" : "xAI X"} search requires an explicit executionModel`, provider);
+		if (!availableNativeModel(provider, context, request.executionModel)) return unavailable("Requested xAI executionModel is not available", provider);
 		if (!canServe(selected, request)) return unavailable(`${provider === "xai" ? "xAI web" : "xAI X"} search cannot satisfy the requested search constraints`, provider);
 		return selection(selected, false);
 	}
@@ -151,6 +169,9 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 	const policy = options.billingPolicy ?? "free-only";
 	return (request, context) => {
 		const normalized = validateSearchRequest(request);
+		if (normalized.executionModel !== undefined && (normalized.providerHint === undefined || normalized.providerHint === "native")) {
+			return unavailable("executionModel requires an explicit model-mediated provider hint", "router");
+		}
 		if (normalized.providerHint !== undefined) return explicitProvider(normalized, context, options, policy);
 
 		// A compatible active native model is the primary choice. A model using a
@@ -158,26 +179,27 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		// grounded search backend; continue to registry/native or direct routing
 		// instead of making the user configure a provider manually.
 		if (context.model?.provider === "openai-codex" && nativeModelCompatible("openai-codex", context.model)) {
-			if (options.openaiCodex === undefined) return unavailable("Codex native search is not registered", "openai-codex");
-			return selection(options.openaiCodex, true, directFallback(options.openaiCodex, normalized, options, policy));
+			if (options.openaiCodex !== undefined && canServe(options.openaiCodex, normalized)) return selection(options.openaiCodex, true, directFallback(options.openaiCodex, normalized, options, policy));
 		}
 		if (context.model?.provider === "openai" && nativeModelCompatible("openai", context.model)) {
-			if (options.openai === undefined) return unavailable("OpenAI native search is not registered", "openai");
-			return selection(options.openai, true, directFallback(options.openai, normalized, options, policy));
+			if (options.openai !== undefined && canServe(options.openai, normalized)) return selection(options.openai, true, directFallback(options.openai, normalized, options, policy));
 		}
 		if (context.model?.provider === "google" && nativeModelCompatible("gemini", context.model)) {
-			if (options.gemini === undefined) return unavailable("Gemini grounding is not registered", "gemini");
-			return selection(options.gemini, true, directFallback(options.gemini, normalized, options, policy));
+			if (options.gemini !== undefined && canServe(options.gemini, normalized)) return selection(options.gemini, true, directFallback(options.gemini, normalized, options, policy));
+			// Continue to another eligible provider when Gemini cannot honor a hard
+			// constraint instead of selecting it and failing after dispatch.
 		}
 		if (context.model?.provider === "xai" && nativeModelCompatible("xai", context.model)) {
-			if (options.xai === undefined) return unavailable("xAI web search is not registered", "xai");
-			return selection(options.xai, true, directFallback(options.xai, normalized, options, policy));
+			const xaiProvider = normalized.social !== undefined || normalized.dateRange !== undefined ? options.xaiX : options.xai;
+			if (xaiProvider !== undefined && canServe(xaiProvider, normalized)) return selection(xaiProvider, true, directFallback(xaiProvider, normalized, options, policy));
+			// Continue to another eligible provider when the active xAI tool cannot
+			// satisfy the requested web/X constraints.
 		}
 
 		// Preserve Pi's built-in search when an authenticated same-provider model
 		// exists, even if the active model is OpenRouter, Anthropic, or local.
 		for (const [providerId, provider] of [["openai-codex", options.openaiCodex], ["openai", options.openai]] as const) {
-			if (provider !== undefined && availableNativeModel(providerId, context)) {
+			if (provider !== undefined && availableNativeModel(providerId, context) && canServe(provider, normalized)) {
 				return selection(provider, true, directFallback(provider, normalized, options, policy));
 			}
 		}
