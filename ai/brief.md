@@ -4,7 +4,7 @@
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and origin are clean at
-`eac13ec`; the installed Git package was refreshed to runtime commit
+`67cc67d`; the installed Git package was refreshed to runtime commit
 `934ec0d`. The active Pi runtime contains only this web extension and exposes
 exactly `web_search`, `web_fetch`, and `web_research`.
 
@@ -40,15 +40,15 @@ default owners for local repositories, media, OCR, and visual analysis.
 
 ## Verification
 
-`bun run check` passes: 132 tests and 312 assertions, with TypeScript checking.
+`bun run check` passes: 135 tests and 318 assertions, with TypeScript checking.
 OpenAI/Codex failure metadata, blocked domain filters, stream cancellation,
 fetch/PDF bounds, Brave free-mode pacing, provider metrics, official X
-normalization, and readable search rendering have deterministic coverage. The
-installed package was refreshed after the readable-output fix. One live smoke
-call each passed for Brave, Exa, and Parallel against `iana.org`; Brave
-returned account rate-limit windows, Exa reported a $0.007 search cost, and
-Parallel returned normalized evidence. Direct OpenAI, Gemini, xAI, and official
-X live rows remain unverified.
+normalization, readable search rendering, and Exa partial-response handling
+have deterministic coverage. The installed package was refreshed after the
+readable-output fix. One live smoke call each passed for Brave, Exa, and
+Parallel against `iana.org`; Brave returned account rate-limit windows, Exa
+reported a $0.007 search cost, and Parallel returned normalized evidence.
+Direct OpenAI, Gemini, xAI, and official X live rows remain unverified.
 
 ## Active work
 
@@ -60,8 +60,10 @@ query. The cached Exa MCP package is not active in Pi's MCP configuration.
 
 ## Next action
 
-Make the direct Exa path production-complete for the non-native fallback/use
-case, then benchmark only the minimum representative cases needed to choose
-between Brave, Exa, Parallel modes, and Gemini grounding. Keep the current
-Brave default until that evidence changes it. Restart any long-running Pi
-process after installing runtime changes.
+The direct Exa path now preserves valid evidence from partial responses,
+falls back from empty highlights to text/summary, ignores malformed optional
+billing metadata, and exposes a $0.007 standard-call estimate for bounded
+research budgets. Next, benchmark only the minimum representative cases needed
+to choose between Brave, Exa, Parallel modes, and Gemini grounding. Keep the
+current Brave default until that evidence changes it. Restart any long-running
+Pi process after installing runtime changes.
