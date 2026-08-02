@@ -11,8 +11,8 @@ fan-out, opaque storage, or unsafe remote extraction.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`a8dc15f`; the installed package at
-`/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is also at `a8dc15f`.
+`32c134f`; the installed package at
+`/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is also at `32c134f`.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
@@ -62,10 +62,11 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 145 tests and 349 assertions, with TypeScript clean.
+`bun run check` passes: 148 tests and 356 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
-enrichment through an injected fetcher, output bounds, and existing safety,
+enrichment through an injected fetcher, multibyte output bounds, bounded
+fetch-attempt counts, cancellation mapping, and existing safety,
 PDF, captions, cancellation, provider, and renderer fixtures. `git diff
 --check` passes. A fresh Codex Pi process completed a live search with concise
 cited output and no raw JSON. A fresh OpenRouter/DeepSeek process failed before

@@ -148,3 +148,9 @@ durable rationale belongs in `decisions.md`.
   JSON. A fresh OpenRouter/DeepSeek process failed before tool execution with
   `401 User not found`, so that is an OpenRouter credential/session blocker,
   not a search adapter result. No provider comparison calls were made.
+- Reviewer follow-up found and fixed three enrichment edge cases in `32c134f`:
+  multibyte source content now obeys byte bounds, failed enrichment counts
+  toward the fetch-attempt limit, and cancellation/deadline errors retain
+  stable search error codes. Invalid or evidence-only answers are removed at
+  shared cleanup. Verification: 148 tests and 356 assertions pass; the
+  installed package was refreshed to `32c134f`.
