@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "kkxo",
+  "title": "Implement compact Pi rendering for all web tools",
+  "description": "Add compact default renderResult and readable model-visible output for web_search, web_fetch, and web_research. Keep structured details available, show only a small preview by default, support expanded details, and remove raw JSON from normal chat-visible output.",
+  "status": "open",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-02T00:56:45.705424Z",
+      "msg": "Parent plan: replicate prior extension collapsed renderResult behavior while keeping model content readable and structured details separate; raw JSON is not acceptable."
+    }
+  ],
+  "created_at": "2026-08-02T00:55:28.069905Z",
+  "updated_at": "2026-08-02T00:56:45.705424Z",
+  "completed_at": null,
+  "external": {}
+}

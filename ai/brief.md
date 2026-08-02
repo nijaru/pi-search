@@ -1,71 +1,83 @@
 # pi-search brief
 
+## Objective
+
+Make `pi-search` a reliable, high-quality sole web extension for Pi within its
+current scope: native provider search, Exa-backed non-native search, bounded
+fetch/PDF/caption extraction, and explicit bounded research. Normal tool output
+must be readable and compact; structured details remain available without raw
+JSON in normal chat presentation.
+
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The current branch and origin are clean
-and synced; the installed Git package was refreshed to runtime commit
-`934ec0d`. The active Pi runtime contains only this web extension and exposes
-exactly `web_search`, `web_fetch`, and `web_research`.
+https://github.com/nijaru/pi-search. The branch is clean and synced; the
+installed Git package was refreshed after the readable `web_search` output fix.
+The active Pi runtime contains only this web extension and exposes exactly
+`web_search`, `web_fetch`, and `web_research`.
 
-Shipped search adapters are OpenAI/Codex, Gemini, xAI web and semantic X,
+Shipped adapters: OpenAI/Codex Responses, Gemini grounding, xAI web and X,
 Brave, Exa, Parallel, and explicit official X recent search. Fetching includes
 pinned DNS/SSRF and redirect checks, streamed limits, local HTML/Markdown
-extraction, bounded PDF text, and bounded YouTube captions. `web_research` is
-an explicit single-provider, sequential, bounded orchestrator with optional
-direct fetches and no hidden synthesis or fan-out.
+extraction, bounded PDF text, and bounded YouTube captions. Research is a
+single-provider, sequential, budgeted workflow with optional direct fetches.
 
-## Long-term direction
+## Decisions in force
 
-The goal is a best-in-class provider portfolio by capability, not a provider
-count or single-vendor dependency. Ordinary calls remain one-provider and
-evidence-first; explicit provider selection and a future opt-in comparison
-mode may use multiple providers. Hidden fallback, paid retries, and ambiguous
-merged provenance remain out of contract.
+- Provider order: active-model native search first; Exa for non-native models
+  when `EXA_API_KEY` is configured; other direct providers only when their
+  policy is explicit and justified. A provider failure never triggers a second
+  network call, retry, or hidden fan-out.
+- OpenRouter/DeepSeek cannot transparently use OpenAI or Gemini native search;
+  doing so would be a separate provider/model call with its own billing.
+- Exa is the preferred non-native path because it returns semantic results,
+  highlights, domain filtering, request IDs, and reported cost. Its direct
+  adapter has deterministic fixtures and a successful credentialed smoke.
+- Gemini grounding is native-only; its current paid docs list 5,000 free
+  search requests shared across Gemini 3.x, then $14/1,000 search queries,
+  with model input/output tokens billed separately. One request can issue
+  multiple search queries.
+- Brave is a last-resort keyword/fresh provider, not the semantic default.
+  Parallel remains a secondary direct provider pending quality evidence.
+- All tools need compact readable model-visible content and compact default Pi
+  TUI renderers with expanded details on demand. Raw JSON is not acceptable in
+  normal chat output.
 
-Current portfolio:
+## Output status
 
-- OpenAI/Codex: native general search and highest correctness priority.
-- Gemini: Google-grounded alternative when explicitly metered.
-- xAI web and `xai-x`: model-mediated web/social context.
-- Brave: cost-controlled general direct search with default free-mode local pacing when a key is configured.
-- Exa: explicit semantic retrieval and highlights; automatic preference is not assumed without measured quality evidence.
-- Parallel: objective-oriented context retrieval.
-- Official X API (`provider: "x"`): exact recent post/query/user retrieval
-  with an explicit bearer credential and provider selection.
-
-Direct local fetching remains the default for individual pages and PDFs. Pi,
-Bash, `read`, `git`, `gh`, `yt-dlp`, `ffmpeg`, and vision workflows remain the
-default owners for local repositories, media, OCR, and visual analysis.
+`web_search` now emits readable text in its tool `content`, but the package
+still lacks old-extension-style custom `renderResult` renderers. `web_fetch`
+and `web_research` still expose JSON-shaped content. The next output task must
+fix all three layers: model content, default TUI preview, and expanded details.
+A running Pi session can retain the implementation loaded at startup.
 
 ## Verification
 
-`bun run check` passes: 135 tests and 318 assertions, with TypeScript checking.
-OpenAI/Codex failure metadata, blocked domain filters, stream cancellation,
-fetch/PDF bounds, Brave free-mode pacing, provider metrics, official X
-normalization, readable search rendering, and Exa partial-response handling
-have deterministic coverage. The installed package was refreshed after the
-readable-output fix. One live smoke call each passed for Brave, Exa, and
-Parallel against `iana.org`; Brave returned account rate-limit windows, Exa
-reported a $0.007 search cost, and Parallel returned normalized evidence.
-Direct OpenAI, Gemini, xAI, and official X live rows remain unverified.
+The last full check passed: 135 tests, 318 assertions, TypeScript clean.
+Deterministic coverage includes OpenAI/Codex parsing and cancellation, provider
+errors, domain constraints, fetch/PDF bounds, Brave pacing, Exa partial
+responses, readable search rendering, and provider metrics. One credentialed
+smoke each passed for Brave, Exa, and Parallel; direct OpenAI, Gemini, xAI, and
+official X live rows remain unverified. Do not repeat paid requests merely to
+measure latency.
 
-## Active work
+## Active tasks
 
-`pi-search-az96` is the open benchmark task. Cost and result quality are the
-primary criteria; latency is recorded but not optimized or repeatedly sampled.
-The first four candidates are Brave, Exa, Parallel, and Gemini. Do not infer
-free-tier eligibility from marketing pages or rank providers from one smoke
-query. The cached Exa MCP package is not active in Pi's MCP configuration.
+- `pi-search-az96`: benchmark provider quality and all-in cost.
+- `pi-search-a9di`: make native OpenAI and Codex search production-correct.
+- `pi-search-kkxo`: implement compact Pi rendering for all web tools.
+- `pi-search-ee3u`: make Exa the non-native search path.
+- `pi-search-i6v0`: finish provider-neutral fetch and research quality audit.
 
-## Next action
+## Next sequence
 
-The direct Exa path now preserves valid evidence from partial responses,
-falls back from empty highlights to text/summary, ignores malformed optional
-billing metadata, and exposes a $0.007 standard-call estimate for bounded
-research budgets. `docs/provider-corpus.md` defines the minimum comparison
-cases and human labels; no additional live requests were made. Next, run only
-the minimum representative calls needed to choose between Brave, Exa, Parallel
-modes, and Gemini grounding. Keep the current Brave default until that evidence
-changes it. Restart any long-running Pi process after installing runtime
-changes.
+1. Save this plan and keep tasks synchronized.
+2. Implement compact content and custom Pi renderers for all three tools, with
+   deterministic tests for collapsed/expanded output and output bounds.
+3. Audit and harden OpenAI/Codex native search against current Responses output;
+   run only one deliberate live smoke per native path if credentials permit.
+4. Complete Exa routing and end-to-end OpenRouter/DeepSeek behavior, without
+   fallback after an Exa error.
+5. Audit fetch/research scope and run the minimum provider comparison corpus.
+6. Re-run the full offline suite, refresh the installed package, then test in a
+   newly started Pi session.

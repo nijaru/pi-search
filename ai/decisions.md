@@ -73,3 +73,21 @@ the current dedicated X path while the official X API is a conditional
 candidate for exact post/user/date workflows. Current official X documentation
 confirms that it complements rather than replaces xAI `x_search`; implement it
 only as an explicit, separately billed provider.
+
+### 2026-08-02 — native-first and compact-output direction
+
+The next implementation phase prioritizes production correctness over adding
+providers: active-model native search first, Exa as the automatic non-native
+path when its configured key is present, and other direct providers only as
+explicit or later availability-based options. A provider error remains final;
+selection fallback based on availability must not become retry or fan-out.
+Gemini grounding is native-only because routing another model through Gemini
+would create a separate model/token bill. Brave is a last-resort keyword/fresh
+provider, not the general semantic default.
+
+All three public tools need two deliberate output layers: compact readable
+model-visible content and a compact default Pi TUI renderer with expanded
+structured details on demand. Raw JSON is not an acceptable normal chat
+presentation. The old extension's collapsed result renderer is a reference for
+presentation only; its fallback, synthesis, and storage behavior is not being
+imported.

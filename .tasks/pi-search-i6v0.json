@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "i6v0",
+  "title": "Finish provider-neutral fetch and research quality audit",
+  "description": "Audit direct fetch, PDF, captions, research budgets, output bounds, provenance, and cancellation against the extension scope. Add only required fixes and deterministic tests; keep browser/media/repository workflows with Pi or CLI tools.",
+  "status": "open",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-02T00:56:45.72489Z",
+      "msg": "Parent plan: audit fetch/research only within current extension scope; keep browser, repository, media, OCR, and vision workflows with Pi or CLI tools."
+    }
+  ],
+  "created_at": "2026-08-02T00:55:28.069919Z",
+  "updated_at": "2026-08-02T00:56:45.72489Z",
+  "completed_at": null,
+  "external": {}
+}

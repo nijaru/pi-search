@@ -40,8 +40,8 @@ Current portfolio roles and gaps:
 | --- | --- | --- |
 | General native search | OpenAI/Codex Responses | Highest immediate correctness and live-verification priority |
 | Google-grounded search | Gemini grounding | Model-mediated and metered; no hard domain guarantee |
-| General direct keyword search | Brave | Free-credit policy and local admission control need hardening |
-| Semantic retrieval/highlights | Exa | Explicit metered path; richer date/deep-search options need evaluation |
+| General non-native semantic search | Exa | Direct path is reliable in fixtures and one smoke; automatic routing and end-to-end OpenRouter behavior need completion |
+| General direct keyword/fresh search | Brave | Last-resort path; free-credit policy and local admission control need hardening |
 | Objective-oriented context | Parallel | Explicit metered path; measure excerpt quality and cost savings |
 | Web grounding | xAI web search | Keep as an explicit native alternative |
 | Dedicated X retrieval | xAI `x_search` plus a future explicit X API path | xAI is best for semantic/model-mediated context; X API fills exact post/query/user/archive gaps |
@@ -56,16 +56,19 @@ explicit credential-gated smoke case.
 
 ## Priority order
 
-### P0 — production correctness and efficiency
+### P0 — production correctness, output, and efficiency
 
 1. Harden OpenAI/Codex Responses search against current provider behavior and
-   run credentialed live cases for both paths.
-2. Keep direct HTML/Markdown/text/JSON fetching the efficient default; verify
-   extraction fidelity, SSRF/redirect/cancellation/byte bounds, and PDF text
-   cleanup with representative fixtures.
-3. Add concurrency-safe Brave free-mode admission control and make the policy
-   explicit that free credits are not a separate endpoint or billing guarantee.
-4. Preserve a live smoke matrix and record skipped providers as skipped.
+   run one credentialed live case per path when credentials permit.
+2. Add compact model-visible content and old-extension-style collapsed/expanded
+   Pi renderers for `web_search`, `web_fetch`, and `web_research`; keep full
+   structured details separate from normal chat output.
+3. Make Exa the automatic non-native path when its key is configured and verify
+   the OpenRouter/DeepSeek route without fallback after provider errors.
+4. Keep direct HTML/Markdown/text/JSON fetching the efficient default; verify
+   extraction fidelity, SSRF/redirect/cancellation/byte bounds, PDF cleanup,
+   and research output bounds with representative fixtures.
+5. Preserve a live smoke matrix and record skipped providers as skipped.
 
 ### P1 — measurable capability coverage
 

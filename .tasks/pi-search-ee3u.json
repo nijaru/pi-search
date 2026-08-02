@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "ee3u",
+  "title": "Make Exa the non-native search path",
+  "description": "Complete Exa direct adapter and routing for non-native models when EXA_API_KEY is configured. Verify current request fields, cost metadata, limits, filters, errors, and end-to-end OpenRouter/DeepSeek behavior without hidden provider fallback.",
+  "status": "open",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-02T00:56:45.714673Z",
+      "msg": "Parent plan: configured Exa is the non-native route for OpenRouter/DeepSeek and other models without native search; verify current API, cost, filters, and errors."
+    }
+  ],
+  "created_at": "2026-08-02T00:55:28.068484Z",
+  "updated_at": "2026-08-02T00:56:45.714673Z",
+  "completed_at": null,
+  "external": {}
+}
