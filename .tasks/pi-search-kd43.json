@@ -27,10 +27,14 @@
     {
       "ts": "2026-08-02T02:19:55.745975Z",
       "msg": "Design and implementation pass started: added typed cited provider answers, registry-driven cross-provider OpenAI/Codex resolution, one visible automatic fallback, optional bounded source enrichment through safe fetch, and Pi tool integration fixtures. Offline suite is green; live native/provider smoke remains deliberate."
+    },
+    {
+      "ts": "2026-08-02T02:25:53.870123Z",
+      "msg": "Fresh installed-package Codex Pi smoke passed with concise cited output and no raw JSON. OpenRouter/DeepSeek fresh process failed before tool execution with 401 User not found, recorded as credential/session blocker. Offline 145-test suite remains green; no provider-comparison calls run."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T02:19:55.745975Z",
+  "updated_at": "2026-08-02T02:25:53.870123Z",
   "completed_at": null,
   "external": {}
 }
