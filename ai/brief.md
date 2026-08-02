@@ -67,8 +67,11 @@ Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, output bounds, and existing safety,
 PDF, captions, cancellation, provider, and renderer fixtures. `git diff
---check` passes. No new live/provider-comparison calls were made in this pass;
-credentialed native live quality remains an explicit next gate.
+--check` passes. A fresh Codex Pi process completed a live search with concise
+cited output and no raw JSON. A fresh OpenRouter/DeepSeek process failed before
+tool execution with `401 User not found`; this is an OpenRouter credential or
+session blocker and does not validate the search path. No comparison calls were
+made.
 
 ## Active tasks
 
@@ -78,13 +81,12 @@ credentialed native live quality remains an explicit next gate.
 
 ## Next sequence
 
-1. Start a fresh Pi process and exercise the installed package with a normal
-   non-native model plus any configured OpenAI/Codex registry credentials;
-   confirm the tool output is answer-first/citation-bearing rather than raw
-   JSON.
+1. Resolve the OpenRouter/DeepSeek credential or session issue if that
+   workflow is still required, then exercise the installed package with the
+   non-native model and confirm registry-native or Exa routing.
 2. If dedicated credentials are intentionally available, run one explicit
-   live smoke per native/direct path and record skipped paths; do not benchmark
-   latency or compare providers with paid calls.
+   live smoke per remaining native/direct path and record skipped paths; do not
+   benchmark latency or compare providers with paid calls.
 3. Re-read failures from that exercise and fix only concrete correctness or UX
    defects. Then update the required-workflow/task docs and consider closing
    `pi-search-kd43`.

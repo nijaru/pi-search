@@ -134,3 +134,17 @@ durable rationale belongs in `decisions.md`.
   about free tiers as unverified until docs or account evidence confirms them.
   Exa should be made fully reliable first as the known useful fallback, without
   making its popularity or the previous extension's behavior the default policy.
+- Designed and pushed `fd8e4ca`: the search-plane contract now defines
+  task-useful typed answers/evidence, registry-driven native resolution, one
+  visible bounded fallback, and opt-in safe source enrichment.
+- Implemented and pushed `a8dc15f`: OpenAI/Codex, Gemini, and xAI preserve
+  bounded cited provider answers; OpenAI/Codex can execute through an
+  authenticated Pi registry model while another model is active; automatic
+  routing makes at most one visible fallback; and `web_search` can fetch a
+  bounded selection of sources through the local safe fetcher. Offline checks
+  pass with 145 tests and 349 assertions.
+- Refreshed the installed package to `a8dc15f`. A fresh Codex Pi process
+  completed a live `web_search` request with concise cited output and no raw
+  JSON. A fresh OpenRouter/DeepSeek process failed before tool execution with
+  `401 User not found`, so that is an OpenRouter credential/session blocker,
+  not a search adapter result. No provider comparison calls were made.
