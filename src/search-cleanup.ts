@@ -188,8 +188,9 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 		if (!appliedOptions.includes("domains")) appliedOptions.push("domains");
 	}
 	const answer = normalizeAnswer(response.answer, provider, normalizedResults, request);
+	const { answer: _ignoredAnswer, ...responseWithoutAnswer } = response;
 	return {
-		...response,
+		...responseWithoutAnswer,
 		query: request.query,
 		provider,
 		results: normalizedResults,

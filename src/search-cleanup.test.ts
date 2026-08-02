@@ -92,6 +92,19 @@ describe("search result cleanup", () => {
 		expect(cleaned.warnings.at(-1)).toMatchObject({ code: "partial-results", message: expect.stringContaining("3 result entries") });
 	});
 
+	it("removes unaligned answers and evidence-mode answers", () => {
+		const response: SearchResponse = {
+			query: "q",
+			provider: "openai",
+			results: [{ url: "https://example.com", provider: "openai", searchQuery: "q" }],
+			answer: { text: "do not keep this", contentTrust: "untrusted", provider: "openai", citations: [{ url: "https://other.example" }] },
+			appliedOptions: [],
+			warnings: [],
+		};
+		expect(cleanupSearchResponse(response, validateSearchRequest({ query: "q" }), "openai").answer).toBeUndefined();
+		expect(cleanupSearchResponse({ ...response, answer: { ...response.answer!, citations: [{ url: "https://example.com" }] } }, validateSearchRequest({ query: "q", answerMode: "evidence" }), "openai").answer).toBeUndefined();
+	});
+
 	it("uses the same conservative identity for research fetch deduplication", () => {
 		expect(searchUrlIdentity("https://EXAMPLE.com:443/page#part")).toBe("https://example.com/page");
 		expect(searchUrlIdentity("https://example.com/page")).toBe("https://example.com/page");

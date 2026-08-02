@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError } from "./errors";
+import { SafeFetchError } from "./fetch-errors";
 import { createWebSearchTool, registerWebSearch, renderSearchResponse } from "./search-tool";
 import { executeSearch, executeSearchSelection, validateSearchRequest } from "./search";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -139,6 +140,71 @@ describe("search boundary", () => {
 		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
 		expect(fetchedUrl).toBe("https://example.com/");
 		expect(result.details?.sourceContents?.[0]?.content).toBe("Readable source content");
+	});
+
+	it("bounds multibyte source enrichment and counts failed fetch attempts", async () => {
+		let attempts = 0;
+		const provider = makeProvider(async (request) => ({
+			...successResponse(request.query),
+			results: Array.from({ length: 3 }, (_, index) => ({ ...successResponse(request.query).results[0]!, url: `https://example.com/${index}` })),
+		}));
+		const tool = createWebSearchTool(provider, {
+			fetcher: async (request) => {
+				attempts += 1;
+				if (attempts === 1) throw new Error("source unavailable");
+				return {
+					url: request.url,
+					content: "🙂".repeat(8_000),
+					contentTrust: "untrusted" as const,
+					outputFormat: "markdown" as const,
+					extraction: "markdown" as const,
+					fetchedAt: "2026-01-01T00:00:00.000Z",
+					status: 200,
+					redirectCount: 0,
+					bytesRead: 32_000,
+					truncated: false,
+					offset: 0,
+					warnings: [],
+				};
+			},
+		});
+		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		expect(attempts).toBe(1);
+		expect(result.details?.sourceContents).toBeUndefined();
+		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ code: "partial-results" }));
+
+		const boundedTool = createWebSearchTool(provider, {
+			fetcher: async (request) => ({
+				url: request.url,
+				content: "🙂".repeat(8_000),
+				contentTrust: "untrusted" as const,
+				outputFormat: "markdown" as const,
+				extraction: "markdown" as const,
+				fetchedAt: "2026-01-01T00:00:00.000Z",
+				status: 200,
+				redirectCount: 0,
+				bytesRead: 32_000,
+				truncated: false,
+				offset: 0,
+				warnings: [],
+			}),
+		});
+		const bounded = await boundedTool.execute("call-2", { query: "q", includeContent: true, contentResults: 3 }, undefined, undefined, {} as never);
+		expect(new TextEncoder().encode(JSON.stringify(bounded.details)).byteLength).toBeLessThanOrEqual(45_000);
+	});
+
+	it("maps cancellation during source enrichment to a stable search error", async () => {
+		const controller = new AbortController();
+		const tool = createWebSearchTool(makeProvider(async (request) => successResponse(request.query)), {
+			fetcher: async (_request, signal) => await new Promise<FetchedContent>((_resolve, reject) => {
+				if (signal === undefined) return reject(new Error("missing signal"));
+				signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
+			}),
+		});
+		const pending = tool.execute("call-1", { query: "q", includeContent: true }, controller.signal, undefined, {} as never);
+		await Bun.sleep(1);
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
 	});
 
 	it("registers web_search and returns structured evidence", async () => {

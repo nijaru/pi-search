@@ -10,7 +10,7 @@ import { Type, type Static, type TUnsafe } from "typebox";
 import type { FetchedContent, Provider, ProviderContext, ProviderModel, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
-import { toSearchToolError } from "./errors";
+import { SearchToolError, toSearchToolError } from "./errors";
 import { searchUrlIdentity } from "./search-cleanup";
 import {
 	DEFAULT_SEARCH_TIMEOUT_MS,
@@ -222,11 +222,23 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	return text;
 }
 
+function boundUtf8(value: string, maxBytes: number): string {
+	if (new TextEncoder().encode(value).byteLength <= maxBytes) return value;
+	let low = 0;
+	let high = value.length;
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		if (new TextEncoder().encode(value.slice(0, middle)).byteLength <= maxBytes) low = middle;
+		else high = middle - 1;
+	}
+	return value.slice(0, low);
+}
+
 function boundedFetchedContent(page: FetchedContent): FetchedContent {
 	return {
 		...page,
 		...(page.title === undefined ? {} : { title: page.title.slice(0, MAX_SEARCH_TITLE_CHARS) }),
-		content: page.content.slice(0, MAX_SEARCH_CONTENT_CHARS),
+		content: boundUtf8(page.content, MAX_SEARCH_CONTENT_CHARS),
 		warnings: page.warnings.slice(0, 4).map((item) => ({ ...item, message: item.message.slice(0, 500) })),
 	};
 }
@@ -278,6 +290,10 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		...(boundedUsage(response.usage) === undefined ? {} : { usage: boundedUsage(response.usage) }),
 	};
 	const byteLength = (): number => boundedResponseByteLength(bounded);
+	while (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS && (bounded.sourceContents?.length ?? 0) > 0) {
+		truncated = true;
+		bounded = { ...bounded, sourceContents: bounded.sourceContents?.slice(0, -1) };
+	}
 	while (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS && bounded.results.length > 0) {
 		truncated = true;
 		bounded = { ...bounded, results: bounded.results.slice(0, -1) };
@@ -303,11 +319,13 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 	const pages: FetchedContent[] = [];
 	const seen = new Set<string>();
 	const warnings = [...response.warnings];
+	let attempts = 0;
 	for (const result of response.results) {
-		if (pages.length >= (request.contentResults ?? 2)) break;
+		if (attempts >= (request.contentResults ?? 2)) break;
 		const identity = searchUrlIdentity(result.url);
 		if (identity === undefined || seen.has(identity)) continue;
 		seen.add(identity);
+		attempts += 1;
 		try {
 			pages.push(await fetcher({ url: result.url, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs }));
 		} catch (error) {
@@ -368,6 +386,9 @@ export function createWebSearchTool(
 					details: bounded,
 				};
 			} catch (error) {
+				if (!(error instanceof SearchToolError) && deadlineController.signal.aborted) {
+					throw new SearchToolError(callerSignal.aborted ? "WEB_SEARCH_CANCELED" : "WEB_SEARCH_TIMEOUT", callerSignal.aborted ? "Search canceled during source enrichment" : "Search timed out during source enrichment");
+				}
 				throw toSearchToolError(error, selectedProvider?.provider.id ?? "router");
 			} finally {
 				clearTimeout(timeoutId);
