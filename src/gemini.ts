@@ -17,6 +17,8 @@ import { validateSearchRequest } from "./search";
 
 export const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_GEMINI_RESPONSE_BYTES = 4 * 1024 * 1024;
+/** Keep grounded answers concise without truncating normal search responses. */
+export const GEMINI_MAX_OUTPUT_TOKENS = 2_048;
 const MAX_GEMINI_ANSWER_LENGTH = 8_000;
 
 export interface GeminiAdapterOptions {
@@ -61,7 +63,7 @@ export function buildGeminiRequest(request: SearchRequest): GeminiRequestPlan {
 		body: {
 			contents: [{ role: "user", parts: [{ text: normalized.mode === "fresh" ? `Prefer current sources. ${normalized.query}` : normalized.query }] }],
 			tools: [{ google_search: {} }],
-			generationConfig: { maxOutputTokens: 512 },
+			generationConfig: { maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS },
 		},
 		appliedOptions: ["maxResults", "mode"],
 		warnings,
