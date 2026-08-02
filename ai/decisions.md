@@ -154,3 +154,8 @@ contract. Keep xAI X and the official X recent-search API explicit. Automatic
 fallback now only follows authentication, rate-limit, or unavailable failures
 known not to have produced a billable result; network, timeout, and
 post-dispatch HTTP failures have uncertain effects and remain final.
+
+For search-only Gemini grounding, prefer the current Pi model-registry alias
+`gemini-flash-lite-latest` rather than full Flash/Pro or legacy model IDs. The
+extension does not silently substitute a model: active-model routing and an
+explicit `executionModel` remain the caller-visible billing choice.

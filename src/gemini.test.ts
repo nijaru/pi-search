@@ -7,7 +7,7 @@ function response(body: unknown, status = 200, headers: Record<string, string> =
 }
 
 function context(apiKey: string | undefined = "gemini-test"): ProviderContext {
-	const model = { id: "gemini-3-flash", provider: "google", api: "google-generative-ai", baseUrl: "https://gemini.test/v1beta" } as const;
+	const model = { id: "gemini-flash-lite-latest", provider: "google", api: "google-generative-ai", baseUrl: "https://gemini.test/v1beta" } as const;
 	return {
 		model,
 		modelRegistry: { getModels: () => [model], getApiKeyAndHeaders: async () => ({ ok: true, ...(apiKey === undefined ? {} : { apiKey }) }) },
@@ -15,7 +15,7 @@ function context(apiKey: string | undefined = "gemini-test"): ProviderContext {
 }
 
 function crossProviderContext(apiKey: string | undefined = "gemini-test"): ProviderContext {
-	const model = { id: "gemini-3-flash", provider: "google", api: "google-generative-ai", baseUrl: "https://gemini.test/v1beta" } as const;
+	const model = { id: "gemini-flash-lite-latest", provider: "google", api: "google-generative-ai", baseUrl: "https://gemini.test/v1beta" } as const;
 	return {
 		model: undefined,
 		modelRegistry: { getModels: () => [model], getApiKeyAndHeaders: async () => ({ ok: true, ...(apiKey === undefined ? {} : { apiKey }) }) },
@@ -34,15 +34,15 @@ describe("GeminiProvider", () => {
 		const result = await provider.search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, context());
 		expect(seenBody).toMatchObject({ tools: [{ google_search: {} }], contents: [{ parts: [{ text: "latest TypeScript release" }] }] });
 		expect(seenHeaders?.get("x-goog-api-key")).toBe("gemini-test");
-		expect(result).toMatchObject({ provider: "gemini", requestId: "gemini-header", executionModel: "gemini-3-flash", usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12, searchQueries: 1 } });
+		expect(result).toMatchObject({ provider: "gemini", requestId: "gemini-header", executionModel: "gemini-flash-lite-latest", usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12, searchQueries: 1 } });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", title: "Example" });
 		expect(result.answer).toMatchObject({ text: "Grounded Gemini answer", contentTrust: "untrusted", citations: [{ url: "https://example.com/page" }] });
 	});
 
 	it("uses an explicitly selected registry Gemini model when another model is active", async () => {
 		const provider = createGeminiProvider({ fetchImpl: async () => response({ candidates: [{ content: { parts: [{ text: "Cross-provider answer" }] }, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/page" } }], groundingSupports: [{ groundingChunkIndices: [0] }] } }] }) });
-		const result = await provider.search({ query: "q", executionModel: "gemini-3-flash" }, new AbortController().signal, crossProviderContext());
-		expect(result.executionModel).toBe("gemini-3-flash");
+		const result = await provider.search({ query: "q", executionModel: "gemini-flash-lite-latest" }, new AbortController().signal, crossProviderContext());
+		expect(result.executionModel).toBe("gemini-flash-lite-latest");
 	});
 
 	it("does not create an answer when grounding supports do not identify citations", async () => {

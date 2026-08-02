@@ -82,13 +82,13 @@ describe("search provider router", () => {
 
 	it("allows explicit registry-backed Gemini and xAI execution", () => {
 		const route = createSearchRouter({ gemini: nativeGemini, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry") });
-		expect(route({ query: "q", providerHint: "gemini", executionModel: "gemini-3.5-flash" }, context("openrouter", "openai-completions", [availableModel("google", "google-generative-ai", "gemini-3.5-flash")])).provider.id).toBe("gemini");
+		expect(route({ query: "q", providerHint: "gemini", executionModel: "gemini-flash-lite-latest" }, context("openrouter", "openai-completions", [availableModel("google", "google-generative-ai", "gemini-flash-lite-latest")])).provider.id).toBe("gemini");
 		expect(route({ query: "q", providerHint: "xai-x", executionModel: "grok-4.5" }, context("openrouter", "openai-completions", [availableModel("xai", "openai-responses", "grok-4.5")])).provider.id).toBe("xai-x");
 	});
 
 	it("requires an explicit provider for an execution model", () => {
 		const route = createSearchRouter({ exa, exaConfigured: true });
-		expect(() => route({ query: "q", executionModel: "gemini-3.5-flash" }, context("openrouter"))).toThrow(/explicit model-mediated provider hint/);
+		expect(() => route({ query: "q", executionModel: "gemini-flash-lite-latest" }, context("openrouter"))).toThrow(/explicit model-mediated provider hint/);
 	});
 
 	it("allows the explicit native alias for configured grounded models", () => {

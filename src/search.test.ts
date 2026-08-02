@@ -49,7 +49,7 @@ describe("search boundary", () => {
 			query: "q",
 			domains: { include: Array.from({ length: 17 }, () => `example${"a".repeat(240)}.com`) },
 		})).toThrow("aggregate limit");
-		expect(validateSearchRequest({ query: "q", executionModel: " gemini-3.5-flash ", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["@xai"] } })).toMatchObject({ executionModel: "gemini-3.5-flash", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["xai"] } });
+		expect(validateSearchRequest({ query: "q", executionModel: " gemini-flash-lite-latest ", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["@xai"] } })).toMatchObject({ executionModel: "gemini-flash-lite-latest", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["xai"] } });
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-03", to: "2026-01-02" } })).toThrow("not be later");
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-02-30" } })).toThrow("ISO-8601");
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-01T12:00" } })).toThrow("ISO-8601");

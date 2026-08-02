@@ -59,6 +59,10 @@
     {
       "ts": "2026-08-02T16:00:26Z",
       "msg": "After refreshing the installed package to 78a9af0 and restarting Pi, live smoke gates passed for active OpenAI/Codex (clean cited sources), explicit Exa (clean sources; provider cost $0.007), xAI web search with executionModel grok-4.5, xAI X search with executionModel grok-4.5, and bounded web_fetch/readability. Explicit Gemini executionModel gemini-2.5-flash reached the adapter but failed HTTP 401 because direct Google model authentication is not configured. A constrained xAI X request completed without parseable citations; retain evidence-first failure behavior until a raw provider response or reproducible no-match contract is available. Numeric xAI citation labels were exposed as titles; fixed in 33b8409, refreshed the installed checkout, and added offline coverage. Verification is now 166 tests / 396 assertions; live Gemini acceptance remains credential-blocked."
+    },
+    {
+      "ts": "2026-08-02T16:09:08Z",
+      "msg": "Gemini search model policy corrected: do not use legacy or full Flash/Pro models for search-only grounding. Current examples and deterministic fixtures use the Pi-available gemini-flash-lite-latest alias; runtime never silently substitutes an execution model. A corrective gemini-3.6-flash request also returned HTTP 401, confirming the direct Google auth gate; no paid Flash or Lite request was made."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",

@@ -88,10 +88,13 @@ completed without parseable citations and was correctly rejected by the
 evidence-first boundary. Exa reported $0.007 for its smoke. The xAI web and
 X smokes reported 47,360 and 26,693 total tokens; these were single correctness
 calls, not a comparison, but xAI search is materially metered and should not
-be retried or made an unbudgeted fallback. Explicit Gemini `gemini-2.5-flash`
-reached the adapter but returned HTTP 401 because direct Google authentication
-is not configured. OpenRouter/DeepSeek still has the separate earlier `401 User
-not found` credential/session blocker. No provider comparison calls were made.
+be retried or made an unbudgeted fallback. The current search recommendation
+is the Pi-available `gemini-flash-lite-latest` model alias; full Flash/Pro and
+legacy Gemini model IDs are not used for search smoke or examples. A test with
+`gemini-3.6-flash` reached the adapter but returned HTTP 401 because direct
+Google authentication is not configured. OpenRouter/DeepSeek still has the
+separate earlier `401 User not found` credential/session blocker. No provider
+comparison calls were made.
 
 ## Active tasks
 
@@ -109,9 +112,9 @@ not found` credential/session blocker. No provider comparison calls were made.
    paid calls on the constrained X case without a raw response or a specific
    no-match test hypothesis.
 2. If direct Gemini search is required, configure/authenticate a Google model
-   in Pi and run one deliberate `gemini-2.5-flash` smoke; otherwise retain the
-   HTTP 401 as an explicit environment gate rather than hiding it with a
-   fallback.
+   in Pi and run one deliberate `gemini-flash-lite-latest` smoke; otherwise
+   retain the HTTP 401 as an explicit environment gate rather than hiding it
+   with a fallback.
 3. Decide whether the constrained xAI X no-citation result is provider-side
    no-match behavior or a response-shape gap, then add a deterministic fixture
    or parser fix. Keep `pi-search-kd43` open until that decision and the

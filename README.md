@@ -63,7 +63,9 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 ```
 
 Gemini and xAI credentials come from Pi's model-registry authentication
-context. Active Gemini/xAI models use native search automatically. Explicit
+context. Active Gemini/xAI models use native search automatically. For
+search-only Gemini grounding, prefer Pi's current `gemini-flash-lite-latest`
+model alias rather than full Flash/Pro or legacy model IDs. Explicit
 `provider: "gemini"`, `"xai"`, or `"xai-x"` can use a compatible registry model
 with `executionModel` even when another model is active; this makes model and
 billing choice visible. Pi's `/login xai` subscription flow is supported by the

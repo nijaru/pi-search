@@ -196,3 +196,11 @@ durable rationale belongs in `decisions.md`.
   materially metered and should not be retried or made an unbudgeted fallback.
   Verification is 166 tests / 396 assertions; the installed checkout is now
   `33b8409` with its unrelated local `bun.lock` change preserved.
+- 2026-08-02: Corrected the Gemini search model policy after review: do not
+  use legacy or full Flash/Pro models for search-only grounding. Current
+  examples and deterministic execution-model fixtures now use Pi's
+  `gemini-flash-lite-latest` alias, which keeps the model choice current and
+  cost-oriented; runtime still honors only the active or explicitly selected
+  registry model and never substitutes one silently. A corrective live call
+  with current `gemini-3.6-flash` also returned HTTP 401, so direct Google
+  authentication remains unavailable; no paid Flash or Lite request was made.

@@ -54,9 +54,9 @@ describe("web_research", () => {
 				};
 			},
 		};
-		const result = await executeResearch({ question: "main", queries: ["one", "two"], provider: "gemini", executionModel: "gemini-3.5-flash", budget }, () => selected, context());
-		expect(seenModels).toEqual(["gemini-3.5-flash", "gemini-3.5-flash"]);
-		expect(result.executionModel).toBe("gemini-3.5-flash");
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], provider: "gemini", executionModel: "gemini-flash-lite-latest", budget }, () => selected, context());
+		expect(seenModels).toEqual(["gemini-flash-lite-latest", "gemini-flash-lite-latest"]);
+		expect(result.executionModel).toBe("gemini-flash-lite-latest");
 		expect(result.usage).toMatchObject({ costUsd: 0.2, billedUnits: 4, billedUnit: "requests" });
 	});
 
