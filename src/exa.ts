@@ -16,6 +16,8 @@ import { validateSearchRequest } from "./search";
 
 export const EXA_SEARCH_ENDPOINT = "https://api.exa.ai/search";
 export const DEFAULT_EXA_RESPONSE_BYTES = 4 * 1024 * 1024;
+/** Current published cost for one standard search returning up to 10 results. */
+export const EXA_ESTIMATED_SEARCH_COST_USD = 0.007;
 
 export interface ExaAdapterOptions {
 	readonly apiKey?: string;
@@ -35,6 +37,7 @@ const capabilities: ProviderCapabilities = {
 const profile: ProviderProfile = {
 	auth: "environment",
 	costModel: "usage-based",
+	estimatedCostUsd: EXA_ESTIMATED_SEARCH_COST_USD,
 };
 
 function domainQuery(request: SearchRequest): Record<string, unknown> {
@@ -78,6 +81,30 @@ function malformed(message: string): never {
 	throw createProviderError({ provider: "exa", kind: "malformed", message: `Exa returned a malformed response (${message})`, retryable: false });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function excerptFromRecord(record: Record<string, unknown>): string | undefined {
+	if (Array.isArray(record.highlights)) {
+		const highlights = record.highlights
+			.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+			.slice(0, 3);
+		if (highlights.length > 0) return highlights.join("\n").slice(0, 4_000);
+	}
+	for (const value of [record.text, record.summary]) {
+		const excerpt = optionalString(value, 4_000);
+		if (excerpt !== undefined) return excerpt;
+	}
+	return undefined;
+}
+
+function costFromResponse(value: unknown): number | undefined {
+	if (!isRecord(value)) return undefined;
+	const total = value.total;
+	return typeof total === "number" && Number.isFinite(total) && total >= 0 ? total : undefined;
+}
+
 function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata: { readonly requestId?: string; readonly rateLimits?: ProviderRateLimitInfo }): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "exa");
@@ -85,32 +112,33 @@ function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata
 	const results: SearchResult[] = [];
 	let discarded = 0;
 	for (const value of root.results) {
-		const record = objectValue(value, "results[]", "exa");
-		const parsed = httpSource(record.url, "exa");
+		// A single malformed result should not hide otherwise usable evidence.
+		if (!isRecord(value)) {
+			discarded += 1;
+			continue;
+		}
+		const parsed = httpSource(value.url, "exa");
 		if (parsed === undefined) {
 			discarded += 1;
 			continue;
 		}
-		const highlights = Array.isArray(record.highlights)
-			? record.highlights.filter((item): item is string => typeof item === "string").slice(0, 3).join("\n")
-			: undefined;
-		const excerpt = highlights ?? optionalString(record.text ?? record.summary, 4_000);
-		const score = typeof record.score === "number" && Number.isFinite(record.score) ? Math.max(0, Math.min(1, record.score)) : undefined;
+		const score = typeof value.score === "number" && Number.isFinite(value.score) ? Math.max(0, Math.min(1, value.score)) : undefined;
 		results.push({
 			url: parsed.url,
-			title: optionalString(record.title, 500),
+			title: optionalString(value.title, 500),
 			domain: parsed.domain,
-			publishedAt: optionalTimestamp(record.publishedDate),
-			excerpt,
+			publishedAt: optionalTimestamp(value.publishedDate),
+			excerpt: excerptFromRecord(value),
 			provider: "exa",
 			searchQuery: normalized.query,
-			sourceId: optionalString(record.id, 500),
+			sourceId: optionalString(value.id, 500),
 			score,
 		});
 	}
 	if (discarded > 0 && results.length === 0) return malformed("results contained no parseable HTTP URLs");
-	const cost = root.costDollars === undefined ? undefined : objectValue(root.costDollars, "costDollars", "exa");
-	const costUsd = typeof cost?.total === "number" && Number.isFinite(cost.total) && cost.total >= 0 ? cost.total : undefined;
+	// Billing metadata is useful but non-essential. Ignore an invalid optional
+	// cost object rather than turning a successful search into a hard failure.
+	const costUsd = costFromResponse(root.costDollars);
 	const bodyRequestId = optionalString(root.requestId, 500);
 	const usage = costUsd === undefined && metadata.rateLimits === undefined
 		? undefined
