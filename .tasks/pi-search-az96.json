@@ -11,9 +11,18 @@
   "blocked_by": [],
   "estimate": null,
   "due_date": null,
-  "logs": [],
+  "logs": [
+    {
+      "ts": "2026-08-02T00:12:02.486984Z",
+      "msg": "Hardened direct Exa normalization: malformed individual results are discarded without hiding valid evidence, empty highlights fall back to text/summary, optional billing metadata is non-fatal, and the standard 10-result call exposes the current $0.007 estimate for bounded research budgets. Verified Exa tests and bun run typecheck; commit 957a9c8 pushed."
+    },
+    {
+      "ts": "2026-08-02T00:12:06.989881Z",
+      "msg": "Correction: the Exa estimate is $0.007 per standard 10-result call; the previous log entry lost the dollar sign to shell expansion."
+    }
+  ],
   "created_at": "2026-08-01T23:55:58.428327Z",
-  "updated_at": "2026-08-01T23:55:58.428327Z",
+  "updated_at": "2026-08-02T00:12:06.989881Z",
   "completed_at": null,
   "external": {}
 }
