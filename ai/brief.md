@@ -11,10 +11,9 @@ JSON in normal chat presentation.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is clean and synced at the
-last context commit; renderer, output, and routing changes below are in the
-working tree and need a commit/push before installation. The installed Git
-package predates these latest changes.
+https://github.com/nijaru/pi-search. The branch is clean and synced at `ad0db04`; renderer, output, Exa-routing,
+and research-bound fixes are installed from that commit. A running Pi session
+can still retain older code at startup, so start a fresh session after reload.
 The active Pi runtime contains only this web extension and exposes exactly
 `web_search`, `web_fetch`, and `web_research`.
 
@@ -57,7 +56,7 @@ a fresh session.
 
 ## Verification
 
-The latest full check passed: 139 tests, 333 assertions, TypeScript clean.
+The latest full check passed: 140 tests, 335 assertions, TypeScript clean.
 Deterministic coverage includes OpenAI/Codex parsing and cancellation, provider
 errors, domain constraints, fetch/PDF bounds, Brave pacing, Exa partial
 responses, readable search/fetch/research output, compact renderers, and
@@ -75,9 +74,9 @@ unverified. Do not repeat paid requests merely to measure latency.
 
 ## Next sequence
 
-1. Commit/push the renderer, output, Exa-routing, tests, and docs changes.
-2. Refresh the installed Git package and start a fresh Pi session; verify one
-   OpenRouter/DeepSeek call routes to Exa and displays compact output.
-3. Run only one deliberate native smoke per OpenAI/Codex path if credentials
+1. Start a fresh Pi session and verify the installed compact renderer in the
+   normal UI; the Exa route was verified end-to-end with an OpenRouter/DeepSeek
+   context and one three-result Exa call (`costUsd: 0.007`).
+2. Run only one deliberate native smoke per OpenAI/Codex path if credentials
    become available; current offline audit is strong.
-4. Audit fetch/research scope and run the minimum provider comparison corpus.
+3. Audit fetch/research scope and run the minimum provider comparison corpus.
