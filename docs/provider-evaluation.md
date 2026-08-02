@@ -22,9 +22,13 @@ not be inferred from result counts.
 
 ## Workflow
 
-1. Define a small task corpus by role: native general search, keyword/fresh
-   search, semantic retrieval, objective/context retrieval, hard filters, and
-   social/X retrieval.
+Use the small, repeatable corpus in [`provider-corpus.md`](./provider-corpus.md)
+for the current Brave/Exa/Parallel/Gemini comparison. It is deliberately
+small and must not become runtime fan-out.
+
+1. Define or select a small task corpus by role: native general search,
+   keyword/fresh search, semantic retrieval, objective/context retrieval, hard
+   filters, and social/X retrieval.
 2. Run one explicit provider smoke at a time with dedicated credentials using
    `docs/live-smoke.md`. Save the structured observation outside the runtime
    package; never add automatic provider fan-out to collect comparisons.
