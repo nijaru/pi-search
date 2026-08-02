@@ -1,8 +1,9 @@
 # Provider consolidation and fetch plan
 
-Status: researched proposal. This is a planning surface, not an
-implementation contract until reconciled with source and accepted by the
-project owner.
+Status: superseded pending rebaseline. This planning surface is not an
+implementation contract. The prior extension is the operational baseline, and
+no provider-comparison calls or further provider additions are planned until
+actual parity gaps are reviewed and accepted by the project owner.
 
 ## Goals
 
@@ -55,6 +56,10 @@ a billing policy, deterministic fixtures, inspectable source URLs, and an
 explicit credential-gated smoke case.
 
 ## Priority order
+
+The earlier provider-first priority is paused. The next priority is a source
+and workflow parity review against `pi-web-access`; the items below are
+historical implementation context until that review is complete.
 
 ### P0 — production correctness, output, and efficiency
 

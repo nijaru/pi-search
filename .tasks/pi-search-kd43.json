@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "kd43",
+  "title": "Rebaseline pi-search against pi-web-access search behavior",
+  "description": "The prior extension is the operational baseline. Research its actual OpenAI/Codex availability routing, answer/synthesis behavior, fallback policy, fetch/curator capabilities, and Pi presentation from source code and current configuration. Identify the concrete reasons pi-search feels worse, then propose a minimal parity/advantage plan before implementing. Do not run provider comparison calls or add another provider just because it exists.",
+  "status": "open",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-02T01:29:18.154342Z",
+      "msg": "Source review confirmed the prior pi-web-access extension auto-detects authenticated OpenAI/Codex registry models even when another model is active, preserves synthesized answers, and has broader fallback/curator/content workflows. pi-search only routes native OpenAI/Codex when active and evidence-only output is intentional. User is pausing pi-search operationally and does not want provider comparison calls; rebaseline before implementation."
+    }
+  ],
+  "created_at": "2026-08-02T01:28:07.640263Z",
+  "updated_at": "2026-08-02T01:29:18.154342Z",
+  "completed_at": null,
+  "external": {}
+}

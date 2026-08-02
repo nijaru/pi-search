@@ -90,4 +90,23 @@ model-visible content and a compact default Pi TUI renderer with expanded
 structured details on demand. Raw JSON is not an acceptable normal chat
 presentation. The old extension's collapsed result renderer is a reference for
 presentation only; its fallback, synthesis, and storage behavior is not being
-imported.
+imported until the required workflow review below is complete.
+
+### 2026-08-02 — pause sole-replacement work and rebaseline against prior extension
+
+The user is returning to `pi-web-access` operationally because its actual
+source provides behavior that currently makes search feel better: it scans all
+authenticated OpenAI/Codex registry models even when another model is active,
+returns a synthesized answer alongside sources, and has broader configured
+routing/fetch/curation workflows. `pi-search` currently has an OpenAI/Codex
+adapter but only routes it when the active model itself is OpenAI/Codex; an
+OpenRouter/DeepSeek session therefore uses Exa instead. This is a confirmed
+source-level parity gap, not evidence that another provider is better.
+
+Decision: stop provider-comparison calls and do not add providers for coverage
+alone. Treat the prior extension as the operational baseline, research actual
+workflow differences from source and configuration, and design the smallest
+parity/advantage plan before further implementation. The one-provider,
+bounded-network, evidence-first constraints remain provisional until that plan
+resolves whether cross-provider native search and optional answer synthesis
+are required.

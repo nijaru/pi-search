@@ -2,21 +2,20 @@
 
 ## Objective
 
-Make `pi-search` a reliable, high-quality sole web extension for Pi within its
-current scope: native provider search, Exa-backed non-native search, bounded
-fetch/PDF/caption extraction, and explicit bounded research. Normal tool output
-must be readable and compact; structured details remain available without raw
-JSON in normal chat presentation.
+Re-establish whether `pi-search` can become a reliable, high-quality sole
+web extension for Pi. The prior `pi-web-access` extension is the current
+operational baseline; do not assume provider count or the current evidence-only
+policy is sufficient. Preserve bounded fetch/PDF/caption extraction and
+readable output while investigating concrete parity gaps first.
 
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`9322fac`; renderer, output, Exa-routing, research-bound, provenance, and
-expanded-metadata fixes are committed; the installed runtime contains the same
-code. A running Pi session can still retain
-older code at startup, so start a fresh session after reload.
-The active Pi runtime contains only this web extension and exposes exactly
+`17599d4`; renderer, output, Exa-routing, research-bound, provenance, and
+expanded-metadata fixes are committed and installed. The user plans to return
+to `pi-web-access` operationally for now; no package switch was performed.
+The active Pi runtime currently exposes exactly
 `web_search`, `web_fetch`, and `web_research`. The search description now
 matches automatic Exa routing for non-native models.
 
@@ -28,24 +27,18 @@ single-provider, sequential, budgeted workflow with optional direct fetches.
 
 ## Decisions in force
 
-- Provider order: active-model native search first; Exa for non-native models
-  when `EXA_API_KEY` is configured; other direct providers only when their
-  policy is explicit and justified. A provider failure never triggers a second
-  network call, retry, or hidden fan-out.
-- OpenRouter/DeepSeek cannot transparently use OpenAI or Gemini native search;
-  doing so would be a separate provider/model call with its own billing.
-- Exa is the preferred non-native path because it returns semantic results,
-  highlights, domain filtering, request IDs, and reported cost. Its direct
-  adapter has deterministic fixtures and a successful credentialed smoke.
-- Gemini grounding is native-only; its current paid docs list 5,000 free
-  search requests shared across Gemini 3.x, then $14/1,000 search queries,
-  with model input/output tokens billed separately. One request can issue
-  multiple search queries.
-- Brave is a last-resort keyword/fresh provider, not the semantic default.
-  Parallel remains a secondary direct provider pending quality evidence.
-- All tools need compact readable model-visible content and compact default Pi
-  TUI renderers with expanded details on demand. Raw JSON is not acceptable in
-  normal chat output.
+- Do not run provider-comparison calls. Use existing extension source,
+  authoritative documentation, and the user's actual workflows to identify
+  gaps; live calls are reserved for deliberate correctness smoke tests.
+- Treat `pi-web-access` as the operational baseline until a parity plan is
+  accepted. Its source confirms cross-provider OpenAI/Codex registry search,
+  answer synthesis, broader routing, and curator/fetch workflows that
+  `pi-search` does not currently match.
+- The current `pi-search` native-first/Exa route is an implementation state,
+  not a final product decision. Revisit cross-provider native search and
+  optional answer synthesis before claiming replacement readiness.
+- Keep safety, bounds, provenance, cancellation, and readable output as
+  candidate advantages; prove they matter against actual workflows.
 
 ## Output status
 
@@ -69,16 +62,15 @@ unverified. Do not repeat paid requests merely to measure latency.
 
 ## Active tasks
 
-- `pi-search-az96`: benchmark provider quality and all-in cost. This remains
-  intentionally open; do not block the working native/Exa path on it.
+- `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior
+  before further implementation.
 
 ## Next sequence
 
-1. Start a fresh Pi session and verify the installed compact renderer in the
-   normal UI; the Exa route was verified end-to-end with an OpenRouter/DeepSeek
-   context and one three-result Exa call (`costUsd: 0.007`).
-2. Run only one deliberate native smoke per OpenAI/Codex path if credentials
-   become available; current offline audit is strong.
-3. Run the minimum provider comparison corpus when deciding whether Parallel,
-   Brave, or another provider deserves a default role; do not repeat paid
-   latency calls.
+1. Use the prior extension for the user's current work if desired; do not
+   switch packages automatically.
+2. Inventory actual workflows and compare the old and current source behavior,
+   especially OpenAI/Codex availability routing, answer/synthesis, multi-query
+   search, fetch/content handling, and UI presentation.
+3. Produce a minimal parity/advantage design before writing more code. Do not
+   benchmark providers or add adapters merely because they exist.

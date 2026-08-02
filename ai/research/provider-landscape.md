@@ -77,6 +77,31 @@ reachability checks, citation audits, reports, and metrics. It is a reference
 for a future advanced research workflow, not a replacement for the current
 bounded single-provider `web_research` contract.
 
+### Concrete parity finding from local source review (2026-08-02)
+
+The prior `pi-web-access` implementation is not merely another adapter. Its
+`openai-search.ts` scans all authenticated OpenAI/Codex models in Pi's model
+registry (`resolvePiAuth`), even when a non-OpenAI model is active, and its
+auto route in `gemini-search.ts` tries OpenAI when suitable before Exa/Brave.
+Its search result also preserves an OpenAI-generated answer alongside sources.
+The current `pi-search` router only selects OpenAI/Codex when that provider is
+the active model, and intentionally returns evidence without provider answer
+synthesis. With OpenRouter/DeepSeek active, pi-search therefore selects Exa
+rather than an available OpenAI/Codex registry credential. This is a concrete
+UX/quality difference, not a provider-quality benchmark result.
+
+The old extension also provides multi-query search, optional background page
+content, curator UI/storage, and configured transient/quota/network fallback.
+Those features may explain perceived quality but are separate ownership and
+cost decisions; they must be evaluated from actual workflows rather than
+copied wholesale.
+
+Evidence: local reference source `/tmp/pi-web-access/openai-search.ts`
+(`resolvePiAuth`, `searchWithOpenAI`) and `/tmp/pi-web-access/gemini-search.ts`
+(`search`, `searchWithConfiguredRouting`), compared with `src/router.ts` and
+`src/openai.ts` in this repository. No new provider requests were made for
+this finding.
+
 ## Current provider capability matrix
 
 The matrix below is a planning snapshot, not a permanent provider ranking.
