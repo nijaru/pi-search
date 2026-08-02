@@ -83,10 +83,14 @@
     {
       "ts": "2026-08-02T17:55:08.525877Z",
       "msg": "Removed the unsupported Gemini generation cap and implemented bounded canonical resolution for Google grounding-api-redirect URLs: one HEAD lookup per known redirect source, redirect never followed automatically, original retained as sourceUrl on success and as URL on lookup failure. Offline verification is 168 tests / 402 assertions; final post-refresh Gemini smoke remains."
+    },
+    {
+      "ts": "2026-08-02T18:02:25.15449Z",
+      "msg": "Saved current state: source and installed checkout are at 9ccb378; Gemini cap removal plus bounded grounding-URL cleanup are verified offline (168 tests / 402 assertions). Only one post-restart Lite smoke remains; xAI X no-citation and OpenRouter/DeepSeek 401 remain conditional/credential findings."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T17:55:08.525877Z",
+  "updated_at": "2026-08-02T18:02:25.15449Z",
   "completed_at": null,
   "external": {}
 }

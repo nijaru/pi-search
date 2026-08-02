@@ -10,10 +10,10 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is at the current Gemini Lite
-implementation and context commits; the installed checkout is refreshed with
-its unrelated local `bun.lock` change preserved. Pi must be reloaded after a
-refresh to execute the latest search behavior.
+https://github.com/nijaru/pi-search. Source and the installed checkout are at
+`9ccb378`, with the installed checkout's unrelated local `bun.lock` change
+preserved. Pi must be reloaded after a refresh to execute the latest search
+behavior.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
@@ -74,7 +74,7 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 166 tests and 398 assertions, with TypeScript clean.
+`bun run check` passes: 168 tests and 402 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
@@ -99,10 +99,11 @@ header for Gemini. After reload, Lite grounding returned sources, but the
 arbitrary 512-token cap caused `MAX_TOKENS`; the cap was first raised and then
 removed to match Google's optional generation config and the mature reference
 adapter. Grounding redirect URLs now receive one bounded canonical-URL lookup,
-with the original preserved as `sourceUrl` if lookup fails. The installed
-checkout is refreshed; one post-final-change smoke remains. OpenRouter/DeepSeek
-still has the separate earlier `401 User not found` credential/session blocker.
-No provider comparison calls were made.
+with the original preserved as `sourceUrl` if lookup fails; deterministic
+success/failure fixtures cover this. The installed checkout is refreshed; one
+post-final-change smoke remains. OpenRouter/DeepSeek still has the separate
+earlier `401 User not found` credential/session blocker. No provider comparison
+calls were made.
 
 ## Active tasks
 
@@ -116,9 +117,9 @@ No provider comparison calls were made.
 ## Next sequence
 
 1. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
-   one deliberate `gemini-flash-lite-latest` smoke against the cap-removal
-   commit. Confirm it completes without `MAX_TOKENS` and retains Google
-   grounding citations.
+   one deliberate `gemini-flash-lite-latest` smoke against `9ccb378`. Confirm
+   it completes without `MAX_TOKENS`, retains Google grounding citations, and
+   returns canonical source URLs where Google resolves them.
 2. Decide whether the constrained xAI X no-citation result is provider-side
    no-match behavior or a response-shape gap, then add a deterministic fixture
    or parser fix only if the raw response proves a parser gap. Keep
