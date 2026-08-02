@@ -153,15 +153,15 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		const normalized = validateSearchRequest(request);
 		if (normalized.providerHint !== undefined) return explicitProvider(normalized, context, options, policy);
 
-		// An active native model is always the primary choice. If its adapter is
-		// unavailable, fail clearly rather than silently changing model semantics.
-		if (context.model?.provider === "openai-codex") {
-			if (!nativeModelCompatible("openai-codex", context.model)) return unavailable("Active Codex model does not use the Codex Responses API", "openai-codex");
+		// A compatible active native model is the primary choice. A model using a
+		// different API variant (for example OpenAI chat completions) is not a
+		// grounded search backend; continue to registry/native or direct routing
+		// instead of making the user configure a provider manually.
+		if (context.model?.provider === "openai-codex" && nativeModelCompatible("openai-codex", context.model)) {
 			if (options.openaiCodex === undefined) return unavailable("Codex native search is not registered", "openai-codex");
 			return selection(options.openaiCodex, true, directFallback(options.openaiCodex, normalized, options, policy));
 		}
-		if (context.model?.provider === "openai") {
-			if (!nativeModelCompatible("openai", context.model)) return unavailable("Active OpenAI model does not use the OpenAI Responses API", "openai");
+		if (context.model?.provider === "openai" && nativeModelCompatible("openai", context.model)) {
 			if (options.openai === undefined) return unavailable("OpenAI native search is not registered", "openai");
 			return selection(options.openai, true, directFallback(options.openai, normalized, options, policy));
 		}

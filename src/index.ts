@@ -14,7 +14,8 @@ import { registerWebSearch } from "./search-tool";
 /**
  * Native grounding is selected for supported active models. Exa is the
  * configured non-native default when its key is present; Brave is the paced
- * last-resort keyword path. No provider failure triggers a fallback.
+ * last-resort keyword path. Automatic availability failures may use one
+ * visible fallback.
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;

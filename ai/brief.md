@@ -11,8 +11,8 @@ fan-out, opaque storage, or unsafe remote extraction.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`80d9471`; runtime source is unchanged since `32c134f`. The installed package
-at `/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is at `32c134f`.
+`e3dd3ae`; runtime source is unchanged since `32c134f`. The installed package
+at `/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is at `e3dd3ae`.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
@@ -62,7 +62,7 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 148 tests and 356 assertions, with TypeScript clean.
+`bun run check` passes: 148 tests and 357 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
@@ -71,20 +71,23 @@ PDF, captions, cancellation, provider, and renderer fixtures. `git diff
 --check` passes. A fresh Codex Pi process completed a live search with concise
 cited output and no raw JSON. A fresh OpenRouter/DeepSeek process failed before
 tool execution with `401 User not found`; this is an OpenRouter credential or
-session blocker and does not validate the search path. No comparison calls were
-made.
+session blocker and does not validate the search path. One explicit Exa live
+smoke passed with bounded IANA evidence, no warnings, and provider-reported
+cost of $0.007. No comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
-  implementation pass is complete, but deliberate live/end-to-end validation
-  and final acceptance remain open.
+  implementation pass is complete; Exa's direct smoke passed, but deliberate
+  installed non-native end-to-end validation and final acceptance remain open.
 
 ## Next sequence
 
 1. Resolve the OpenRouter/DeepSeek credential or session issue if that
    workflow is still required, then exercise the installed package with the
-   non-native model and confirm registry-native or Exa routing.
+   non-native model and confirm registry-native or Exa routing. Automatic
+   routing now skips incompatible OpenAI chat-completions models instead of
+   failing before the normal registry/direct path.
 2. If dedicated credentials are intentionally available, run one explicit
    live smoke per remaining native/direct path and record skipped paths; do not
    benchmark latency or compare providers with paid calls.

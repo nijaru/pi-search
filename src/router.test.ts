@@ -90,9 +90,11 @@ describe("search provider router", () => {
 		expect(() => route({ query: "q", providerHint: "unknown" }, context("anthropic"))).toThrow(/not configured/);
 	});
 
-	it("does not route OpenAI completions models to the Responses search adapter", () => {
+	it("routes OpenAI completions models through the normal automatic path", () => {
 		const route = createSearchRouter({ openai: nativeOpenAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(() => route({ query: "q" }, context("openai", "openai-completions"))).toThrow(/does not use the OpenAI Responses API/);
+		const selected = route({ query: "q" }, context("openai", "openai-completions"));
+		expect(selected.provider.id).toBe("brave");
+		expect(selected.automatic).toBe(true);
 	});
 
 	it("uses explicitly selected direct providers when configured", () => {

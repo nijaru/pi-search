@@ -154,3 +154,9 @@ durable rationale belongs in `decisions.md`.
   stable search error codes. Invalid or evidence-only answers are removed at
   shared cleanup. Verification: 148 tests and 356 assertions pass; the
   installed package was refreshed to `32c134f`.
+- 2026-08-01: Ran one explicit Exa live smoke only (IANA domain-filtered
+  query). It returned three bounded HTTPS sources, no warnings, a request ID,
+  and provider-reported cost of $0.007. Updated automatic routing so an active
+  OpenAI chat-completions model is treated as non-grounded and falls through
+  to registry/native or direct routing instead of failing before the normal
+  path. Offline verification remains 148 tests and 357 assertions.
