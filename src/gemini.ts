@@ -75,7 +75,7 @@ function endpointFor(model: ProviderModel, override?: string): string {
 }
 
 function authHeaders(execution: ModelExecution): Readonly<Record<string, string>> {
-	const headers = modelAuthHeaders(execution);
+	const headers = modelAuthHeaders(execution, { bearerApiKey: false });
 	if (execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("x-goog-api-key", execution.auth.apiKey);
 	if (!headers.has("x-goog-api-key")) {
 		throw createProviderError({ provider: "gemini", kind: "auth", message: "Gemini authentication returned no API key", retryable: false });

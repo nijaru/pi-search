@@ -77,12 +77,17 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 	return { model: selected, auth };
 }
 
-export function modelAuthHeaders(execution: ModelExecution): Headers {
+export interface ModelAuthHeaderOptions {
+	/** Google Generative AI uses x-goog-api-key rather than a bearer header. */
+	readonly bearerApiKey?: boolean;
+}
+
+export function modelAuthHeaders(execution: ModelExecution, options: ModelAuthHeaderOptions = {}): Headers {
 	const headers = new Headers();
 	for (const source of [execution.model.headers, execution.auth.headers]) {
 		if (source === undefined) continue;
 		for (const [key, value] of Object.entries(source)) headers.set(key, value);
 	}
-	if (execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("authorization", `Bearer ${execution.auth.apiKey}`);
+	if (options.bearerApiKey !== false && execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("authorization", `Bearer ${execution.auth.apiKey}`);
 	return headers;
 }
