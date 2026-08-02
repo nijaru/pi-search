@@ -176,3 +176,7 @@ durable rationale belongs in `decisions.md`.
   automatic fallback is limited to safe auth/rate-limit/unavailable failures.
   Offline verification: 165 tests / 395 assertions, TypeScript clean, no live
   provider calls made in this pass; Gemini/xAI/X live acceptance remains open.
+- 2026-08-02: Committed and pushed the implementation as `9a18341` and the
+  context updates as `9806f7c`. The working tree is clean. The installed copy
+  intentionally remains at `61e71f9`; refreshing it and restarting Pi is the
+  next operational step before testing the new model-mediated paths.
