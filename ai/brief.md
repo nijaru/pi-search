@@ -98,19 +98,20 @@ Google's `x-goog-api-key`; Google rejects that combination with
 header for Gemini. After reload, Lite grounding returned sources, but the
 arbitrary 512-token cap caused `MAX_TOKENS`; the cap was first raised and then
 removed to match Google's optional generation config and the mature reference
-adapter. The installed checkout is refreshed; one post-removal smoke remains.
-OpenRouter/DeepSeek still has the separate earlier `401 User not found`
-credential/session blocker. No provider comparison calls were made.
+adapter. Grounding redirect URLs now receive one bounded canonical-URL lookup,
+with the original preserved as `sourceUrl` if lookup fails. The installed
+checkout is refreshed; one post-final-change smoke remains. OpenRouter/DeepSeek
+still has the separate earlier `401 User not found` credential/session blocker.
+No provider comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
   design and implementation are materially complete offline. OpenAI/Codex,
   Exa, xAI web/X, fetch, and Gemini Lite grounding smokes pass. Gemini needs
-  one post-cap-removal smoke; Google grounding redirect URLs remain a cleanup
-  follow-up. A constrained xAI X request produced no citations and remains an
-  evidence-first investigation item. OpenRouter/DeepSeek remains blocked by
-  its separate credential/session failure.
+  one post-final-change smoke; a constrained xAI X request produced no
+  citations and remains an evidence-first investigation item. OpenRouter/DeepSeek
+  remains blocked by its separate credential/session failure.
 
 ## Next sequence
 
@@ -118,9 +119,8 @@ credential/session blocker. No provider comparison calls were made.
    one deliberate `gemini-flash-lite-latest` smoke against the cap-removal
    commit. Confirm it completes without `MAX_TOKENS` and retains Google
    grounding citations.
-2. Implement bounded resolution of Google's `grounding-api-redirect` URLs to
-   canonical source URLs, following the mature reference's single HEAD
-   redirect check without issuing another search.
-3. Decide whether the constrained xAI X no-citation result is provider-side
+2. Decide whether the constrained xAI X no-citation result is provider-side
    no-match behavior or a response-shape gap, then add a deterministic fixture
-   or parser fix. Keep `pi-search-kd43` open until these gates are resolved.
+   or parser fix only if the raw response proves a parser gap. Keep
+   `pi-search-kd43` open until the final Gemini smoke and this evidence-first
+   X decision are recorded.

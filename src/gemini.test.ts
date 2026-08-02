@@ -41,6 +41,31 @@ describe("GeminiProvider", () => {
 		expect(result.answer).toMatchObject({ text: "Grounded Gemini answer", contentTrust: "untrusted", citations: [{ url: "https://example.com/page" }] });
 	});
 
+	it("resolves Google grounding redirects to canonical source URLs", async () => {
+		const redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token";
+		const calls: Array<{ url: string; method: string }> = [];
+		const provider = createGeminiProvider({ fetchImpl: async (input, init) => {
+			const url = String(input);
+			calls.push({ url, method: init?.method ?? "GET" });
+			if (init?.method === "HEAD") return new Response(null, { status: 302, headers: { location: "https://developers.google.com/gemini-api/docs/grounding" } });
+			return response({ candidates: [{ content: { parts: [{ text: "Grounded answer" }] }, groundingMetadata: { groundingChunks: [{ web: { uri: redirect, title: "Grounding docs" } }], groundingSupports: [{ groundingChunkIndices: [0] }] } }] });
+		} });
+		const result = await provider.search({ query: "grounding docs" }, new AbortController().signal, context());
+		expect(calls).toEqual([{ url: "https://gemini.test/v1beta/models/gemini-flash-lite-latest:generateContent", method: "POST" }, { url: redirect, method: "HEAD" }]);
+		expect(result.results[0]).toMatchObject({ url: "https://developers.google.com/gemini-api/docs/grounding", sourceUrl: redirect, domain: "developers.google.com" });
+		expect(result.answer).toMatchObject({ citations: [{ url: "https://developers.google.com/gemini-api/docs/grounding" }] });
+	});
+
+	it("keeps the Google grounding URL when canonical resolution fails", async () => {
+		const redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token";
+		const provider = createGeminiProvider({ fetchImpl: async (_input, init) => {
+			if (init?.method === "HEAD") throw new Error("lookup failed");
+			return response({ candidates: [{ groundingMetadata: { groundingChunks: [{ web: { uri: redirect } }] } }] });
+		} });
+		const result = await provider.search({ query: "q" }, new AbortController().signal, context());
+		expect(result.results[0]).toMatchObject({ url: redirect, domain: "vertexaisearch.cloud.google.com" });
+	});
+
 	it("uses an explicitly selected registry Gemini model when another model is active", async () => {
 		const provider = createGeminiProvider({ fetchImpl: async () => response({ candidates: [{ content: { parts: [{ text: "Cross-provider answer" }] }, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/page" } }], groundingSupports: [{ groundingChunkIndices: [0] }] } }] }) });
 		const result = await provider.search({ query: "q", executionModel: "gemini-flash-lite-latest" }, new AbortController().signal, crossProviderContext());

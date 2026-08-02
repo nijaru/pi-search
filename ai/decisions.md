@@ -165,6 +165,7 @@ searches to finish with `MAX_TOKENS`. Google makes generation config optional,
 and the mature `pi-web-access` Gemini adapter omits it entirely. Do not add an
 unverified model-output cap: the adapter keeps its independent response-byte,
 answer-text, and model-visible output bounds, while Gemini controls its normal
-model-default generation budget. Follow-up: resolve Google's grounding
-redirect URLs to canonical source URLs, as the reference adapter does,
-without treating that as a second search.
+model-default generation budget. The adapter resolves Google's grounding
+redirect URLs to canonical source URLs with one bounded HEAD request, preserving
+the redirect as `sourceUrl` and retaining it when resolution fails; this is
+metadata cleanup, not a second search.

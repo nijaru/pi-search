@@ -236,3 +236,9 @@ durable rationale belongs in `decisions.md`.
   response-byte, answer-text, and model-visible bounds. Offline verification
   remains 166 tests / 398 assertions. Canonical grounding-URL resolution
   remains a follow-up, not another search provider call.
+- 2026-08-02: Implemented bounded Gemini grounding-redirect cleanup. The
+  adapter makes at most one HEAD lookup per returned source, only for Google's
+  known redirect host, never follows the redirect automatically, preserves the
+  original URL as `sourceUrl`, and falls back to the redirect when lookup fails.
+  Added canonical-success and lookup-failure fixtures. Offline verification is
+  168 tests / 402 assertions; one final live smoke remains after package reload.

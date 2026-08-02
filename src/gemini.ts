@@ -11,12 +11,15 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError } from "./errors";
+import { cancelResponseBody } from "./http";
 import { httpSource, objectValue, optionalString, postJson, type SearchHttpFetch } from "./provider-http";
 import { selectModelExecution, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_GEMINI_RESPONSE_BYTES = 4 * 1024 * 1024;
+const GEMINI_GROUNDING_REDIRECT_HOST = "vertexaisearch.cloud.google.com";
+const GEMINI_GROUNDING_REDIRECT_TIMEOUT_MS = 5_000;
 const MAX_GEMINI_ANSWER_LENGTH = 8_000;
 
 export interface GeminiAdapterOptions {
@@ -67,6 +70,15 @@ export function buildGeminiRequest(request: SearchRequest): GeminiRequestPlan {
 	};
 }
 
+function isGroundingRedirectUrl(url: string): boolean {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === "https:" && parsed.hostname.toLowerCase() === GEMINI_GROUNDING_REDIRECT_HOST && parsed.pathname.startsWith("/grounding-api-redirect/");
+	} catch {
+		return false;
+	}
+}
+
 function endpointFor(model: ProviderModel, override?: string): string {
 	const base = (override ?? (model.baseUrl.trim().length > 0 ? model.baseUrl : GEMINI_GENERATE_CONTENT_ENDPOINT)).replace(/\/+$/, "");
 	if (base.endsWith(":generateContent")) return base;
@@ -82,7 +94,36 @@ function authHeaders(execution: ModelExecution): Readonly<Record<string, string>
 	return Object.fromEntries(headers.entries());
 }
 
-function normalizeGeminiResponse(payload: unknown, request: SearchRequest): SearchResponse {
+async function resolveGroundingUrl(url: string, signal: AbortSignal, fetchImpl: SearchHttpFetch): Promise<string> {
+	if (signal.aborted) throw createProviderError({ provider: "gemini", kind: "canceled", message: "Search canceled", retryable: false });
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return url;
+	}
+	if (!isGroundingRedirectUrl(url)) return url;
+	const controller = new AbortController();
+	const onAbort = () => controller.abort(signal.reason);
+	const timeoutId = setTimeout(() => controller.abort(new DOMException("Gemini grounding URL resolution timed out", "TimeoutError")), GEMINI_GROUNDING_REDIRECT_TIMEOUT_MS);
+	signal.addEventListener("abort", onAbort, { once: true });
+	try {
+		const response = await fetchImpl(url, { method: "HEAD", redirect: "manual", signal: controller.signal });
+		const location = response.headers.get("location");
+		await cancelResponseBody(response);
+		if (location === null || location.trim().length === 0) return url;
+		const target = httpSource(new URL(location, url).toString(), "gemini");
+		return target?.url ?? url;
+	} catch (error) {
+		if (signal.aborted) throw createProviderError({ provider: "gemini", kind: "canceled", message: "Search canceled", retryable: false, cause: error });
+		return url;
+	} finally {
+		clearTimeout(timeoutId);
+		signal.removeEventListener("abort", onAbort);
+	}
+}
+
+async function normalizeGeminiResponse(payload: unknown, request: SearchRequest, signal: AbortSignal, fetchImpl: SearchHttpFetch): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "gemini");
 	const promptFeedback = root.promptFeedback;
@@ -104,6 +145,7 @@ function normalizeGeminiResponse(payload: unknown, request: SearchRequest): Sear
 	const seen = new Set<string>();
 	const warnings: SearchWarning[] = [];
 	let discarded = 0;
+	let redirectAttempts = 0;
 	for (const candidateValue of root.candidates) {
 		const candidate = objectValue(candidateValue, "candidates[]", "gemini");
 		const finishReason = optionalString(candidate.finishReason);
@@ -141,14 +183,26 @@ function normalizeGeminiResponse(payload: unknown, request: SearchRequest): Sear
 				chunkUrls.push(undefined);
 				continue;
 			}
-			chunkUrls.push(parsed.url);
-			if (seen.has(parsed.url)) continue;
-			seen.add(parsed.url);
+			let canonicalUrl = parsed.url;
+			if (isGroundingRedirectUrl(parsed.url) && redirectAttempts < maxResults) {
+				redirectAttempts += 1;
+				canonicalUrl = await resolveGroundingUrl(parsed.url, signal, fetchImpl);
+			}
+			const canonical = httpSource(canonicalUrl, "gemini");
+			if (canonical === undefined) {
+				discarded += 1;
+				chunkUrls.push(undefined);
+				continue;
+			}
+			chunkUrls.push(canonical.url);
+			if (seen.has(canonical.url)) continue;
+			seen.add(canonical.url);
 			if (results.length < maxResults) {
 				results.push({
-					url: parsed.url,
+					url: canonical.url,
+					...(canonical.url === parsed.url ? {} : { sourceUrl: parsed.url }),
 					title: optionalString(source.title, 500),
-					domain: parsed.domain,
+					domain: canonical.domain,
 					provider: "gemini",
 					searchQuery: normalized.query,
 				});
@@ -231,7 +285,7 @@ export class GeminiProvider implements Provider {
 			fetchImpl: this.fetchImpl,
 			maxResponseBytes: this.maxResponseBytes,
 		});
-		const response = normalizeGeminiResponse(result.payload, normalized);
+		const response = await normalizeGeminiResponse(result.payload, normalized, signal, this.fetchImpl);
 		const usage = response.usage === undefined && result.rateLimits === undefined
 			? undefined
 			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
