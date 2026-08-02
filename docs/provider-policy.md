@@ -44,7 +44,7 @@ fan-out, or provider comparisons.
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Selected automatically when configured; one visible fallback may use Brave | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
-| Official X API | Exact post/query/user/recent search | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
+| Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
 The word “fallback” for Brave primarily means fallback in model *selection*
 when no native provider applies. Automatic routing also permits one visible
@@ -64,8 +64,10 @@ Exa is the automatic semantic option for local and other models because it
 returns useful highlights and source evidence. Brave is the cost-controlled
 last direct path when Exa is absent; its free-mode admission remains
 conservative. Parallel is a useful explicit objective-oriented provider. The
-official X API is a separate exact post/query/user retrieval path, while xAI X
-remains the semantic, model-mediated path. None of these direct providers
+official X API is a separate exact recent-search path; X query operators can
+target posts or users, but dedicated lookup and archive endpoints are not
+implemented. xAI X remains the semantic, model-mediated path. None of these
+direct providers
 provides a reliable fixed per-call estimate for every hard research cost
 ceiling, so unsupported cost ceilings are rejected before calls.
 

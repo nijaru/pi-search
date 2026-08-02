@@ -32,10 +32,11 @@ Shipped search adapters:
 | Exa | Other/local model with configured key | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model when Exa is unavailable; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
-| Official X API | — | `x` with configured bearer token | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
+| Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
-Native/model-mediated failures are final. Direct provider failures are final.
-No adapter retries or silently changes providers.
+Explicit provider failures are final. Automatic routing may use one visible
+fallback after an availability-like failure; there are no adapter retries or
+hidden provider changes.
 
 ## Routing and billing
 

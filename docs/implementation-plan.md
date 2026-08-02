@@ -109,8 +109,8 @@ before calling the search surface production-mature:
 
 ### Long-term selective additions
 
-- Add the official X API as an explicit complementary provider for exact post,
-  query, user, and date/archive workflows; keep xAI `x_search` for
+- Expand the official X API only if exact post lookup, user timelines, or
+  date/archive workflows become required; keep xAI `x_search` for
   semantic/model-mediated social context.
 - Add Perplexity only if hard date/path/domain controls materially improve a
   required workflow beyond the shipped set.

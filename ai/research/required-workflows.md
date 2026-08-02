@@ -26,7 +26,7 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; active model selection |
 | xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; active model selection |
 | Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
-| Exact post/query/user X search | `x`; shipped as explicit provider | Direct post URLs/text/IDs, bounded recent search, rate-limit fixtures |
+| Official X recent search | `x`; shipped as explicit provider | Query operators, direct post URLs/text/IDs, bounded recent search, rate-limit fixtures; dedicated lookup/archive endpoints remain deferred |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
 | Source depth and context | **Implemented**: explicit `includeContent` uses the local safe fetcher with bounded count/length/deadline | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |

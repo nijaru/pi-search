@@ -65,7 +65,7 @@ Current portfolio roles and gaps:
 | General direct keyword/fresh search | Brave | Last-resort path; free-credit policy and local admission control need hardening |
 | Objective-oriented context | Parallel | Explicit metered path; measure excerpt quality and cost savings |
 | Web grounding | xAI web search | Keep as an explicit native alternative |
-| Dedicated X retrieval | xAI `x_search` plus a future explicit X API path | xAI is best for semantic/model-mediated context; X API fills exact post/query/user/archive gaps |
+| Dedicated X retrieval | xAI `x_search` plus the shipped explicit X API recent-search path | xAI is best for semantic/model-mediated context; dedicated X lookup/user/archive gaps remain |
 | Hard date/path/domain retrieval | Not yet selected | Evaluate Perplexity only if the shipped set cannot guarantee it |
 | Self-hosted/privacy search | None | Evaluate SearXNG only for a concrete self-hosted requirement |
 | Search plus extraction service | Direct local fetch | Evaluate Tavily/remote extraction only when local fetch misses a required class |
@@ -115,8 +115,9 @@ comparison.
 5. Build a provider-role evaluation harness before adding overlapping adapters.
 6. Extend contracts only for demonstrated needs such as date ranges, source
    types, social handles, or provider-specific retrieval intent.
-7. Add the official X API as an explicit complementary path for exact
-   post/user/date/archive workflows; keep xAI `x_search` for semantic context.
+7. Expand the official X API only if exact post lookup, user timelines, or
+   date/archive workflows become required; keep xAI `x_search` for semantic
+   context.
 
 ### P2 — selective additions and specialized fetch
 
