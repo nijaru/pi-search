@@ -241,4 +241,10 @@ durable rationale belongs in `decisions.md`.
   known redirect host, never follows the redirect automatically, preserves the
   original URL as `sourceUrl`, and falls back to the redirect when lookup fails.
   Added canonical-success and lookup-failure fixtures. Offline verification is
-  168 tests / 402 assertions; one final live smoke remains after package reload.
+  168 tests / 402 assertions.
+- 2026-08-02: After the final Pi restart, the deliberate
+  `gemini-flash-lite-latest` smoke passed through the installed extension. It
+  returned three canonical Google documentation sources, one provider search
+  query, no warnings, and no `MAX_TOKENS`. This closes the Gemini acceptance
+  gate; xAI X no-citation remains conditional pending a real reproduced
+  workflow, not a reason for another metered comparison call.

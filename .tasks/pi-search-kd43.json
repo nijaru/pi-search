@@ -3,7 +3,7 @@
   "ref": "kd43",
   "title": "Rebaseline pi-search against pi-web-access search behavior",
   "description": "The prior extension is the operational baseline. Research its actual OpenAI/Codex availability routing, answer/synthesis behavior, fallback policy, fetch/curator capabilities, and Pi presentation from source code and current configuration. Identify the concrete reasons pi-search feels worse, then propose a minimal parity/advantage plan before implementing. Do not run provider comparison calls or add another provider just because it exists.",
-  "status": "open",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -87,10 +87,14 @@
     {
       "ts": "2026-08-02T18:02:25.15449Z",
       "msg": "Saved current state: source and installed checkout are at 9ccb378; Gemini cap removal plus bounded grounding-URL cleanup are verified offline (168 tests / 402 assertions). Only one post-restart Lite smoke remains; xAI X no-citation and OpenRouter/DeepSeek 401 remain conditional/credential findings."
+    },
+    {
+      "ts": "2026-08-02T18:29:35.468173Z",
+      "msg": "Final post-restart gemini-flash-lite-latest smoke passed through the installed extension: three canonical Google sources, one provider search query, no warnings, and no MAX_TOKENS. Gemini acceptance is closed; xAI X no-citation remains conditional pending a real reproduced workflow."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T18:02:25.15449Z",
-  "completed_at": null,
+  "updated_at": "2026-08-02T18:29:35.482267Z",
+  "completed_at": "2026-08-02T18:29:35.482267Z",
   "external": {}
 }

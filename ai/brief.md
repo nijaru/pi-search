@@ -100,28 +100,23 @@ arbitrary 512-token cap caused `MAX_TOKENS`; the cap was first raised and then
 removed to match Google's optional generation config and the mature reference
 adapter. Grounding redirect URLs now receive one bounded canonical-URL lookup,
 with the original preserved as `sourceUrl` if lookup fails; deterministic
-success/failure fixtures cover this. The installed checkout is refreshed; one
-post-final-change smoke remains. OpenRouter/DeepSeek still has the separate
-earlier `401 User not found` credential/session blocker. No provider comparison
-calls were made.
+success/failure fixtures cover this. The final post-change live Lite smoke
+passed after restart: three canonical Google documentation sources, one
+provider search query, no warnings, and no `MAX_TOKENS`. OpenRouter/DeepSeek
+still has the separate earlier `401 User not found` credential/session
+blocker. No provider comparison calls were made.
 
 ## Active tasks
 
-- `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
-  design and implementation are materially complete offline. OpenAI/Codex,
-  Exa, xAI web/X, fetch, and Gemini Lite grounding smokes pass. Gemini needs
-  one post-final-change smoke; a constrained xAI X request produced no
-  citations and remains an evidence-first investigation item. OpenRouter/DeepSeek
-  remains blocked by its separate credential/session failure.
+- No blocking implementation task remains. The constrained xAI X no-citation
+  result is a conditional investigation item, not a reason to spend another
+  metered request without a reproduced workflow.
 
 ## Next sequence
 
-1. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
-   one deliberate `gemini-flash-lite-latest` smoke against `9ccb378`. Confirm
-   it completes without `MAX_TOKENS`, retains Google grounding citations, and
-   returns canonical source URLs where Google resolves them.
-2. Decide whether the constrained xAI X no-citation result is provider-side
-   no-match behavior or a response-shape gap, then add a deterministic fixture
-   or parser fix only if the raw response proves a parser gap. Keep
-   `pi-search-kd43` open until the final Gemini smoke and this evidence-first
-   X decision are recorded.
+1. Use native OpenAI/Codex search when Pi has an authenticated Responses model;
+   select Gemini Lite or Exa explicitly when that is the intended provider or
+   billing choice.
+2. Inspect a raw xAI response only if an actual X workflow reproduces the
+   no-citation result. Add a parser fixture or fix only if that evidence proves
+   a response-shape gap; do not run provider comparisons.
