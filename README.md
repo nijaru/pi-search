@@ -19,9 +19,11 @@ Pi tools:
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
-- Other/local models use configured Brave with conservative free-mode pacing.
-- Exa, Parallel, and the official X API require only explicit provider
-  selection and their credentials; they are never chosen automatically.
+- Other/local models use configured Exa automatically when `EXA_API_KEY` is
+  available; Exa returns semantic results with excerpts and reported usage.
+- When Exa is unavailable, configured Brave is the conservative paced
+  keyword/fresh fallback. Parallel and the official X API remain explicit
+  providers until their quality/role is evaluated further.
 - There are no hidden retries, provider fan-out, or paid fallback chains.
 
 All providers normalize into the same evidence-first result shape. Provider
@@ -33,7 +35,10 @@ The extension reads credentials only at construction or through Pi's model
 registry; it never logs keys.
 
 ```bash
-# Non-native/local-model search
+# Preferred non-native/local-model search
+export EXA_API_KEY=...
+
+# Optional last-resort keyword/fresh search
 export BRAVE_API_KEY=...
 # Configured Brave uses conservative free-mode admission by default:
 # request starts are spaced by 1s and observed quota headers are honored.
@@ -42,8 +47,7 @@ export BRAVE_API_KEY=...
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
 
-# Explicit providers (provider selection is the metered-call opt-in)
-export EXA_API_KEY=...
+# Explicit secondary providers
 export PARALLEL_API_KEY=...
 export X_API_BEARER_TOKEN=...         # explicit official X API search
 # Optional: to deliberately disable Brave's default free-mode pacing:
@@ -53,10 +57,14 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 
 Gemini and xAI credentials come from the active Pi model's authentication
 context. A provider hint such as `provider: "exa"`, `"parallel"`, `"x"`, or
-`"xai-x"` is strict and never falls through to another provider.
+`"xai-x"` is strict and never falls through to another provider. Without a
+hint, the router selects native search first, then Exa, then Brave when the
+corresponding credentials and hard constraints permit it.
 
 ## Fetch coverage
 
+Tool results use compact readable model content and a compact Pi display;
+expanded tool details retain the normalized metadata and source evidence.
 `web_fetch` owns direct HTTPS/HTTP fetching with SSRF protection, redirect
 validation, response limits, cancellation, Markdown content negotiation, local
 Readability/Turndown extraction, and untrusted-content fencing. It also supports:

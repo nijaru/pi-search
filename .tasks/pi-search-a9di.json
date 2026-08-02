@@ -3,7 +3,7 @@
   "ref": "a9di",
   "title": "Make native OpenAI and Codex search production-correct",
   "description": "Audit current Responses web_search request and SSE/source normalization against current official behavior. Add deterministic fixtures for current response variants, verify live OpenAI/Codex paths once with credential-gated smoke coverage, preserve domain filters, usage, cancellation, and no hidden fallback.",
-  "status": "open",
+  "status": "done",
   "priority": 1,
   "labels": null,
   "assignees": null,
@@ -15,10 +15,14 @@
     {
       "ts": "2026-08-02T00:56:45.695515Z",
       "msg": "Parent plan: native-first correctness is P0; output and Exa routing are coordinated tasks. Preserve one provider per call and no fallback after provider failure."
+    },
+    {
+      "ts": "2026-08-02T01:06:14.175536Z",
+      "msg": "Audited current OpenAI/Codex Responses adapter against official Responses web_search shape and prior extension; existing strict parser, SSE completion checks, citation/source normalization, auth selection, cancellation, and diagnostics remain covered by tests."
     }
   ],
   "created_at": "2026-08-02T00:55:28.068221Z",
-  "updated_at": "2026-08-02T00:56:45.695515Z",
-  "completed_at": null,
+  "updated_at": "2026-08-02T01:08:50.518221Z",
+  "completed_at": "2026-08-02T01:08:50.518221Z",
   "external": {}
 }

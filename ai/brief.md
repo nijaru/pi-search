@@ -11,8 +11,10 @@ JSON in normal chat presentation.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is clean and synced; the
-installed Git package was refreshed after the readable `web_search` output fix.
+https://github.com/nijaru/pi-search. The branch is clean and synced at the
+last context commit; renderer, output, and routing changes below are in the
+working tree and need a commit/push before installation. The installed Git
+package predates these latest changes.
 The active Pi runtime contains only this web extension and exposes exactly
 `web_search`, `web_fetch`, and `web_research`.
 
@@ -45,21 +47,23 @@ single-provider, sequential, budgeted workflow with optional direct fetches.
 
 ## Output status
 
-`web_search` now emits readable text in its tool `content`, but the package
-still lacks old-extension-style custom `renderResult` renderers. `web_fetch`
-and `web_research` still expose JSON-shaped content. The next output task must
-fix all three layers: model content, default TUI preview, and expanded details.
-A running Pi session can retain the implementation loaded at startup.
+All three tools now emit bounded readable model content instead of raw JSON
+and provide compact default Pi renderers with expanded evidence/details.
+Search shows three sources collapsed; fetch shows status/extraction and
+content; research shows stop status/counts and expands source summaries.
+Deterministic renderer/output tests cover the new behavior. A running Pi
+session can retain older code at startup, so install the new commit and start
+a fresh session.
 
 ## Verification
 
-The last full check passed: 135 tests, 318 assertions, TypeScript clean.
+The latest full check passed: 139 tests, 333 assertions, TypeScript clean.
 Deterministic coverage includes OpenAI/Codex parsing and cancellation, provider
 errors, domain constraints, fetch/PDF bounds, Brave pacing, Exa partial
-responses, readable search rendering, and provider metrics. One credentialed
-smoke each passed for Brave, Exa, and Parallel; direct OpenAI, Gemini, xAI, and
-official X live rows remain unverified. Do not repeat paid requests merely to
-measure latency.
+responses, readable search/fetch/research output, compact renderers, and
+provider metrics. One credentialed smoke each passed for Brave, Exa, and
+Parallel; direct OpenAI, Gemini, xAI, and official X live rows remain
+unverified. Do not repeat paid requests merely to measure latency.
 
 ## Active tasks
 
@@ -71,13 +75,9 @@ measure latency.
 
 ## Next sequence
 
-1. Save this plan and keep tasks synchronized.
-2. Implement compact content and custom Pi renderers for all three tools, with
-   deterministic tests for collapsed/expanded output and output bounds.
-3. Audit and harden OpenAI/Codex native search against current Responses output;
-   run only one deliberate live smoke per native path if credentials permit.
-4. Complete Exa routing and end-to-end OpenRouter/DeepSeek behavior, without
-   fallback after an Exa error.
-5. Audit fetch/research scope and run the minimum provider comparison corpus.
-6. Re-run the full offline suite, refresh the installed package, then test in a
-   newly started Pi session.
+1. Commit/push the renderer, output, Exa-routing, tests, and docs changes.
+2. Refresh the installed Git package and start a fresh Pi session; verify one
+   OpenRouter/DeepSeek call routes to Exa and displays compact output.
+3. Run only one deliberate native smoke per OpenAI/Codex path if credentials
+   become available; current offline audit is strong.
+4. Audit fetch/research scope and run the minimum provider comparison corpus.

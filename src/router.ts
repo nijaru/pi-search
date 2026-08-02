@@ -142,6 +142,14 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		}
 
 		const mode = normalized.mode ?? "auto";
+		const exaConfigured = options.exaConfigured === true;
+		const exaCanMatchMode = options.exa !== undefined && canServe(options.exa, normalized);
+		// Exa is the default non-native semantic path when the user has supplied
+		// its key. Selection happens before execution; an Exa failure is final.
+		if (exaConfigured && exaCanMatchMode) return options.exa!;
+		if (exaConfigured && mode !== "auto" && options.exa !== undefined && !exaCanMatchMode) {
+			return unavailable(`Exa cannot satisfy ${mode} search semantics`, "exa");
+		}
 		const braveCanMatchMode = options.brave !== undefined && canServe(options.brave, normalized);
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;

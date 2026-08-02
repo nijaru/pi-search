@@ -36,7 +36,13 @@ describe("search provider router", () => {
 		expect(route({ query: "q" }, context("openai-codex")).id).toBe("openai-codex");
 	});
 
-	it("uses configured Brave for free-capacity general search", () => {
+	it("uses configured Exa before Brave for non-native search", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).id).toBe("exa");
+		expect(route({ query: "q" }, context("openrouter", "openai-completions")).id).toBe("exa");
+	});
+
+	it("uses configured Brave when Exa is absent", () => {
 		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).id).toBe("brave");
 		expect(route({ query: "q" }, context("openrouter", "openai-completions")).id).toBe("brave");

@@ -12,14 +12,13 @@ import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 
 /**
- * Native grounding is selected for supported active models. Brave is the
- * configured local/non-native default, while Exa, Parallel, and the official X
- * API require explicit provider selection; no provider failure triggers a fallback.
+ * Native grounding is selected for supported active models. Exa is the
+ * configured non-native default when its key is present; Brave is the paced
+ * last-resort keyword path. No provider failure triggers a fallback.
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
-	// A configured Brave key should work like the previous extension by default.
-	// Free-mode admission is conservative: pace starts at 1 RPS and never claims
+	// Brave is a conservative last-resort path: pace starts at 1 RPS and never claims
 	// to know the account's billing balance. Set `=0` only with explicit metered
 	// opt-in when that pacing is intentionally not wanted.
 	const braveFreeOnly = process.env.PI_SEARCH_BRAVE_FREE_ONLY !== "0";

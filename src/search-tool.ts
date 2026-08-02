@@ -5,6 +5,7 @@ import {
 	type ExtensionContext,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static, type TUnsafe } from "typebox";
 import type { Provider, ProviderContext, ProviderModel, SearchRequest, SearchResponse } from "./contracts";
 import { toSearchToolError } from "./errors";
@@ -163,6 +164,36 @@ export function renderSearchResponse(response: SearchResponse): string {
 	return lines.join("\n").trim();
 }
 
+function searchResultPreview(result: SearchResponse["results"][number]): string {
+	const title = compactText(result.title ?? result.domain ?? result.url, 180);
+	const excerpt = result.excerpt === undefined ? undefined : compactText(result.excerpt, 240);
+	const lines = [`${title}`, `  ${result.url}`];
+	if (excerpt !== undefined && excerpt.length > 0) lines.push(`  ${excerpt}`);
+	return lines.join("\n");
+}
+
+/** Render the compact/expanded result shown in Pi's TUI. */
+export function renderSearchResult(response: SearchResponse, expanded: boolean, theme: Parameters<NonNullable<ToolDefinition["renderResult"]>>[2]): string {
+	const count = response.results.length;
+	const status = count === 0 ? "No results" : `${count} result${count === 1 ? "" : "s"}`;
+	const meta = [response.provider, response.latencyMs === undefined ? undefined : `${response.latencyMs}ms`].filter(Boolean).join(" · ");
+	let text = theme.fg(response.warnings.length > 0 ? "warning" : "success", status);
+	if (meta.length > 0) text += theme.fg("muted", ` · ${meta}`);
+	const limit = expanded ? count : Math.min(count, 3);
+	for (const result of response.results.slice(0, limit)) {
+		text += `\n${theme.fg("accent", searchResultPreview(result).split("\n")[0]!)}`;
+		text += `\n${theme.fg("dim", `  ${result.url}`)}`;
+		if (result.excerpt !== undefined) text += `\n${theme.fg("muted", `  ${compactText(result.excerpt, expanded ? 400 : 240)}`)}`;
+	}
+	if (!expanded && count > limit) text += `\n${theme.fg("muted", `… ${count - limit} more; expand for details`)}`;
+	if (expanded) {
+		for (const warning of response.warnings) text += `\n${theme.fg("warning", `Warning: ${compactText(warning.message, 300)}`)}`;
+		const usage = compactUsage(response.usage);
+		if (usage !== undefined) text += `\n${theme.fg("dim", `Usage: ${usage}`)}`;
+	}
+	return text;
+}
+
 function boundedResponseByteLength(response: SearchResponse): number {
 	return Math.max(
 		new TextEncoder().encode(JSON.stringify(response, null, 2)).byteLength,
@@ -252,6 +283,22 @@ export function createWebSearchTool(
 			} catch (error) {
 				throw toSearchToolError(error, selectedProvider?.id ?? "router");
 			}
+		},
+		renderCall(args, theme) {
+			const mode = args.mode === undefined ? "auto" : args.mode;
+			let text = theme.fg("toolTitle", theme.bold("web_search ")) + theme.fg("accent", `"${compactText(args.query, 120)}"`);
+			text += theme.fg("muted", ` · ${mode}`);
+			if (args.provider !== undefined) text += theme.fg("dim", ` · ${args.provider}`);
+			return new Text(text, 0, 0);
+		},
+		renderResult(result, { expanded, isPartial }, theme, context) {
+			if (isPartial) return new Text(theme.fg("warning", "Searching…"), 0, 0);
+			const details = result.details;
+			if (details === undefined) {
+				const content = result.content.find((item) => item.type === "text");
+				return new Text(theme.fg(context.isError ? "error" : "dim", content?.type === "text" ? content.text : "No search output"), 0, 0);
+			}
+			return new Text(renderSearchResult(details, expanded, theme), 0, 0);
 		},
 	});
 }

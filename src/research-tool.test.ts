@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Provider, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
-import { executeResearch } from "./research-tool";
+import { executeResearch, renderResearchResponse } from "./research-tool";
 
 function context(): never {
 	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
@@ -58,6 +58,25 @@ describe("web_research", () => {
 		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["http://127.0.0.1/blocked", "http://127.0.0.1/blocked-2"]), context());
 		expect(result.fetchAttempts).toBe(1);
 		expect(result.fetchesCompleted).toBe(0);
+	});
+
+	it("renders readable evidence instead of raw JSON", () => {
+		const response = {
+			question: "main",
+			results: [{ url: "https://example.com/1", title: "Example", excerpt: "A useful source", provider: "openai", searchQuery: "main" }],
+			fetched: [],
+			stepsCompleted: 1,
+			providerCalls: 1,
+			fetchesCompleted: 0,
+			fetchAttempts: 0,
+			stopReason: "completed" as const,
+			warnings: [],
+		};
+		const rendered = renderResearchResponse(response);
+		expect(rendered).toContain("Question: main");
+		expect(rendered).toContain("Search evidence:");
+		expect(rendered).toContain("URL: https://example.com/1");
+		expect(rendered).not.toContain('"results"');
 	});
 
 	it("bounds the serialized research response", async () => {

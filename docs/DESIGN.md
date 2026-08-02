@@ -27,8 +27,8 @@ Shipped search adapters:
 | Gemini grounding | Active Google Gemini model | `gemini` | No hard domain filter |
 | xAI web grounding | Active xAI Responses model | `xai` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` | Social/X search; no web-domain filter |
-| Brave | Other/local model with configured key; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
-| Exa | — | `exa` with configured key | Semantic retrieval and domains |
+| Exa | Other/local model with configured key | `exa` | Semantic retrieval, excerpts, and domains |
+| Brave | Other/local model when Exa is unavailable; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
 | Official X API | — | `x` with configured bearer token | Exact recent post/query/user search; direct post evidence; full archive is a future explicit option |
 
@@ -44,15 +44,17 @@ Normal `web_search` selects one provider:
 2. Gemini or xAI grounding when that provider is the active model; selecting
    the model is the user's metered-call decision. `xai-x` remains explicit for
    X-specific grounding.
-3. Brave for other models when `BRAVE_API_KEY` exists. It uses conservative
-   free-mode admission by default (1 RPS local pacing plus observed quota
-   windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
+3. Exa for other models when `EXA_API_KEY` exists and its hard constraints
+   are supported. Exa is selected before Brave because it supplies semantic
+   retrieval, highlights, and reported cost.
+4. Brave when Exa is unavailable and `BRAVE_API_KEY` exists. It uses
+   conservative free-mode admission by default (1 RPS local pacing plus
+   observed quota windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
    `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
    configured metered Brave.
-4. No automatic Exa, Parallel, or official X API selection. They require a
-   provider hint and configured credentials; the hint is the metered-call
-   decision.
-5. No fallback after auth, rate-limit, transient, malformed, unsupported, or
+5. Parallel and official X API remain explicit until their quality/role
+   evaluation justifies default routing.
+6. No fallback after auth, rate-limit, transient, malformed, unsupported, or
    cancellation errors.
 
 Provider profile usage is surfaced when available. A research cost ceiling is
@@ -90,7 +92,9 @@ Every provider returns:
 - request ID, latency, and provider usage when available.
 
 Model-generated answer text is discarded at the public search boundary. Native
-citation metadata is retained as inspectable source evidence.
+citation metadata is retained as inspectable source evidence. Normal tool
+content is readable and bounded rather than raw JSON; the full normalized
+response remains in tool details and is shown by the expanded Pi renderer.
 
 ## Direct fetching and specialty paths
 

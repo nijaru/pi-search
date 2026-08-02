@@ -125,6 +125,26 @@ describe("search boundary", () => {
 		}
 	});
 
+	it("uses a compact Pi renderer while preserving expandable evidence", async () => {
+		const provider = makeProvider(async (request) => ({
+			...successResponse(request.query),
+			results: Array.from({ length: 5 }, (_, index) => ({
+				...successResponse(request.query).results[0]!,
+				title: `Source ${index + 1}`,
+				url: `https://example.com/${index + 1}`,
+			})),
+		}));
+		const tool = createWebSearchTool(provider);
+		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const context = { isError: false } as never;
+		const collapsed = tool.renderResult!(result, { expanded: false, isPartial: false }, theme, context).render(120).join("\n");
+		const expanded = tool.renderResult!(result, { expanded: true, isPartial: false }, theme, context).render(120).join("\n");
+		expect(collapsed).toContain("2 more; expand for details");
+		expect(collapsed).not.toContain("Source 4");
+		expect(expanded).toContain("Source 5");
+	});
+
 	it("renders compact readable evidence while preserving metadata", () => {
 		const rendered = renderSearchResponse({
 			...successResponse("current APIs"),

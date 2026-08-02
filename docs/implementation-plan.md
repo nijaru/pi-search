@@ -14,8 +14,8 @@ This is the tracked source of truth for implementation order.
 
 - Native OpenAI/Codex Responses search is the first route for compatible active
   models.
-- Brave is available for other/local models only with explicit free-capacity or
-  metered policy.
+- Exa is the automatic non-native path when `EXA_API_KEY` is configured;
+  Brave remains a paced last-resort keyword path.
 - No native failure falls through to Brave or a paid provider.
 
 ## 2. Direct `web_fetch` — complete
@@ -33,8 +33,9 @@ Shipped routing now covers:
 - OpenAI Responses and Codex Responses native search;
 - Gemini Google Search grounding;
 - xAI web grounding and explicit X grounding;
-- Brave for free-capacity or explicitly metered non-native use; and
-- explicit, metered Exa and Parallel adapters.
+- Exa for configured non-native semantic search;
+- Brave for free-capacity or explicitly metered last-resort keyword search; and
+- explicit, metered Parallel and official X adapters.
 
 Native and direct failures remain visible. There is no hidden retry, fallback,
 or provider fan-out.
@@ -71,6 +72,11 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
 
 ## 7. Post-install maturity gates — next work
 
+The tools now emit bounded readable model content and compact default Pi
+renderers; expanded views retain the structured details. The remaining gates
+below are about provider correctness and measured role selection, not adding
+more output formats.
+
 The package is installed and usable, but these are the correct next gates
 before calling the search surface production-mature:
 
@@ -82,14 +88,14 @@ before calling the search surface production-mature:
    text, JSON, redirects, oversized responses, readable extraction, PDFs, and
    explicit scanned/encrypted failures. Keep the direct local path as the
    efficient default; do not add a browser or remote extractor by habit.
-3. **Brave free-mode admission gate.** Add a concurrency-safe local limiter,
-   preserve provider-reported quota windows, and state clearly that monthly
-   free credits are account billing rather than a separate endpoint or local
-   billing guarantee.
-4. **Provider-role evaluation gate.** Build deterministic and credential-gated
-   comparisons for quality, freshness, constraints, excerpts/context,
-   latency, cost, quotas, provenance, and failure behavior. The result should
-   choose providers by capability, not create a universal vendor ranking.
+3. **Direct-provider role gate.** Verify Exa's automatic non-native route and
+   its strict no-fallback behavior, then compare one deliberate corpus against
+   Brave and Parallel for evidence quality, hard constraints, context, cost,
+   and quota behavior. Keep the corpus small; latency is secondary.
+4. **Brave free-mode admission gate.** Preserve provider-reported quota
+   windows and state clearly that monthly free credits are account billing,
+   not a separate endpoint or local billing guarantee. Do not treat the local
+   1 RPS limiter as proof of free capacity.
 5. **Explicit option gate.** Add date, source-type, social-handle, or other
    provider-neutral options only when the evaluation shows a required gap.
    The current contract stays intentionally small: X query operators can be
