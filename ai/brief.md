@@ -12,8 +12,9 @@ readable output while investigating concrete parity gaps first.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`17599d4`; renderer, output, Exa-routing, research-bound, provenance, and
-expanded-metadata fixes are committed and installed. The user plans to return
+`82ee8bf`; renderer, output, Exa-routing, research-bound, provenance, and
+expanded-metadata fixes are committed; the revised quality requirements and
+rebaseline task are also saved. The user plans to return
 to `pi-web-access` operationally for now; no package switch was performed.
 The active Pi runtime currently exposes exactly
 `web_search`, `web_fetch`, and `web_research`. The search description now
@@ -52,7 +53,8 @@ fresh session after reload.
 
 ## Verification
 
-The latest full check passed: 141 tests, 336 assertions, TypeScript clean.
+The latest full check passed: 141 tests, 336 assertions, TypeScript clean;
+that check preceded documentation-only requirement updates.
 Deterministic coverage includes OpenAI/Codex parsing and cancellation, provider
 errors, domain constraints, fetch/PDF bounds, Brave pacing, Exa partial
 responses, readable search/fetch/research output, compact renderers, and
