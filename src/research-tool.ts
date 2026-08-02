@@ -108,6 +108,7 @@ function researchUsage(usage: ProviderUsage | undefined): string | undefined {
 export function renderResearchResponse(response: ResearchResponse, maxChars = MAX_RESEARCH_OUTPUT_CHARS): string {
 	const lines = [
 		`Question: ${compactText(response.question, 2_000)}`,
+		`Provider: ${response.provider}`,
 		`Status: ${response.stopReason}`,
 		`Steps: ${response.stepsCompleted} · provider calls: ${response.providerCalls} · fetched: ${response.fetchesCompleted}/${response.fetchAttempts}`,
 	];
@@ -265,6 +266,7 @@ export async function executeResearch(
 					context: providerContextFromPi(context),
 				});
 				results.push(...response.results);
+				warnings.push(...response.warnings);
 				const responseUsage = response.usage;
 				costUsd += responseUsage?.costUsd ?? estimatedCost;
 				if (responseUsage?.inputTokens !== undefined) {
@@ -338,6 +340,7 @@ export async function executeResearch(
 		};
 		const response: ResearchResponse = {
 			question: normalized.question,
+			provider: provider.id,
 			results,
 			fetched,
 			stepsCompleted,

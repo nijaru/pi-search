@@ -7,7 +7,7 @@ function context(): never {
 	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
 }
 
-function provider(fail = false, estimatedCostUsd?: number, resultUrls = ["https://example.com/1"]): Provider {
+function provider(fail = false, estimatedCostUsd?: number, resultUrls = ["https://example.com/1"], responseWarnings: SearchResponse["warnings"] = []): Provider {
 	let calls = 0;
 	return {
 		id: "openai",
@@ -21,7 +21,7 @@ function provider(fail = false, estimatedCostUsd?: number, resultUrls = ["https:
 				results: [{ url: resultUrls[(calls - 1) % resultUrls.length]!, provider: "openai", searchQuery: request.query }],
 				provider: "openai",
 				appliedOptions: ["maxResults"],
-				warnings: [],
+				warnings: responseWarnings,
 			};
 		},
 	};
@@ -41,6 +41,11 @@ describe("web_research", () => {
 		expect(result.stopReason).toBe("provider-error");
 		expect(result.providerCalls).toBe(1);
 		expect(result.warnings[0]?.message).toContain("rate limit");
+	});
+
+	it("preserves warnings returned by each provider call", async () => {
+		const result = await executeResearch({ question: "main", budget }, () => provider(false, undefined, ["https://example.com/1"], [{ code: "unsupported-option", option: "mode", message: "freshness is approximate" }]), context());
+		expect(result.warnings).toContainEqual({ code: "unsupported-option", option: "mode", message: "freshness is approximate" });
 	});
 
 	it("rejects invalid budgets before provider selection effects", async () => {
@@ -63,6 +68,7 @@ describe("web_research", () => {
 	it("renders readable evidence instead of raw JSON", () => {
 		const response = {
 			question: "main",
+			provider: "openai" as const,
 			results: [{ url: "https://example.com/1", title: "Example", excerpt: "A useful source", provider: "openai", searchQuery: "main" }],
 			fetched: [],
 			stepsCompleted: 1,

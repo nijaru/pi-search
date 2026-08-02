@@ -299,6 +299,8 @@ export type ResearchStopReason = "completed" | "budget" | "deadline" | "canceled
 
 export interface ResearchResponse {
 	readonly question: string;
+	/** The single provider selected for the whole research invocation. */
+	readonly provider: ProviderId;
 	readonly results: readonly SearchResult[];
 	readonly fetched: readonly FetchedContent[];
 	readonly stepsCompleted: number;
