@@ -211,6 +211,14 @@ durable rationale belongs in `decisions.md`.
   is the already-running Pi process/model-registry credential state. The
   installed Git package is at the latest context commit; a full Pi restart
   through the fnox-backed wrapper is the next acceptance gate.
+- 2026-08-02: Reproduced the auth discrepancy without exposing the key: a
+  direct Google request with only `x-goog-api-key` returned HTTP 200, while
+  adding the generic `Authorization: Bearer` header returned HTTP 401 with
+  `API_KEY_SERVICE_BLOCKED`. The extension's shared model-auth helper was
+  adding that bearer header to Gemini. Fixed in `18775fc` by disabling the
+  generic bearer header for Gemini, added an assertion, and refreshed the
+  installed checkout. A full Pi restart is required before the corrective
+  Lite smoke.
 - 2026-08-02: After Pi was reloaded, the direct Google
   `gemini-flash-lite-latest` smoke still returned HTTP 401. The shell has a
   `GEMINI_API_KEY` set, distinct from the OpenRouter key; Pi's auth file has no
