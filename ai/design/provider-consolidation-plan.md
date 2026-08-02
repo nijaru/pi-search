@@ -7,6 +7,26 @@ actual parity gaps are reviewed and accepted by the project owner.
 
 ## Goals
 
+The quality bar is task usefulness, not adapter count or strict parity with
+`pi-web-access`. A normal search should produce a useful, citation-bearing
+answer or high-quality evidence/context for the active model, work without
+unnecessary provider configuration, and remain bounded and inspectable.
+
+Borrow the strongest ideas from reviewed extensions:
+
+- `pi-web-access`: availability-based auth resolution, answer-plus-citation
+  presentation, optional source content, multi-query workflows, and compact
+  interaction;
+- `pi-web-providers`: typed capability definitions and centralized execution
+  policy;
+- `pi-search-hub`: URL identity, deduplication, reader dispatch, and explicit
+  provider health state; and
+- `pi-deep-research`: auditable source/citation records where a deeper research
+  workflow actually needs them.
+
+Do not import their broad provider fan-out, opaque synthesis, persistent
+history, browser curator, or remote extraction without a separate contract.
+
 - Cover useful native and direct search providers without duplicating calls by
   default.
 - Preserve evidence, provenance, hard constraints, cost, and rate-limit
@@ -58,8 +78,22 @@ explicit credential-gated smoke case.
 ## Priority order
 
 The earlier provider-first priority is paused. The next priority is a source
-and workflow parity review against `pi-web-access`; the items below are
-historical implementation context until that review is complete.
+and workflow quality review against `pi-web-access` and the required-workflow
+inventory. The items below are historical implementation context until that
+review is complete.
+
+### Rebaseline quality gates
+
+1. Define the normal `web_search` result contract: useful answer or evidence,
+   citation fidelity, backend/model attribution, source depth, and bounded
+   output.
+2. Resolve available search backends independently from the active model when
+   policy permits; make cross-provider billing explicit instead of silently
+   assuming active-provider-only search.
+3. Add bounded, observable resilience for unavailable providers, with no
+   unbounded fan-out or retry loops.
+4. Verify the actual Pi UI/tool path with deliberate GPT/OpenRouter/Codex
+   workflows before claiming replacement readiness.
 
 ### P0 — production correctness, output, and efficiency
 

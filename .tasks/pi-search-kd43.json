@@ -15,10 +15,14 @@
     {
       "ts": "2026-08-02T01:29:18.154342Z",
       "msg": "Source review confirmed the prior pi-web-access extension auto-detects authenticated OpenAI/Codex registry models even when another model is active, preserves synthesized answers, and has broader fallback/curator/content workflows. pi-search only routes native OpenAI/Codex when active and evidence-only output is intentional. User is pausing pi-search operationally and does not want provider comparison calls; rebaseline before implementation."
+    },
+    {
+      "ts": "2026-08-02T01:40:31.63032Z",
+      "msg": "User clarified the issue is not strict parity or provider ranking: even with GPT, pi-search has bugs and only technically works. Revised quality bar requires task-useful answer/citation behavior, automatic backend resolution, bounded resilience, and optional source depth; these are now open requirements rather than assumed non-goals."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T01:29:18.154342Z",
+  "updated_at": "2026-08-02T01:40:31.63032Z",
   "completed_at": null,
   "external": {}
 }

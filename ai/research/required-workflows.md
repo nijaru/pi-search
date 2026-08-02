@@ -2,10 +2,11 @@
 
 ## Scope
 
-This is the cutover inventory for replacing `pi-web-access` with `pi-search`.
-It records the workflows the project has actually called for, rather than
-requiring feature parity with every provider and UI in the reference package.
-A feature is required only when losing it would break an intended workflow.
+This is the revised quality inventory for determining whether `pi-search` can
+replace `pi-web-access`. It records user-visible outcomes, not just adapter
+presence. A feature is required when losing it makes normal search less useful,
+less reliable, or less safe; exact feature parity with the reference package is
+not the target.
 
 This is the current-runtime baseline, not the long-term provider ceiling. The
 long-term portfolio target, evaluation order, and conditional provider
@@ -16,15 +17,19 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 
 | Workflow | Current owner/status | Acceptance evidence |
 | --- | --- | --- |
-| Native OpenAI Responses search | `src/openai.ts`; shipped | Pi model-registry auth, SSE fixtures, live smoke |
-| Native OpenAI Codex search | `src/openai.ts`; shipped | Correct ChatGPT endpoint, fresh-process live smoke |
-| Search for local/non-native models | Brave plus explicit Exa/Parallel; shipped | Offline adapters, billing-policy tests, live smoke where credentials exist |
+| Task-useful web search | **Gap**: current output is evidence-only and has no answer-quality contract | A normal question yields a concise, citation-bearing answer or clearly usable evidence for the active model; no raw JSON or unexplained snippets |
+| Automatic backend resolution | **Gap**: native routing only follows the active provider | Normal search uses an available suitable native/direct backend without unnecessary manual provider selection; cross-provider use and billing are explicit in policy and diagnostics |
+| Bounded search resilience | **Gap**: provider errors are always final | A bounded, visible availability/fallback policy handles unavailable backends without unbounded fan-out, duplicate paid calls, or masking the original failure |
+| Native OpenAI Responses search | `src/openai.ts`; parser shipped, live quality unverified | Pi model-registry auth, current Responses fixtures, one deliberate live smoke, usable answer/citations |
+| Native OpenAI Codex search | `src/openai.ts`; parser shipped, live quality unverified | Correct ChatGPT endpoint, fresh-process live smoke, usable answer/citations |
+| Search for local/non-native models | Exa/Brave/Parallel adapters shipped; workflow quality gap remains | Works with normal active models, returns useful evidence/context, and exposes bounded cost/provenance |
 | Gemini grounding | `src/gemini.ts`; shipped | Model-registry auth and grounding fixtures; active model selection |
 | xAI web search | `src/xai.ts`; shipped | Model-registry auth and citation fixtures; active model selection |
 | Semantic/model-mediated X search | `xai-x`; shipped | Explicit provider and citation fixtures; no web-domain promise |
 | Exact post/query/user X search | `x`; shipped as explicit provider | Direct post URLs/text/IDs, bounded recent search, rate-limit fixtures |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
-| Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, live diagnostics |
+| Source depth and context | **Gap**: search snippets alone can be insufficient | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
+| Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |
 | PDF text extraction | bounded local `pdftotext`; shipped | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
 | YouTube transcript/caption fetch | bounded local `yt-dlp`; shipped | URL validation, cue cleanup, cancellation tests |
@@ -38,8 +43,9 @@ extension's runtime contract now:
 
 | Feature | Correct owner or decision | Reason |
 | --- | --- | --- |
-| Provider fan-out and automatic fallback | Retired from this contract | Risks duplicate paid calls, hidden latency, and ambiguous provenance |
-| Opaque answer synthesis and curator UI | Retired from this contract | Calling model should inspect evidence; Pi UI is not a search-provider contract |
+| Unbounded provider fan-out | Not required | Risks duplicate paid calls, hidden latency, and ambiguous provenance; any fallback must be bounded and visible |
+| Answer synthesis | **Open design decision** | Old/provider-generated answers improve task usefulness, but synthesis must retain citations, identify the backend/model, and avoid treating remote text as instructions |
+| Curator UI/storage | Not currently required | Useful in the old extension, but only adopt if an actual workflow needs interactive review or persistence |
 | Search history storage and `get_search_content` | Use repeated bounded `web_fetch`/offsets | Avoids persistent sensitive history; fetch already supports paging |
 | GitHub cloning and local repository browsing | Pi `read`, Bash, `git`, and `gh` | Repository operations need filesystem and Git semantics, not web search |
 | Local video analysis, frame extraction, and OCR | `yt-dlp`, `ffmpeg`, and a dedicated vision workflow | Media download/vision requires a separate resource and privacy boundary |
@@ -51,6 +57,9 @@ extension's runtime contract now:
 | Arbitrary extra search providers | Deferred unless a coverage gap appears | Tavily, SearXNG, Perplexity, Anthropic, and similar options overlap shipped capabilities or need a concrete auth/cost requirement |
 
 ## Required closure before cutover
+
+The current adapter/test inventory is not sufficient for cutover. The quality
+contract above must pass before another package switch is considered.
 
 The required rows above are not all release-verified yet. Before removing the
 old package from the active runtime:
