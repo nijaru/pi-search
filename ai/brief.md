@@ -12,9 +12,9 @@ JSON in normal chat presentation.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`be1fbef`; renderer, output, Exa-routing, research-bound, provenance, and
+`9322fac`; renderer, output, Exa-routing, research-bound, provenance, and
 expanded-metadata fixes are committed; the installed runtime contains the same
-code from `f68a764`. A running Pi session can still retain
+code. A running Pi session can still retain
 older code at startup, so start a fresh session after reload.
 The active Pi runtime contains only this web extension and exposes exactly
 `web_search`, `web_fetch`, and `web_research`. The search description now
