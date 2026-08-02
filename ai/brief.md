@@ -4,10 +4,9 @@
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and origin are clean at
-`1ab9d9a`; the installed Git package was refreshed to runtime commit
-`934ec0d`. The active
-Pi runtime contains only this web extension and exposes exactly `web_search`,
-`web_fetch`, and `web_research`.
+`eac13ec`; the installed Git package was refreshed to runtime commit
+`934ec0d`. The active Pi runtime contains only this web extension and exposes
+exactly `web_search`, `web_fetch`, and `web_research`.
 
 Shipped search adapters are OpenAI/Codex, Gemini, xAI web and semantic X,
 Brave, Exa, Parallel, and explicit official X recent search. Fetching includes
@@ -45,31 +44,24 @@ default owners for local repositories, media, OCR, and visual analysis.
 OpenAI/Codex failure metadata, blocked domain filters, stream cancellation,
 fetch/PDF bounds, Brave free-mode pacing, provider metrics, official X
 normalization, and readable search rendering have deterministic coverage. The
-installed package was refreshed after the readable-output fix. Live Brave and
-Exa smoke calls passed against `iana.org`; Brave returned its rate-limit
-windows and Exa reported a $0.007 search cost. Other direct-provider live rows
-remain skipped unless dedicated smoke credentials are provided.
+installed package was refreshed after the readable-output fix. One live smoke
+call each passed for Brave, Exa, and Parallel against `iana.org`; Brave
+returned account rate-limit windows, Exa reported a $0.007 search cost, and
+Parallel returned normalized evidence. Direct OpenAI, Gemini, xAI, and official
+X live rows remain unverified.
 
-Credentialed live rows for direct OpenAI, Gemini, xAI, Brave, Exa, Parallel, and
-the official X API remain skipped unless dedicated smoke credentials are
-provided. Do not claim those providers passed live tests. The X and other live
-smoke dry-run paths are present and fail closed.
+## Active work
 
-## Completed planning gates
-
-The provider-role evaluation harness, X API comparison, selective-provider
-evaluation, and dynamic-page ownership evaluation are complete. Perplexity is
-still conditional on a measured hard date/path/domain gap; SearXNG is
-self-hosted-only; browser/remote extraction remains conditional on failed-page
-evidence. No open tasks remain in `tk`.
+`pi-search-az96` is the open benchmark task. Cost and result quality are the
+primary criteria; latency is recorded but not optimized or repeatedly sampled.
+The first four candidates are Brave, Exa, Parallel, and Gemini. Do not infer
+free-tier eligibility from marketing pages or rank providers from one smoke
+query. The cached Exa MCP package is not active in Pi's MCP configuration.
 
 ## Next action
 
-A runtime smoke exposed and fixed the default Brave admission regression. The
-model-visible search result is now compact readable evidence instead of raw
-JSON; structured details remain available to callers. Current default policy
-uses Brave for cost-controlled non-native search, with Exa and other providers
-selected explicitly until a representative quality/cost benchmark justifies
-automatic preference. The cached Exa MCP package is not active in Pi's MCP
-configuration. Restart any long-running Pi process after installing this
-change. Next work is an evidence-based provider benchmark and OpenRouter smoke.
+Make the direct Exa path production-complete for the non-native fallback/use
+case, then benchmark only the minimum representative cases needed to choose
+between Brave, Exa, Parallel modes, and Gemini grounding. Keep the current
+Brave default until that evidence changes it. Restart any long-running Pi
+process after installing runtime changes.

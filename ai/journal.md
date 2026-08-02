@@ -128,3 +128,9 @@ durable rationale belongs in `decisions.md`.
   official X providers. Active model selection or an explicit provider hint is
   already user intent, so those redundant gates were removed; credentials and
   strict single-provider routing remain required.
+- The user set the active evaluation policy: prioritize total cost for useful
+  results over latency, avoid repeated paid measurements, restrict the first
+  comparison to Brave, Exa, Parallel, and Gemini, and treat marketing claims
+  about free tiers as unverified until docs or account evidence confirms them.
+  Exa should be made fully reliable first as the known useful fallback, without
+  making its popularity or the previous extension's behavior the default policy.
