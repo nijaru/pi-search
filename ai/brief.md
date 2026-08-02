@@ -11,10 +11,10 @@ fan-out, opaque storage, or unsafe remote extraction.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`cfcdf32` (implementation `9a18341`, citation rendering fix `33b8409`, and
-live-smoke context); the installed checkout is at `33b8409` with its unrelated
-local `bun.lock` change preserved. Pi must be reloaded after that refresh to
-execute the latest citation-title fix.
+`db78523` (implementation `9a18341`, citation rendering fix `33b8409`, and
+current Gemini Lite policy); the installed checkout is also at `db78523` with
+its unrelated local `bun.lock` change preserved. Pi must be reloaded after
+that refresh to execute the latest search behavior.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
