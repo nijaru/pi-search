@@ -4,7 +4,7 @@
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The current branch and origin are clean at
-`67cc67d`; the installed Git package was refreshed to runtime commit
+`0324972`; the installed Git package was refreshed to runtime commit
 `934ec0d`. The active Pi runtime contains only this web extension and exposes
 exactly `web_search`, `web_fetch`, and `web_research`.
 
@@ -63,7 +63,9 @@ query. The cached Exa MCP package is not active in Pi's MCP configuration.
 The direct Exa path now preserves valid evidence from partial responses,
 falls back from empty highlights to text/summary, ignores malformed optional
 billing metadata, and exposes a $0.007 standard-call estimate for bounded
-research budgets. Next, benchmark only the minimum representative cases needed
-to choose between Brave, Exa, Parallel modes, and Gemini grounding. Keep the
-current Brave default until that evidence changes it. Restart any long-running
-Pi process after installing runtime changes.
+research budgets. `docs/provider-corpus.md` defines the minimum comparison
+cases and human labels; no additional live requests were made. Next, run only
+the minimum representative calls needed to choose between Brave, Exa, Parallel
+modes, and Gemini grounding. Keep the current Brave default until that evidence
+changes it. Restart any long-running Pi process after installing runtime
+changes.
