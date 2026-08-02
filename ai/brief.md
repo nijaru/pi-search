@@ -12,9 +12,9 @@ readable output while investigating concrete parity gaps first.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`82ee8bf`; renderer, output, Exa-routing, research-bound, provenance, and
+`d79f217`; renderer, output, Exa-routing, research-bound, provenance, and
 expanded-metadata fixes are committed; the revised quality requirements and
-rebaseline task are also saved. The user plans to return
+rebaseline task are saved. The user plans to return
 to `pi-web-access` operationally for now; no package switch was performed.
 The active Pi runtime currently exposes exactly
 `web_search`, `web_fetch`, and `web_research`. The search description now
@@ -40,6 +40,11 @@ single-provider, sequential, budgeted workflow with optional direct fetches.
   optional answer synthesis before claiming replacement readiness.
 - Keep safety, bounds, provenance, cancellation, and readable output as
   candidate advantages; prove they matter against actual workflows.
+- The next implementation must redesign the search plane before patching
+  adapters: task-useful answer/evidence output, capability-based backend
+  resolution, bounded visible resilience, and optional source enrichment.
+  Preserve the fetcher, safety boundary, provider adapters, and deterministic
+  fixtures unless the design review finds a concrete defect.
 
 ## Output status
 
@@ -71,8 +76,8 @@ unverified. Do not repeat paid requests merely to measure latency.
 
 1. Use the prior extension for the user's current work if desired; do not
    switch packages automatically.
-2. Inventory actual workflows and compare the old and current source behavior,
-   especially OpenAI/Codex availability routing, answer/synthesis, multi-query
-   search, fetch/content handling, and UI presentation.
-3. Produce a minimal parity/advantage design before writing more code. Do not
-   benchmark providers or add adapters merely because they exist.
+2. Finish the search-plane design: evidence/answer contract, backend resolver,
+   bounded fallback policy, and optional source enrichment.
+3. Implement the design in focused slices with fake Pi integration tests before
+   any deliberate live smoke. Do not benchmark providers or add adapters merely
+   because they exist.

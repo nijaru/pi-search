@@ -19,10 +19,14 @@
     {
       "ts": "2026-08-02T01:40:31.63032Z",
       "msg": "User clarified the issue is not strict parity or provider ranking: even with GPT, pi-search has bugs and only technically works. Revised quality bar requires task-useful answer/citation behavior, automatic backend resolution, bounded resilience, and optional source depth; these are now open requirements rather than assumed non-goals."
+    },
+    {
+      "ts": "2026-08-02T01:54:38.783881Z",
+      "msg": "User directed: save/compact, then fix design issues before implementation. Next design must cover task-useful answer/evidence output, capability-based backend resolution, bounded visible resilience, optional source enrichment, and end-to-end Pi integration tests. Preserve fetch safety/adapters unless concrete review finds defects; no provider benchmarking."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T01:40:31.63032Z",
+  "updated_at": "2026-08-02T01:54:38.783881Z",
   "completed_at": null,
   "external": {}
 }
