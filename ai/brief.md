@@ -10,10 +10,11 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Source and the installed checkout are at
-`9ccb378`, with the installed checkout's unrelated local `bun.lock` change
-preserved. Pi must be reloaded after a refresh to execute the latest search
-behavior.
+https://github.com/nijaru/pi-search. Source is at `953ab37`; the installed
+checkout is at runtime commit `9ccb378` with its unrelated local `bun.lock`
+change preserved. The latest source change after that runtime commit only
+records context, so the installed behavior is current. Pi must be reloaded
+after a runtime refresh to execute new search behavior.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
