@@ -11,8 +11,8 @@ fan-out, opaque storage, or unsafe remote extraction.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. The branch is clean and synced at
-`61e71f9`; runtime includes the routing fix after `32c134f`. The installed
-package at `/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` is also at
+`5f20e09`; runtime includes the routing fix after `32c134f`. The installed
+package at `/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` remains at
 `61e71f9`.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
