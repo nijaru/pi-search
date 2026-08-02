@@ -4,13 +4,15 @@
 
 The extension exposes exactly three Pi tools:
 
-- `web_search` returns normalized evidence and provenance.
+- `web_search` returns a bounded typed provider answer when available plus
+  inspectable evidence and provenance, or evidence alone.
 - `web_fetch` retrieves bounded content from a selected URL.
 - `web_research` runs an explicit, budgeted sequence of searches and optional
   fetches.
 
-There is no opaque answer tool, hidden planner, provider fan-out, or implicit
-browser/crawler.
+There is no separate opaque answer tool, hidden planner, unbounded provider
+fan-out, or implicit browser/crawler. Provider answer text remains untrusted
+and must cite normalized sources.
 
 ## Provider boundary
 
@@ -37,29 +39,35 @@ No adapter retries or silently changes providers.
 
 ## Routing and billing
 
-Normal `web_search` selects one provider:
+Normal `web_search` resolves one primary provider and, for automatic routing,
+at most one visible fallback:
 
 1. OpenAI Responses or Codex Responses native search when that is the active
    compatible model.
-2. Gemini or xAI grounding when that provider is the active model; selecting
+2. For another active model, an authenticated OpenAI/Codex Responses model
+   available through Pi's model registry is eligible, preserving built-in
+   search without requiring a model switch.
+3. Gemini or xAI grounding when that provider is the active model; selecting
    the model is the user's metered-call decision. `xai-x` remains explicit for
    X-specific grounding.
-3. Exa for other models when `EXA_API_KEY` exists and its hard constraints
+4. Exa for other models when `EXA_API_KEY` exists and its hard constraints
    are supported. Exa is selected before Brave because it supplies semantic
    retrieval, highlights, and reported cost.
-4. Brave when Exa is unavailable and `BRAVE_API_KEY` exists. It uses
+5. Brave when Exa is unavailable and `BRAVE_API_KEY` exists. It uses
    conservative free-mode admission by default (1 RPS local pacing plus
    observed quota windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
    `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
    configured metered Brave.
-5. Parallel and official X API remain explicit until their quality/role
+6. Parallel and official X API remain explicit until their quality/role
    evaluation justifies default routing.
-6. No fallback after auth, rate-limit, transient, malformed, unsupported, or
-   cancellation errors.
 
-Provider profile usage is surfaced when available. A research cost ceiling is
-rejected when a provider cannot provide a reliable per-call estimate; this
-prevents a false guarantee for native grounding, Exa, and Parallel.
+A primary failure may use one fallback only for automatic availability-like
+failures. Explicit provider hints, invalid/unsupported/malformed requests,
+and cancellation remain final. There are no retry loops, paid fan-out, or
+provider comparisons. Provider profile usage and selected execution model are
+surfaced when available. A research cost ceiling is rejected when a provider
+cannot provide a reliable per-call estimate; this prevents a false guarantee
+for native grounding, Exa, and Parallel.
 
 ## Native OpenAI stability contract
 
@@ -87,20 +95,24 @@ Every provider returns:
 
 - source URL and hostname;
 - optional title, excerpt, publication timestamp, score, and source ID;
-- provider identity and executed query;
-- applied options and explicit unsupported-option warnings;
+- provider identity, executed query, and execution model when available;
+- an optional typed, bounded provider answer with source URL citations;
+- applied options and explicit unsupported-option warnings; and
 - request ID, latency, and provider usage when available.
 
-Model-generated answer text is discarded at the public search boundary. Native
-citation metadata is retained as inspectable source evidence. Normal tool
-content is readable and bounded rather than raw JSON; the full normalized
-response remains in tool details and is shown by the expanded Pi renderer.
+Answer text is untrusted provider output, not an authoritative summary. Native
+citation metadata is retained as inspectable source evidence and citations are
+aligned with normalized URLs. Normal tool content is readable and bounded
+rather than raw JSON; the full normalized response remains in tool details and
+is shown by the expanded Pi renderer.
 
 ## Direct fetching and specialty paths
 
 The fetch operation uses pinned direct HTTP transport, manual redirect
 validation, DNS/IP SSRF checks, streamed byte limits, one overall deadline,
 cancellation, and local extraction. Fetched content is always untrusted data.
+`web_search` can opt into bounded enrichment of selected result URLs through
+this same fetcher; it never uses an implicit remote extraction service.
 
 - PDF URLs are fetched safely, validated by magic header, passed to bounded
   local `pdftotext`, and cleaned up. No OCR or persistent download.

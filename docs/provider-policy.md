@@ -5,58 +5,69 @@ records current routing and spending policy, not a permanent provider ranking.
 
 ## Ordinary search
 
-The extension selects exactly one provider:
+The extension selects one primary provider and may make one visible fallback
+call for automatic routing:
 
 1. Active OpenAI Responses and Codex Responses models use native OpenAI search.
-2. Active Google Gemini and xAI Responses models use native grounding
+2. With another active model, an authenticated OpenAI/Codex Responses model in
+   Pi's registry is eligible, so built-in search does not require changing the
+   active model.
+3. Active Google Gemini and xAI Responses models use native grounding
    automatically; selecting that active model is the user's metered-call
    decision. `xai-x` is explicit for X-specific retrieval.
-3. Other/local models use Brave when `BRAVE_API_KEY` is configured. The
-   default is conservative free-mode admission: local request starts are
-   spaced by one second and observed provider quota windows are honored.
-   `PI_SEARCH_BRAVE_FREE_ONLY=0` disables that pacing only for deliberate
-   metered use with `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account
-   billing or guarantees against paid overage.
-4. Exa, Parallel, and official X API search require configured credentials
-   and an explicit provider hint. The hint is the metered-call decision; they
-   are never selected automatically. `PI_SEARCH_ALLOW_METERED=1` is only
-   needed when deliberately disabling Brave's default free-mode pacing.
-5. If nothing is eligible, search fails clearly.
+4. Other/local models use configured Exa automatically when its hard
+   constraints are supported. Exa is preferred because it returns semantic
+   evidence and highlights.
+5. Brave is the last direct path when Exa is unavailable and
+   `BRAVE_API_KEY` is configured. The default is conservative free-mode
+   admission: local request starts are spaced by one second and observed
+   provider quota windows are honored. `PI_SEARCH_BRAVE_FREE_ONLY=0` disables
+   that pacing only for deliberate metered use with
+   `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account billing or
+   guarantees against paid overage.
+6. Parallel and official X API require an explicit provider hint.
 
-A provider error never starts a second provider call. There are no hidden
-retries, paid fallback chains, or automatic multi-provider searches.
+An automatic primary failure may use at most one eligible alternative for
+availability-like errors. The response reports the failed provider and
+fallback warning. Explicit provider hints, invalid/unsupported/malformed
+requests, and cancellation remain final. There are no retry loops, hidden
+fan-out, or provider comparisons.
 
 ## Shipped providers
 
 | Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
-| OpenAI/Codex | Native default for compatible active provider | One authenticated same-provider Responses model; no fallback | Pi model registry |
-| Gemini | Native Google Search grounding for active Gemini | Active model selects it; no fallback | Pi model registry |
-| xAI | Native web grounding for active xAI Responses | Active model selects it; no fallback | Pi model registry |
+| OpenAI/Codex | Native and registry-available built-in search | Active model first; one authenticated registry model may serve other models | Pi model registry |
+| Gemini | Native Google Search grounding for active Gemini | Active model selects it; one bounded automatic fallback may apply | Pi model registry |
+| xAI | Native web grounding for active xAI Responses | Active model selects it; one bounded automatic fallback may apply | Pi model registry |
 | xAI X | Explicit social/X grounding | Explicit `xai-x`; no fallback | Pi model registry |
-| Brave | Non-native/local fallback path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
-| Exa | Semantic retrieval and highlights | Explicit `exa`; no automatic selection | `EXA_API_KEY` |
+| Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
+| Exa | Automatic non-native semantic path | Selected automatically when configured; one visible fallback may use Brave | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Exact post/query/user/recent search | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
-The word “fallback” for Brave means fallback in model *selection* when no
-native provider applies. It does not mean fallback after a provider failure.
+The word “fallback” for Brave primarily means fallback in model *selection*
+when no native provider applies. Automatic routing also permits one visible
+alternative after an availability-like primary failure; explicit providers
+never use this behavior.
 
 ## Why both native and direct providers exist
 
 Native grounding is appropriate when the active model already owns a search
-capability, especially OpenAI/Codex, Gemini, and xAI. It avoids routing a local
-or unrelated model through a different model and preserves that provider's
-citation semantics.
+capability, especially OpenAI/Codex, Gemini, and xAI. When another model is
+active, an already authenticated OpenAI/Codex model in Pi's registry can still
+provide the built-in search path; the response identifies that execution
+model. This avoids forcing a model switch while keeping credentials inside Pi's
+registry boundary.
 
-Brave is the cost-controlled general option for local and other models. Exa
-and Parallel are useful specialized, metered choices but are never silently
-used. Exa is strongest for semantic retrieval/highlights; Parallel is useful
-for objective-oriented research and excerpts. The official X API is a separate
-exact post/query/user retrieval path, while xAI X remains the semantic,
-model-mediated path. None of these direct providers provides a reliable fixed
-per-call estimate for every hard research cost ceiling, so unsupported cost
-ceilings are rejected before calls.
+Exa is the automatic semantic option for local and other models because it
+returns useful highlights and source evidence. Brave is the cost-controlled
+last direct path when Exa is absent; its free-mode admission remains
+conservative. Parallel is a useful explicit objective-oriented provider. The
+official X API is a separate exact post/query/user retrieval path, while xAI X
+remains the semantic, model-mediated path. None of these direct providers
+provides a reliable fixed per-call estimate for every hard research cost
+ceiling, so unsupported cost ceilings are rejected before calls.
 
 ## Search constraints
 
@@ -95,11 +106,13 @@ capability; a general provider returning `x.com` links is not equivalent.
 
 ## Transient failures
 
-There are zero automatic retries. Authentication, invalid requests,
-unsupported filters, malformed responses, and cancellation are not retried.
-Network, 408, 425, 429, and 5xx failures remain visible with stable provider,
-status, request ID, retry timing, and retryability fields. A caller may decide
-to retry as a new tool call.
+There are no same-provider retries. Authentication, network, timeout,
+rate-limit, HTTP, and unavailable failures may consume the single bounded
+alternative for automatic routing; the response records that decision.
+Invalid requests, unsupported filters, malformed responses, and cancellation
+are not retried or rerouted. Failures remain visible with stable provider,
+status, request ID, retry timing, and retryability fields. A caller may retry
+as a new tool call.
 
 ## Extension ownership
 
@@ -119,7 +132,9 @@ It does not own:
 - browser automation or JS-only page execution;
 - video downloads, frames, OCR, or visual analysis (`yt-dlp`, `ffmpeg`, vision
   workflows); or
-- implicit cloning, persistent search storage, or provider answer synthesis.
+- implicit cloning, persistent search storage, or opaque answer synthesis.
+  Typed provider answers may be returned when the backend supplies grounded
+  citations; they remain untrusted evidence.
 
 ## Runtime ownership and cutover
 
