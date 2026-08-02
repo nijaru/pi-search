@@ -10,10 +10,11 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is clean and synced at `9806f7c` (implementation `9a18341` plus
-context commit); the installed package at
-`/Users/nick/.pi/agent/git/github.com/nijaru/pi-search` remains at `61e71f9`
-until it is deliberately refreshed and Pi is restarted.
+https://github.com/nijaru/pi-search. The branch is clean and synced at
+`33b8409` (implementation `9a18341`, context `9806f7c`, and the citation
+rendering fix); the installed checkout is also at `33b8409` with its unrelated
+local `bun.lock` change preserved. Pi must be reloaded after that refresh to
+execute the latest citation-title fix.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
@@ -74,38 +75,42 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 165 tests and 395 assertions, with TypeScript clean.
+`bun run check` passes: 166 tests and 396 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
-fetch-attempt counts, cancellation mapping, and existing safety,
-PDF, captions, cancellation, provider, and renderer fixtures. `git diff
---check` passes. A fresh Codex Pi process completed a live search with concise
-cited output and no raw JSON. A fresh OpenRouter/DeepSeek process failed before
-tool execution with `401 User not found`; this is an OpenRouter credential or
-session blocker and does not validate the search path. One direct Exa smoke
-passed with bounded IANA evidence, no warnings, a request ID, and
-provider-reported cost of $0.007; a fresh installed Pi smoke then returned
-three concise Exa source links with no raw JSON. No comparison calls were made.
+fetch-attempt counts, cancellation mapping, and existing safety, PDF, captions,
+cancellation, provider, and renderer fixtures. `git diff --check` passes. A
+fresh installed Pi process completed live smokes for active OpenAI/Codex,
+explicit Exa, xAI web search, xAI X search, and bounded Readability fetch; all
+returned clean bounded output except the constrained xAI X request, which
+completed without parseable citations and was correctly rejected by the
+evidence-first boundary. Exa reported $0.007 for its smoke. Explicit Gemini
+`gemini-2.5-flash` reached the adapter but returned HTTP 401 because direct
+Google authentication is not configured. OpenRouter/DeepSeek still has the
+separate earlier `401 User not found` credential/session blocker. No provider
+comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
-  model-mediated routing/constraint pass is complete offline. Exa direct and
-  installed tool-path smokes passed, but Gemini/xAI/official-X live acceptance
-  and non-native OpenRouter/DeepSeek acceptance remain open; the latter is
-  blocked by its credential/session failure.
+  design and implementation are materially complete offline. OpenAI/Codex,
+  Exa, xAI web/X, and fetch smokes pass. Gemini is credential-blocked by HTTP
+  401; a constrained xAI X request produced no citations and remains an
+  evidence-first investigation item. OpenRouter/DeepSeek remains blocked by
+  its separate credential/session failure.
 
 ## Next sequence
 
-1. Refresh the installed package after the implementation commit and run the
-   deliberate provider smoke gates only when credentials are intentionally
-   available: OpenAI/Codex first, then Gemini/xAI/X. Do not benchmark latency
-   or compare providers with paid calls.
-2. Repair the OpenRouter/DeepSeek credential or session issue if that workflow
-   is still required, then run one installed non-native smoke and confirm
-   automatic Exa routing. Automatic routing skips incompatible OpenAI
-   chat-completions models instead of failing before the normal registry/direct
-   path.
-3. Re-read any concrete failure, update the required-workflow/task docs, and
-   close `pi-search-kd43` only after the remaining live gates pass.
+1. Reload Pi once more after `33b8409` if we want to verify the numeric xAI
+   citation-label rendering fix in the actual tool process. Do not spend more
+   paid calls on the constrained X case without a raw response or a specific
+   no-match test hypothesis.
+2. If direct Gemini search is required, configure/authenticate a Google model
+   in Pi and run one deliberate `gemini-2.5-flash` smoke; otherwise retain the
+   HTTP 401 as an explicit environment gate rather than hiding it with a
+   fallback.
+3. Decide whether the constrained xAI X no-citation result is provider-side
+   no-match behavior or a response-shape gap, then add a deterministic fixture
+   or parser fix. Keep `pi-search-kd43` open until that decision and the
+   credential-gated acceptance requirements are resolved.

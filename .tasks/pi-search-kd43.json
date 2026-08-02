@@ -55,10 +55,14 @@
     {
       "ts": "2026-08-02T05:20:35.30047Z",
       "msg": "2026-08-02: Reviewed official Gemini/xAI docs and current provider implementations. Model-mediated search now resolves explicit registry models; Gemini support-linked citations and xAI annotation citations are aligned; xAI X handle/date/media options, Exa date filters, official X handle/date filters, research executionModel propagation, usage-query/token accounting, and hard-constraint rejection at adapter boundaries are covered. Offline check: 165 tests / 395 assertions, TypeScript clean. No live Gemini/xAI/X requests made; live acceptance remains open."
+    },
+    {
+      "ts": "2026-08-02T16:00:26Z",
+      "msg": "After refreshing the installed package to 78a9af0 and restarting Pi, live smoke gates passed for active OpenAI/Codex (clean cited sources), explicit Exa (clean sources; provider cost $0.007), xAI web search with executionModel grok-4.5, xAI X search with executionModel grok-4.5, and bounded web_fetch/readability. Explicit Gemini executionModel gemini-2.5-flash reached the adapter but failed HTTP 401 because direct Google model authentication is not configured. A constrained xAI X request completed without parseable citations; retain evidence-first failure behavior until a raw provider response or reproducible no-match contract is available. Numeric xAI citation labels were exposed as titles; fixed in 33b8409, refreshed the installed checkout, and added offline coverage. Verification is now 166 tests / 396 assertions; live Gemini acceptance remains credential-blocked."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T05:20:35.30047Z",
+  "updated_at": "2026-08-02T16:00:26Z",
   "completed_at": null,
   "external": {}
 }

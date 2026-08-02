@@ -180,3 +180,16 @@ durable rationale belongs in `decisions.md`.
   context updates as `9806f7c`. The working tree is clean. The installed copy
   intentionally remains at `61e71f9`; refreshing it and restarting Pi is the
   next operational step before testing the new model-mediated paths.
+- 2026-08-02: After the installed checkout was refreshed to `78a9af0` and Pi
+  was restarted, deliberate live smoke gates passed for active OpenAI/Codex,
+  explicit Exa (provider-reported cost `$0.007`), xAI web search with
+  `grok-4.5`, xAI X search with `grok-4.5`, and bounded Readability fetch.
+  Gemini `gemini-2.5-flash` reached the adapter but returned HTTP 401 because
+  direct Google model authentication is not configured. A constrained xAI X
+  query completed without parseable citations; evidence-first rejection is
+  retained until the raw response or a reproducible no-match contract is
+  available. The live xAI response exposed numeric inline-citation labels as
+  source titles; `33b8409` drops those labels so rendering falls back to the
+  source domain, with offline coverage. Verification is 166 tests / 396
+  assertions; the installed checkout is now `33b8409` with its unrelated
+  local `bun.lock` change preserved.
