@@ -31,10 +31,14 @@
     {
       "ts": "2026-08-02T02:25:53.870123Z",
       "msg": "Fresh installed-package Codex Pi smoke passed with concise cited output and no raw JSON. OpenRouter/DeepSeek fresh process failed before tool execution with 401 User not found, recorded as credential/session blocker. Offline 145-test suite remains green; no provider-comparison calls run."
+    },
+    {
+      "ts": "2026-08-02T02:36:53.519252Z",
+      "msg": "Independent review found three P2 enrichment issues; fixed in 32c134f: UTF-8 byte bounds include fetched source content, failed enrichment counts against attempts, cancellation/deadline preserve stable search errors, and cleanup drops invalid answers. Offline check now 148 tests / 356 assertions; package refreshed."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",
-  "updated_at": "2026-08-02T02:25:53.870123Z",
+  "updated_at": "2026-08-02T02:36:53.519252Z",
   "completed_at": null,
   "external": {}
 }
