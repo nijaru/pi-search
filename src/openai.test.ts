@@ -63,6 +63,11 @@ describe("OpenAIProvider", () => {
 	it("normalizes citations and sources as inspectable evidence", () => {
 		const result = normalizeOpenAIResponse(payload, request, "openai");
 		expect(result).toMatchObject({ query: request.query, provider: "openai", requestId: "resp-123", usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, billedUnits: 30, billedUnit: "tokens" } });
+		expect(result.answer).toMatchObject({
+			text: "TypeScript's latest release is documented here.",
+			contentTrust: "untrusted",
+			citations: [{ url: "https://typescriptlang.org/docs", title: "TypeScript docs" }],
+		});
 		expect(result.results).toEqual([
 			{
 				url: "https://typescriptlang.org/docs",
@@ -110,6 +115,29 @@ describe("OpenAIProvider", () => {
 			appliedOptions: ["maxResults", "mode", "domains"],
 			warnings: [],
 		});
+	});
+
+	it("selects an authenticated registry model when another provider is active", async () => {
+		let authenticatedModel = "";
+		let body: Record<string, unknown> | undefined;
+		const searchModel = { ...model("openai"), id: "gpt-5.5" };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			model: { id: "deepseek-chat", provider: "openrouter", api: "openai-completions", baseUrl: "https://openrouter.test" },
+			modelRegistry: {
+				getModels: () => [searchModel],
+				getApiKeyAndHeaders: async (requested) => { authenticatedModel = requested.id; return { ok: true, apiKey: "registry-key" }; },
+			},
+		});
+		expect(authenticatedModel).toBe("gpt-5.5");
+		expect(body?.model).toBe("gpt-5.5");
 	});
 
 	it("selects an authenticated same-provider search model", async () => {

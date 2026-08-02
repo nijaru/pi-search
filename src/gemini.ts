@@ -16,6 +16,7 @@ import { validateSearchRequest } from "./search";
 
 export const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_GEMINI_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_GEMINI_ANSWER_LENGTH = 8_000;
 
 export interface GeminiAdapterOptions {
 	readonly endpoint?: string;
@@ -108,6 +109,7 @@ function normalizeGeminiResponse(payload: unknown, request: SearchRequest): Sear
 		throw createProviderError({ provider: "gemini", kind: "malformed", message: "Gemini returned no candidates array", retryable: false });
 	}
 	const results: SearchResult[] = [];
+	const answerParts: string[] = [];
 	const maxResults = normalized.maxResults ?? 10;
 	const seen = new Set<string>();
 	const warnings: SearchWarning[] = [];
@@ -117,6 +119,15 @@ function normalizeGeminiResponse(payload: unknown, request: SearchRequest): Sear
 		const finishReason = optionalString(candidate.finishReason);
 		if (finishReason !== undefined && finishReason !== "STOP" && finishReason !== "UNSPECIFIED") {
 			warnings.push({ code: "partial-results", message: `Gemini grounding candidate finished with ${finishReason}` });
+		}
+		const content = candidate.content;
+		if (content !== null && typeof content === "object" && !Array.isArray(content)) {
+			const parts = (content as Record<string, unknown>).parts;
+			if (Array.isArray(parts)) {
+				for (const part of parts) {
+					if (part !== null && typeof part === "object" && !Array.isArray(part) && typeof (part as Record<string, unknown>).text === "string") answerParts.push((part as Record<string, unknown>).text as string);
+				}
+			}
 		}
 		const metadata = candidate.groundingMetadata;
 		if (metadata === undefined) continue;
@@ -152,9 +163,14 @@ function normalizeGeminiResponse(payload: unknown, request: SearchRequest): Sear
 	const usage = root.usageMetadata;
 	const usageRecord = usage === undefined ? undefined : objectValue(usage, "usageMetadata", "gemini");
 	const billedUnits = typeof usageRecord?.totalTokenCount === "number" && Number.isFinite(usageRecord.totalTokenCount) ? usageRecord.totalTokenCount : undefined;
+	const answerText = answerParts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_GEMINI_ANSWER_LENGTH);
+	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && results.length > 0
+		? { text: answerText, contentTrust: "untrusted" as const, provider: "gemini" as const, citations: results.slice(0, maxResults).map((result) => ({ url: result.url, ...(result.title === undefined ? {} : { title: result.title }) })) }
+		: undefined;
 	return {
 		query: normalized.query,
 		results,
+		...(answer === undefined ? {} : { answer }),
 		provider: "gemini",
 		appliedOptions: [],
 		warnings,
@@ -199,8 +215,10 @@ export class GeminiProvider implements Provider {
 			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
 		return {
 			...response,
+			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: model.id } }),
 			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
 			...(usage === undefined ? {} : { usage }),
+			executionModel: model.id,
 			appliedOptions: plan.appliedOptions,
 			warnings: [...plan.warnings, ...response.warnings],
 		};

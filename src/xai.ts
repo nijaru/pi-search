@@ -16,6 +16,7 @@ import { validateSearchRequest } from "./search";
 
 export const XAI_RESPONSES_ENDPOINT = "https://api.x.ai/v1";
 export const DEFAULT_XAI_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_XAI_ANSWER_LENGTH = 8_000;
 
 type XAITool = "web_search" | "x_search";
 
@@ -113,6 +114,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 		throw createProviderError({ provider: tool === "x_search" ? "xai-x" : "xai", kind: status === undefined ? "malformed" : "http", message: status === undefined ? "xAI response has no terminal status" : `xAI response was ${status}`, retryable: status === "incomplete" || status === "in_progress" });
 	}
 	const results: SearchResult[] = [];
+	const answerParts: string[] = [];
 	const seen = new Set<string>();
 	let discarded = 0;
 	if (Array.isArray(root.citations)) {
@@ -137,6 +139,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 			const content = output.content;
 			if (!Array.isArray(content)) continue;
 			for (const partValue of content) {
+				if (typeof partValue === "object" && partValue !== null && !Array.isArray(partValue) && typeof (partValue as Record<string, unknown>).text === "string") answerParts.push((partValue as Record<string, unknown>).text as string);
 				if (typeof partValue !== "object" || partValue === null || Array.isArray(partValue)) continue;
 				const part = partValue as Record<string, unknown>;
 				if (!Array.isArray(part.annotations)) continue;
@@ -156,12 +159,18 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 	}
 	const provider = tool === "x_search" ? "xai-x" : "xai";
 	const warnings: SearchWarning[] = discarded > 0 ? [{ code: "partial-results", message: `xAI discarded ${discarded} malformed citation entr${discarded === 1 ? "y" : "ies"}` }] : [];
+	const normalizedResults = results.slice(0, normalized.maxResults ?? 10).map((result) => ({ ...result, provider }));
+	const answerText = answerParts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_XAI_ANSWER_LENGTH);
+	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && normalizedResults.length > 0
+		? { text: answerText, contentTrust: "untrusted" as const, provider, citations: normalizedResults.map((result) => ({ url: result.url, ...(result.title === undefined ? {} : { title: result.title }) })) }
+		: undefined;
 	const usage = root.usage;
 	const usageRecord = usage !== null && typeof usage === "object" && !Array.isArray(usage) ? usage as Record<string, unknown> : undefined;
 	const billedUnits = typeof usageRecord?.total_tokens === "number" && Number.isFinite(usageRecord.total_tokens) ? usageRecord.total_tokens : undefined;
 	return {
 		query: normalized.query,
-		results: results.slice(0, normalized.maxResults ?? 10).map((result) => ({ ...result, provider })),
+		results: normalizedResults,
+		...(answer === undefined ? {} : { answer }),
 		provider,
 		appliedOptions: [],
 		warnings,
@@ -209,8 +218,10 @@ export class XAIProvider implements Provider {
 			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
 		return {
 			...response,
+			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: model.id } }),
 			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
 			...(usage === undefined ? {} : { usage }),
+			executionModel: model.id,
 			appliedOptions: plan.appliedOptions,
 			warnings: [...plan.warnings, ...response.warnings],
 		};

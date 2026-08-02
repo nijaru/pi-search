@@ -35,6 +35,7 @@ describe("XAIProvider", () => {
 		expect(seenHeaders?.get("authorization")).toBe("Bearer xai-test");
 		expect(result).toMatchObject({ provider: "xai", requestId: "xai-header", usage: { billedUnits: 20, billedUnit: "tokens" } });
 		expect(result.results).toHaveLength(2);
+		expect(result.answer).toMatchObject({ text: "Answer", contentTrust: "untrusted", citations: [{ url: "https://example.com/page" }, { url: "https://example.org/other" }] });
 	});
 
 	it("supports explicit X search and rejects web-only domain filters", async () => {

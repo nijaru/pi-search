@@ -7,27 +7,32 @@ A standalone, provider-neutral web search and fetching extension for Pi.
 The cost-controlled core is implemented. The extension exposes exactly three
 Pi tools:
 
-- `web_search` — structured evidence with URLs, excerpts, dates, and provider
-  provenance.
+- `web_search` — a bounded grounded answer when available, plus structured
+  evidence with URLs, excerpts, dates, and provider provenance.
 - `web_fetch` — bounded safe extraction from a selected URL.
 - `web_research` — explicit, budgeted sequential search and fetches.
 
 ### Search routing
 
 - Active OpenAI Responses and OpenAI Codex Responses models use native search
-  first. Native failures are final; they never trigger another provider.
+  first. With another active model, an authenticated OpenAI/Codex Responses
+  model in Pi's registry can provide the built-in search path without a model
+  switch.
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
 - Other/local models use configured Exa automatically when `EXA_API_KEY` is
   available; Exa returns semantic results with excerpts and reported usage.
 - When Exa is unavailable, configured Brave is the conservative paced
-  keyword/fresh fallback. Parallel and the official X API remain explicit
-  providers until their quality/role is evaluated further.
-- There are no hidden retries, provider fan-out, or paid fallback chains.
+  keyword/fresh path. Parallel and the official X API remain explicit
+  providers.
+- Automatic routing permits at most one visible fallback after an
+  availability-like failure. Explicit provider hints never fall through;
+  there are no retry loops or provider fan-out.
 
 All providers normalize into the same evidence-first result shape. Provider
-answers are not returned as authoritative summaries.
+answers are typed, cited, bounded, and marked untrusted rather than treated as
+authoritative summaries.
 
 ## Configuration
 
@@ -58,13 +63,18 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 Gemini and xAI credentials come from the active Pi model's authentication
 context. A provider hint such as `provider: "exa"`, `"parallel"`, `"x"`, or
 `"xai-x"` is strict and never falls through to another provider. Without a
-hint, the router selects native search first, then Exa, then Brave when the
-corresponding credentials and hard constraints permit it.
+hint, the router selects available native search first, then Exa, then Brave
+when the corresponding credentials and hard constraints permit it. Set
+`includeContent: true` on `web_search` only when bounded excerpts from selected
+source pages are needed; this reuses the safe local fetch path.
 
 ## Fetch coverage
 
 Tool results use compact readable model content and a compact Pi display;
 expanded tool details retain the normalized metadata and source evidence.
+Native grounded answers include citations. `web_search` can opt into bounded
+fetching of selected result pages with `includeContent`, `contentResults`, and
+`contentMaxLength`; fetched pages remain untrusted.
 `web_fetch` owns direct HTTPS/HTTP fetching with SSRF protection, redirect
 validation, response limits, cancellation, Markdown content negotiation, local
 Readability/Turndown extraction, and untrusted-content fencing. It also supports:

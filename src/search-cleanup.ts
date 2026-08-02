@@ -1,4 +1,4 @@
-import type { ProviderId, SearchRequest, SearchResponse, SearchResult, SearchWarning } from "./contracts";
+import type { ProviderId, SearchAnswer, SearchCitation, SearchRequest, SearchResponse, SearchResult, SearchWarning } from "./contracts";
 
 export const MAX_SEARCH_URL_LENGTH = 8_192;
 export const MAX_SEARCH_TITLE_LENGTH = 500;
@@ -6,6 +6,8 @@ export const MAX_SEARCH_EXCERPT_LENGTH = 4_000;
 export const MAX_SEARCH_DOMAIN_LENGTH = 253;
 export const MAX_SEARCH_SOURCE_ID_LENGTH = 500;
 export const MAX_SEARCH_QUERY_LENGTH = 2_000;
+const MAX_SEARCH_ANSWER_LENGTH = 8_000;
+const MAX_SEARCH_CITATIONS = 20;
 
 export interface CanonicalSearchUrl {
 	readonly url: string;
@@ -106,6 +108,36 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	};
 }
 
+function normalizeAnswer(answer: SearchAnswer | undefined, provider: ProviderId, results: readonly SearchResult[], request: SearchRequest): SearchAnswer | undefined {
+	if (answer === undefined || request.answerMode === "evidence") return undefined;
+	const text = boundedString(answer.text, MAX_SEARCH_ANSWER_LENGTH);
+	if (text === undefined) return undefined;
+	const resultUrls = new Set(results.map((result) => result.url));
+	const citations: SearchCitation[] = [];
+	for (const citationValue of Array.isArray(answer.citations) ? answer.citations : []) {
+		if (typeof citationValue !== "object" || citationValue === null || Array.isArray(citationValue)) continue;
+		const citation = citationValue as Partial<SearchCitation>;
+		const parsed = normalizeSearchUrl(citation.url);
+		if (parsed === undefined || !resultUrls.has(parsed.url) || citations.some((item) => item.url === parsed.url)) continue;
+		const title = boundedString(citation.title, MAX_SEARCH_TITLE_LENGTH);
+		const sourceId = boundedString(citation.sourceId, MAX_SEARCH_SOURCE_ID_LENGTH);
+		citations.push({
+			url: parsed.url,
+			...(title === undefined ? {} : { title }),
+			...(sourceId === undefined ? {} : { sourceId }),
+		});
+		if (citations.length >= MAX_SEARCH_CITATIONS) break;
+	}
+	if (citations.length === 0) return undefined;
+	return {
+		text,
+		contentTrust: "untrusted",
+		provider,
+		...(typeof answer.executionModel === "string" ? { executionModel: answer.executionModel.slice(0, 500) } : {}),
+		citations,
+	};
+}
+
 function mergeResult(current: SearchResult, candidate: SearchResult): SearchResult {
 	return {
 		...current,
@@ -150,15 +182,18 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 			message: `Search removed ${domainDiscarded} result entr${domainDiscarded === 1 ? "y" : "ies"} outside the requested domain constraints`,
 		});
 	}
+	const normalizedResults = [...results.values()].slice(0, request.maxResults ?? 10);
 	const appliedOptions = [...response.appliedOptions];
 	if ((request.domains?.include?.length ?? 0) > 0 || (request.domains?.exclude?.length ?? 0) > 0) {
 		if (!appliedOptions.includes("domains")) appliedOptions.push("domains");
 	}
+	const answer = normalizeAnswer(response.answer, provider, normalizedResults, request);
 	return {
 		...response,
 		query: request.query,
 		provider,
-		results: [...results.values()].slice(0, request.maxResults ?? 10),
+		results: normalizedResults,
+		...(answer === undefined ? {} : { answer }),
 		appliedOptions,
 		warnings,
 	};

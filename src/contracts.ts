@@ -185,6 +185,8 @@ export interface DomainFilter {
  * must be surfaced in `SearchResponse.warnings`; hard constraints must never
  * disappear silently.
  */
+export type SearchAnswerMode = "auto" | "evidence";
+
 export interface SearchRequest {
 	/** Natural-language or keyword query. Required. */
 	readonly query: string;
@@ -194,6 +196,14 @@ export interface SearchRequest {
 	readonly maxResults?: number;
 	/** Restrict/exclude hosts. */
 	readonly domains?: DomainFilter;
+	/** Include a provider-grounded answer when the backend supplies one. */
+	readonly answerMode?: SearchAnswerMode;
+	/** Fetch a small number of selected result URLs through the safe local fetcher. */
+	readonly includeContent?: boolean;
+	/** Maximum selected source pages to fetch when includeContent is enabled. */
+	readonly contentResults?: number;
+	/** Maximum extracted characters per selected source page. */
+	readonly contentMaxLength?: number;
 	/**
 	 * Hint to prefer a specific provider by id. The router may still override
 	 * when the provider lacks the requested capability. Normal callers should
@@ -205,10 +215,26 @@ export interface SearchRequest {
 /** Options whose handling must be visible in the normalized response. */
 export type SearchOption = "mode" | "maxResults" | "domains";
 
+export interface SearchCitation {
+	/** URL of a normalized search result cited by the answer. */
+	readonly url: Url;
+	readonly title?: string;
+	readonly sourceId?: string;
+}
+
+/** Provider-generated grounded text. It is evidence, never trusted instructions. */
+export interface SearchAnswer {
+	readonly text: string;
+	readonly contentTrust: "untrusted";
+	readonly provider: ProviderId;
+	readonly executionModel?: string;
+	readonly citations: readonly SearchCitation[];
+}
+
 
 /** A non-fatal limitation or partial-application notice. */
 export interface SearchWarning {
-	readonly code: "unsupported-option" | "partial-results";
+	readonly code: "unsupported-option" | "partial-results" | "provider-fallback";
 	readonly option?: SearchOption;
 	readonly message: string;
 }
@@ -254,8 +280,16 @@ export interface SearchResponse {
 	readonly query: string;
 	/** Results, best-first. May be empty. */
 	readonly results: readonly SearchResult[];
+	/** Optional provider-grounded answer aligned with `results`. */
+	readonly answer?: SearchAnswer;
+	/** Bounded source pages fetched after search when requested. */
+	readonly sourceContents?: readonly FetchedContent[];
 	/** Which provider actually served the request. */
 	readonly provider: ProviderId;
+	/** Model used by a model-mediated provider, when available. */
+	readonly executionModel?: string;
+	/** Providers attempted by bounded automatic routing, in order. */
+	readonly attemptedProviders?: readonly ProviderId[];
 	/** Options the provider applied, including post-filtered constraints. */
 	readonly appliedOptions: readonly SearchOption[];
 	/** Explicit warnings for options that were unsupported or only partial. */
@@ -432,6 +466,14 @@ export interface FindResult {
 
 // ─── Provider interface ────────────────────────────────────────────────────
 
+/** A bounded provider choice produced by automatic routing. */
+export interface SearchProviderSelection {
+	readonly provider: Provider;
+	/** At most one alternative; explicit provider hints always leave this empty. */
+	readonly fallbacks: readonly Provider[];
+	readonly automatic: boolean;
+}
+
 /**
  * Identifier for a provider. Used in results and capability descriptors.
  * The concrete union grows as adapters land; string allows forward-compat.
@@ -500,7 +542,8 @@ export interface Provider {
 	 *   kind `unsupported`;
 	 * - normalize results to {@link SearchResult};
 	 * - preserve `url`, `excerpt`, `publishedAt`, `provider`, `searchQuery`;
-	 * - return evidence rather than an opaque provider answer.
+	 * - return evidence and, when supplied by the backend, a typed untrusted
+	 *   answer whose citations align with returned result URLs.
 	 */
 	readonly search: (
 		request: SearchRequest,

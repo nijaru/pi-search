@@ -20,13 +20,14 @@ describe("GeminiProvider", () => {
 		const provider = createGeminiProvider({ endpoint: "https://gemini.test/v1beta" , fetchImpl: async (_input, init) => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			seenHeaders = new Headers(init?.headers);
-			return response({ candidates: [{ groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/page", title: "Example" } }] } }], usageMetadata: { totalTokenCount: 12 } }, 200, { "content-type": "application/json", "x-request-id": "gemini-header" });
+			return response({ candidates: [{ content: { parts: [{ text: "Grounded Gemini answer" }] }, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/page", title: "Example" } }] } }], usageMetadata: { totalTokenCount: 12 } }, 200, { "content-type": "application/json", "x-request-id": "gemini-header" });
 		} });
 		const result = await provider.search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, context());
 		expect(seenBody).toMatchObject({ tools: [{ google_search: {} }], contents: [{ parts: [{ text: "latest TypeScript release" }] }] });
 		expect(seenHeaders?.get("x-goog-api-key")).toBe("gemini-test");
 		expect(result).toMatchObject({ provider: "gemini", requestId: "gemini-header", usage: { billedUnits: 12, billedUnit: "tokens" } });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", title: "Example" });
+		expect(result.answer).toMatchObject({ text: "Grounded Gemini answer", contentTrust: "untrusted", citations: [{ url: "https://example.com/page" }] });
 	});
 
 	it("rejects domain constraints because grounding cannot enforce them", async () => {

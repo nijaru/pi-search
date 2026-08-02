@@ -1,4 +1,4 @@
-import type { Provider, ProviderContext, SearchRequest, SearchResponse } from "./contracts";
+import type { Provider, ProviderContext, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
 import { cleanupSearchResponse } from "./search-cleanup";
 
@@ -10,6 +10,10 @@ export const MAX_SEARCH_DOMAIN_COUNT = 20;
 export const MAX_SEARCH_DOMAIN_BYTES = 4_096;
 /** Native model-mediated search can spend tens of seconds grounding a query. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
+export const DEFAULT_CONTENT_RESULTS = 2;
+export const MAX_CONTENT_RESULTS = 3;
+export const DEFAULT_CONTENT_MAX_LENGTH = 4_000;
+export const MAX_CONTENT_MAX_LENGTH = 8_000;
 
 function invalidRequest(message: string): SearchToolError {
 	return new SearchToolError("WEB_SEARCH_INVALID_REQUEST", message);
@@ -74,6 +78,20 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > MAX_RESULTS) {
 		throw invalidRequest(`Search maxResults must be an integer between 1 and ${MAX_RESULTS}`);
 	}
+	const answerMode = request.answerMode ?? "auto";
+	if (answerMode !== "auto" && answerMode !== "evidence") {
+		throw invalidRequest("Search answerMode must be auto or evidence");
+	}
+	const includeContent = request.includeContent ?? false;
+	if (typeof includeContent !== "boolean") throw invalidRequest("Search includeContent must be a boolean");
+	const contentResults = request.contentResults ?? DEFAULT_CONTENT_RESULTS;
+	if (!Number.isInteger(contentResults) || contentResults < 1 || contentResults > MAX_CONTENT_RESULTS) {
+		throw invalidRequest(`Search contentResults must be an integer between 1 and ${MAX_CONTENT_RESULTS}`);
+	}
+	const contentMaxLength = request.contentMaxLength ?? DEFAULT_CONTENT_MAX_LENGTH;
+	if (!Number.isInteger(contentMaxLength) || contentMaxLength < 1 || contentMaxLength > MAX_CONTENT_MAX_LENGTH) {
+		throw invalidRequest(`Search contentMaxLength must be an integer between 1 and ${MAX_CONTENT_MAX_LENGTH}`);
+	}
 
 	if (
 		request.domains !== undefined &&
@@ -95,6 +113,10 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		query,
 		mode: request.mode ?? "auto",
 		maxResults,
+		answerMode,
+		includeContent,
+		contentResults,
+		contentMaxLength,
 		...(include === undefined && exclude === undefined
 			? { domains: request.domains }
 			: { domains: { ...(include === undefined ? {} : { include }), ...(exclude === undefined ? {} : { exclude }) } }),
@@ -183,4 +205,53 @@ export async function executeSearch(
 		}
 		options.signal?.removeEventListener("abort", onAbort);
 	}
+}
+
+function canUseAutomaticFallback(error: unknown): boolean {
+	if (!(error instanceof SearchToolError)) return false;
+	return error.kind === "auth" || error.kind === "network" || error.kind === "timeout" || error.kind === "rateLimit" || error.kind === "http" || error.kind === "unavailable";
+}
+
+/** Execute an automatic selection with at most one visible alternative. */
+export async function executeSearchSelection(
+	selection: SearchProviderSelection,
+	request: SearchRequest,
+	options: ExecuteSearchOptions = {},
+): Promise<SearchResponse> {
+	const normalized = validateSearchRequest(request);
+	const candidates = [selection.provider, ...(selection.automatic ? selection.fallbacks.slice(0, 1) : [])];
+	let firstError: SearchToolError | undefined;
+	for (let index = 0; index < candidates.length; index += 1) {
+		const candidate = candidates[index]!;
+		try {
+			const response = await executeSearch(candidate, normalized, options);
+			const attemptedProviders = candidates.slice(0, index + 1).map((provider) => provider.id);
+			if (index === 0) return { ...response, attemptedProviders };
+			return {
+				...response,
+				attemptedProviders,
+				warnings: [
+					...response.warnings,
+					{ code: "provider-fallback", message: `Provider ${candidates[0]!.id} failed; used ${candidate.id} as the bounded automatic fallback` },
+				],
+			};
+		} catch (error) {
+			const toolError = error instanceof SearchToolError ? error : toSearchToolError(error, candidate.id);
+			if (index === 0) firstError = toolError;
+			if (index === 0 && selection.automatic && selection.fallbacks.length > 0 && canUseAutomaticFallback(toolError)) continue;
+			if (firstError !== undefined && index > 0) {
+				throw new SearchToolError(toolError.code, `${toolError.message}; primary provider ${selection.provider.id} also failed: ${firstError.message}`, {
+					provider: toolError.provider,
+					kind: toolError.kind,
+					retryable: toolError.retryable,
+					status: toolError.status,
+					requestId: toolError.requestId,
+					retryAfterMs: toolError.retryAfterMs,
+					rateLimits: toolError.rateLimits,
+				});
+			}
+			throw toolError;
+		}
+	}
+	throw firstError ?? new SearchToolError("WEB_SEARCH_UNKNOWN", "Search failed");
 }

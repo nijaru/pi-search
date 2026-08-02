@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static, type TUnsafe } from "typebox";
-import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchRequest, SearchResult, SearchWarning } from "./contracts";
+import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchProviderSelection, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
 import { SearchToolError } from "./errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
@@ -39,7 +39,7 @@ export const WebResearchParameters = Type.Object({
 export type WebResearchParams = Static<typeof WebResearchParameters>;
 export type WebResearchDetails = ResearchResponse;
 
-export type ResearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => Provider;
+export type ResearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => Provider | SearchProviderSelection;
 
 export interface WebResearchOptions extends FetcherOptions {
 	readonly searchTimeoutMs?: number;
@@ -208,7 +208,8 @@ export async function executeResearch(
 	};
 	let provider: Provider;
 	try {
-		provider = providerResolver(firstRequest, context);
+		const selected = providerResolver(firstRequest, context);
+		provider = "provider" in selected && "fallbacks" in selected ? selected.provider : selected;
 	} catch (error) {
 		if (error instanceof SearchToolError) throw error;
 		throw new SearchToolError("WEB_RESEARCH_PROVIDER", error instanceof Error ? error.message : "Research provider selection failed");
