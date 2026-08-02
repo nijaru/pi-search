@@ -11,9 +11,10 @@ JSON in normal chat presentation.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is clean and synced at `2cd2469`; renderer, output, Exa-routing,
-research-bound, and provenance fixes are installed from that commit. A running Pi session
-can still retain older code at startup, so start a fresh session after reload.
+https://github.com/nijaru/pi-search. The branch is clean and synced at
+`f68a764`; renderer, output, Exa-routing, research-bound, provenance, and
+expanded-metadata fixes are installed. A running Pi session can still retain
+older code at startup, so start a fresh session after reload.
 The active Pi runtime contains only this web extension and exposes exactly
 `web_search`, `web_fetch`, and `web_research`.
 
@@ -48,11 +49,11 @@ single-provider, sequential, budgeted workflow with optional direct fetches.
 
 All three tools now emit bounded readable model content instead of raw JSON
 and provide compact default Pi renderers with expanded evidence/details.
-Search shows three sources collapsed; fetch shows status/extraction and
-content; research shows stop status/counts and expands source summaries.
-Deterministic renderer/output tests cover the new behavior. A running Pi
-session can retain older code at startup, so install the new commit and start
-a fresh session.
+Search shows three sources collapsed and complete metadata expanded; fetch
+shows status/extraction and content; research shows stop status/counts and
+expands source summaries. Deterministic renderer/output tests cover the new
+behavior. A running Pi session can retain older code at startup, so start a
+fresh session after reload.
 
 ## Verification
 
@@ -66,11 +67,8 @@ unverified. Do not repeat paid requests merely to measure latency.
 
 ## Active tasks
 
-- `pi-search-az96`: benchmark provider quality and all-in cost.
-- `pi-search-a9di`: make native OpenAI and Codex search production-correct.
-- `pi-search-kkxo`: implement compact Pi rendering for all web tools.
-- `pi-search-ee3u`: make Exa the non-native search path.
-- `pi-search-i6v0`: finish provider-neutral fetch and research quality audit.
+- `pi-search-az96`: benchmark provider quality and all-in cost. This remains
+  intentionally open; do not block the working native/Exa path on it.
 
 ## Next sequence
 
