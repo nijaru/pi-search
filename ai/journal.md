@@ -204,6 +204,13 @@ durable rationale belongs in `decisions.md`.
   registry model and never substitutes one silently. A corrective live call
   with current `gemini-3.6-flash` also returned HTTP 401, so direct Google
   authentication remains unavailable; no paid Flash or Lite request was made.
+- 2026-08-02: The fnox `pi` profile was checked without exposing the secret:
+  it resolves `GEMINI_API_KEY`, and a direct Google model-metadata request for
+  `gemini-flash-lite-latest` returned HTTP 200. The current extension tool path
+  still returned HTTP 401, so the key is valid and the remaining discrepancy
+  is the already-running Pi process/model-registry credential state. The
+  installed Git package is at the latest context commit; a full Pi restart
+  through the fnox-backed wrapper is the next acceptance gate.
 - 2026-08-02: After Pi was reloaded, the direct Google
   `gemini-flash-lite-latest` smoke still returned HTTP 401. The shell has a
   `GEMINI_API_KEY` set, distinct from the OpenRouter key; Pi's auth file has no

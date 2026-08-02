@@ -67,6 +67,10 @@
     {
       "ts": "2026-08-02T16:19:04Z",
       "msg": "After Pi reload, a direct gemini-flash-lite-latest smoke still returned HTTP 401. GEMINI_API_KEY is set in the shell and distinct from OPENROUTER_API_KEY; auth.json has no Google entry, which is normal for environment-based Google auth. Treat direct Google key validity or process resolution as the remaining blocker; no billable Gemini request was made."
+    },
+    {
+      "ts": "2026-08-02T16:31:18Z",
+      "msg": "Fnox profile pi was checked without exposing the secret: it resolves GEMINI_API_KEY, and a direct Google model-metadata request for gemini-flash-lite-latest returned HTTP 200. The currently running extension path still returned HTTP 401, so the key is valid and the remaining discrepancy is stale Pi process/model-registry credential state. The installed Git package is updated; full Pi restart through the fnox-backed pi wrapper is the next acceptance gate."
     }
   ],
   "created_at": "2026-08-02T01:28:07.640263Z",

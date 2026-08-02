@@ -92,9 +92,11 @@ be retried or made an unbudgeted fallback. The current search recommendation
 is the Pi-available `gemini-flash-lite-latest` model alias; full Flash/Pro and
 legacy Gemini model IDs are not used for search smoke or examples. A test with
 `gemini-3.6-flash` and, after reload, `gemini-flash-lite-latest` both reached
-the adapter but returned HTTP 401. `GEMINI_API_KEY` is present in the shell and
-distinct from the OpenRouter key, so direct Google credential validity or Pi
-process resolution remains the blocker. OpenRouter/DeepSeek still has the
+the adapter but returned HTTP 401. The fnox `pi` profile resolves the current
+`GEMINI_API_KEY`, and a direct Google model-metadata request with that scoped key
+returned HTTP 200. The discrepancy points to the already-running Pi
+process/model-registry credential state; a full Pi restart through the fnox
+wrapper is required before the next extension smoke. OpenRouter/DeepSeek still has the
 separate earlier `401 User not found` credential/session blocker. No provider
 comparison calls were made.
 
@@ -113,10 +115,10 @@ comparison calls were made.
    citation-label rendering fix in the actual tool process. Do not spend more
    paid calls on the constrained X case without a raw response or a specific
    no-match test hypothesis.
-2. If direct Gemini search is required, configure/authenticate a Google model
-   in Pi and run one deliberate `gemini-flash-lite-latest` smoke; otherwise
-   retain the HTTP 401 as an explicit environment gate rather than hiding it
-   with a fallback.
+2. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
+   one deliberate `gemini-flash-lite-latest` smoke. The scoped key itself now
+   passes a direct Google metadata request; do not add an environment read to
+   the extension or hide the stale-process discrepancy with a fallback.
 3. Decide whether the constrained xAI X no-citation result is provider-side
    no-match behavior or a response-shape gap, then add a deterministic fixture
    or parser fix. Keep `pi-search-kd43` open until that decision and the
