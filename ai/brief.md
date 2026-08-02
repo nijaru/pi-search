@@ -10,11 +10,10 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. The branch is clean and synced at
-`db78523` (implementation `9a18341`, citation rendering fix `33b8409`, and
-current Gemini Lite policy); the installed checkout is also at `db78523` with
-its unrelated local `bun.lock` change preserved. Pi must be reloaded after
-that refresh to execute the latest search behavior.
+https://github.com/nijaru/pi-search. The branch is at the current Gemini Lite
+implementation and context commits; the installed checkout is refreshed with
+its unrelated local `bun.lock` change preserved. Pi must be reloaded after a
+refresh to execute the latest search behavior.
 The active runtime exposes exactly `web_search`, `web_fetch`, and
 `web_research`. `pi-web-access` is not installed as an overlapping runtime.
 
@@ -75,7 +74,7 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 166 tests and 397 assertions, with TypeScript clean.
+`bun run check` passes: 166 tests and 398 assertions, with TypeScript clean.
 Coverage now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
@@ -96,28 +95,29 @@ through the extension even though the fnox key worked directly. The root cause
 was a real adapter bug: generic model auth added `Authorization: Bearer` beside
 Google's `x-goog-api-key`; Google rejects that combination with
 `API_KEY_SERVICE_BLOCKED`. Fixed in `18775fc` by disabling the generic bearer
-header for Gemini. After reload, Lite grounding passed with three sources and
-two search queries, but the 512-token cap caused `MAX_TOKENS`; `22bf461` raises
-that bounded cap to 2,048. The installed checkout is refreshed; one post-fix
-smoke remains. OpenRouter/DeepSeek still has the separate earlier `401 User not
-found` credential/session blocker. No provider comparison calls were made.
+header for Gemini. After reload, Lite grounding returned sources, but the
+arbitrary 512-token cap caused `MAX_TOKENS`; the cap was first raised and then
+removed to match Google's optional generation config and the mature reference
+adapter. The installed checkout is refreshed; one post-removal smoke remains.
+OpenRouter/DeepSeek still has the separate earlier `401 User not found`
+credential/session blocker. No provider comparison calls were made.
 
 ## Active tasks
 
 - `pi-search-kd43`: rebaseline pi-search against pi-web-access search behavior;
   design and implementation are materially complete offline. OpenAI/Codex,
-  Exa, xAI web/X, fetch, and Gemini Lite grounding smokes pass. Gemini still
-  needs one post-`22bf461` smoke to confirm the larger output bound; Google
-  grounding redirect URLs also remain a cleanup follow-up. A constrained xAI X
-  request produced no citations and remains an evidence-first investigation
-  item. OpenRouter/DeepSeek remains blocked by its separate credential/session
-  failure.
+  Exa, xAI web/X, fetch, and Gemini Lite grounding smokes pass. Gemini needs
+  one post-cap-removal smoke; Google grounding redirect URLs remain a cleanup
+  follow-up. A constrained xAI X request produced no citations and remains an
+  evidence-first investigation item. OpenRouter/DeepSeek remains blocked by
+  its separate credential/session failure.
 
 ## Next sequence
 
 1. Fully exit and relaunch Pi through the fnox-backed `pi` wrapper, then run
-   one deliberate `gemini-flash-lite-latest` smoke against `22bf461`. Confirm
-   it completes without `MAX_TOKENS` and retains Google grounding citations.
+   one deliberate `gemini-flash-lite-latest` smoke against the cap-removal
+   commit. Confirm it completes without `MAX_TOKENS` and retains Google
+   grounding citations.
 2. Implement bounded resolution of Google's `grounding-api-redirect` URLs to
    canonical source URLs, following the mature reference's single HEAD
    redirect check without issuing another search.

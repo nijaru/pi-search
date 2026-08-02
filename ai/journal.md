@@ -230,7 +230,9 @@ durable rationale belongs in `decisions.md`.
   without a `generationConfig` cap, extracts the answer from candidate parts,
   and resolves Google's `grounding-api-redirect` URLs with bounded HEAD
   requests. Our initial 512-token cap was arbitrary and produced a live
-  `MAX_TOKENS` warning on an otherwise successful Lite grounding call. Raised
-  the bounded cap to 2,048 in `22bf461`; offline verification remains 166
-  tests / 397 assertions. Canonical grounding-URL resolution remains a
-  follow-up, not another search provider call.
+  `MAX_TOKENS` warning on an otherwise successful Lite grounding call. The
+  temporary 2,048 cap was also unsupported by provider guidance, so it was
+  removed; the adapter now follows the reference and retains independent
+  response-byte, answer-text, and model-visible bounds. Offline verification
+  remains 166 tests / 398 assertions. Canonical grounding-URL resolution
+  remains a follow-up, not another search provider call.

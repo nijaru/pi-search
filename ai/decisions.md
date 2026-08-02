@@ -160,12 +160,11 @@ For search-only Gemini grounding, prefer the current Pi model-registry alias
 extension does not silently substitute a model: active-model routing and an
 explicit `executionModel` remain the caller-visible billing choice.
 
-The initial 512-token Gemini output cap was too aggressive for grounded,
-reasoning-capable responses and caused valid searches to finish with
-`MAX_TOKENS`. Google makes generation config optional, and the mature
-`pi-web-access` Gemini adapter omits it entirely. Keep a local cost bound, but
-use a 2,048-token ceiling aligned with the extension's 8,000-character answer
-bound; provider response bytes and model-visible output remain independently
-bounded. Follow-up: resolve Google's grounding redirect URLs to canonical
-source URLs, as the reference adapter does, without treating that as a second
-search.
+The initial 512-token Gemini output cap was arbitrary and caused valid
+searches to finish with `MAX_TOKENS`. Google makes generation config optional,
+and the mature `pi-web-access` Gemini adapter omits it entirely. Do not add an
+unverified model-output cap: the adapter keeps its independent response-byte,
+answer-text, and model-visible output bounds, while Gemini controls its normal
+model-default generation budget. Follow-up: resolve Google's grounding
+redirect URLs to canonical source URLs, as the reference adapter does,
+without treating that as a second search.

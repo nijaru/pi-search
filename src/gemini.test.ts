@@ -32,7 +32,8 @@ describe("GeminiProvider", () => {
 			return response({ candidates: [{ content: { parts: [{ text: "Grounded Gemini answer" }] }, groundingMetadata: { webSearchQueries: ["latest TypeScript release"], groundingChunks: [{ web: { uri: "https://example.com/page", title: "Example" } }], groundingSupports: [{ groundingChunkIndices: [0] }] } }], usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 4, totalTokenCount: 12 } }, 200, { "content-type": "application/json", "x-request-id": "gemini-header" });
 		} });
 		const result = await provider.search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, context());
-		expect(seenBody).toMatchObject({ tools: [{ google_search: {} }], contents: [{ parts: [{ text: "latest TypeScript release" }] }], generationConfig: { maxOutputTokens: 2_048 } });
+		expect(seenBody).toMatchObject({ tools: [{ google_search: {} }], contents: [{ parts: [{ text: "latest TypeScript release" }] }], });
+		expect(seenBody).not.toHaveProperty("generationConfig");
 		expect(seenHeaders?.get("x-goog-api-key")).toBe("gemini-test");
 		expect(seenHeaders?.get("authorization")).toBeNull();
 		expect(result).toMatchObject({ provider: "gemini", requestId: "gemini-header", executionModel: "gemini-flash-lite-latest", usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12, searchQueries: 1 } });
