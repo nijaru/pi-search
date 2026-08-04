@@ -260,3 +260,11 @@ durable rationale belongs in `decisions.md`.
   dependency-only follow-up; no runtime behavior changed. Remaining work is
   low-priority light acceptance testing and separate browser/Chrome MCP
   research, tracked in `.tasks/`.
+- The light YouTube acceptance probe found that installed `yt-dlp` 2026.07.04
+  rejects the shipped `--no-netrc` option; `--ignore-config` already prevents
+  configuration-file credentials, so the obsolete option was removed. Live
+  caption-only extraction then passed for `aircAruvnKk` without media download.
+  The same pass fixed VTT header leakage and numeric/arrow caption handling,
+  added deterministic fixtures, and completed `pi-search-pvas`. Code and task
+  state were pushed in `467e86f`; the installed Pi checkout still needs a
+  refresh and restart to use it.

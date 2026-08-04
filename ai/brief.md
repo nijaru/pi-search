@@ -10,9 +10,9 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `52548f2`; the user's
+https://github.com/nijaru/pi-search. Repository HEAD is `467e86f`; the user's
 latest `pi update --extensions` refreshed the installed checkout through
-`146215f` before the dependency-only follow-up. The active runtime exposes
+`146215f` before the YouTube acceptance fix. The active runtime exposes
 exactly `web_search`, `web_fetch`, and `web_research`; `pi-web-access` is not
 installed as an overlapping runtime. Pi must be reloaded after a runtime
 refresh to execute new search behavior.
@@ -45,8 +45,10 @@ The search-plane design and first implementation pass are complete:
 
 Fetching remains direct/local with pinned DNS/SSRF and redirect validation,
 streamed limits, cancellation, Readability/Markdown extraction, bounded PDF
-text, and bounded YouTube captions. Research remains explicit, sequential, and
-budgeted; it uses one selected provider and does not use search fallbacks.
+text, and bounded YouTube captions. The YouTube path uses local `yt-dlp` with
+configuration ignored, no media download, bounded caption files, and
+cue-aware VTT cleanup. Research remains explicit, sequential, and budgeted; it
+uses one selected provider and does not use search fallbacks.
 
 ## Decisions in force
 
@@ -74,11 +76,14 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 168 tests and 402 assertions, with TypeScript 7.0.2
+`bun run check` passes: 169 tests and 404 assertions, with TypeScript 7.0.2
 clean after aligning the Pi development dependencies to 0.83.0, TypeBox to
 1.3.10, and adding direct `pi-ai` 0.83.0 development coverage. `bun outdated`
-reports no remaining package updates and `git diff --check` passes. Coverage
-now includes registry-driven cross-provider native selection, answer
+reports no remaining package updates and `git diff --check` passes. A live
+caption-only extraction using installed `yt-dlp` 2026.07.04 succeeded for a
+public video without media download; the old unsupported `--no-netrc` flag was
+removed and VTT header/numeric-caption handling was corrected. Coverage now
+includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
 fetch-attempt counts, cancellation mapping, and existing safety, PDF, captions,
@@ -114,16 +119,13 @@ blocker. No provider comparison calls were made.
 - No blocking implementation task remains. The constrained xAI X no-citation
   result is a conditional investigation item, not a reason to spend another
   metered request without a reproduced workflow.
-- `pi-search-pvas`: plan a light acceptance pass for shipped search, fetch, PDF,
-  YouTube, and research workflows.
 - `pi-search-3jx8`: investigate browser/Chrome MCP as a separate extension,
   not part of pi-search's default fetch path.
 
 ## Next sequence
 
-1. Keep the current three-tool runtime stable; no immediate provider or browser
-   implementation is planned.
-2. Run the light acceptance pass when useful, recording only actionable results.
-3. Investigate a separate browser/Chrome MCP option when that workflow matters.
-4. Inspect a raw xAI response only if an actual X workflow reproduces the
+1. Keep the current three-tool runtime stable; refresh and restart Pi when the
+   YouTube fix is needed.
+2. Investigate a separate browser/Chrome MCP option when that workflow matters.
+3. Inspect a raw xAI response only if an actual X workflow reproduces the
    no-citation result; do not run provider comparisons.
