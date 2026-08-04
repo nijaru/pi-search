@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "1r0g",
+  "title": "Audit outdated dependencies",
+  "description": "Review the current Bun, Pi, TypeBox, and TypeScript dependency versions, update compatible packages through Bun, and run the full check before keeping any changes.",
+  "status": "open",
+  "priority": 3,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-04T01:25:24.211653Z",
+  "updated_at": "2026-08-04T01:25:24.211653Z",
+  "completed_at": null,
+  "external": {}
+}

@@ -2,7 +2,7 @@
   "project": "pi-search",
   "ref": "3jx8",
   "title": "Investigate separate browser/Chrome MCP extension",
-  "description": "Low-priority research only. Browser/JS rendering should not be owned by pi-search or added to the default fetch path. Evaluate the best separate Chrome/DevTools MCP option for a Codex + Brave workflow, including isolation, permissions, navigation/resource limits, and handoff of selected URLs/content. No implementation or installation now.",
+  "description": "Low-priority research: evaluate browser/Chrome MCP options as a separate extension for a Codex + Brave workflow; no pi-search integration planned yet.",
   "status": "open",
   "priority": 4,
   "labels": null,
