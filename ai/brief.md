@@ -10,9 +10,9 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `cbd9a81`; the
-installed checkout was refreshed to this revision after the YouTube acceptance
-fix. The active runtime exposes
+https://github.com/nijaru/pi-search. Repository HEAD is `6dd3fd2`; the
+installed checkout is `cbd9a81`, the latest code revision before this context
+only commit. The active runtime exposes
 exactly `web_search`, `web_fetch`, and `web_research`; `pi-web-access` is not
 installed as an overlapping runtime. Pi must be reloaded after a runtime
 refresh to execute new search behavior.
