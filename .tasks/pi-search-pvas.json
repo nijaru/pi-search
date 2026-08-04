@@ -1,0 +1,19 @@
+{
+  "project": "pi-search",
+  "ref": "pvas",
+  "title": "Plan light pi-search acceptance tests",
+  "description": "Low-priority follow-up. Keep the current provider portfolio; do not add Perplexity, Anthropic/Claude, Playwright, or another search provider now. Plan a small credential-gated smoke matrix plus a deterministic fetch/PDF corpus covering HTML/Markdown, redirects/SSRF bounds, PDFs (plain, layout-heavy, malformed, large), YouTube captions, and bounded research. Record skipped credentials; do not run provider comparisons or change runtime behavior.",
+  "status": "open",
+  "priority": 3,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-08-04T01:00:40.801541Z",
+  "updated_at": "2026-08-04T01:00:40.801541Z",
+  "completed_at": null,
+  "external": {}
+}
