@@ -268,3 +268,7 @@ durable rationale belongs in `decisions.md`.
   added deterministic fixtures, and completed `pi-search-pvas`. Code and task
   state were pushed in `467e86f`; the installed Pi checkout still needs a
   refresh and restart to use it.
+- Refreshed the installed Git extension to `cbd9a81` with `pi update
+  --extensions`; the transitive `node-domexception@1.0.0` deprecation warning
+  remains and is outside the direct dependency set. A running Pi process still
+  needs a restart to load the refreshed extension.
