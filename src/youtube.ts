@@ -143,22 +143,34 @@ async function runYtDlp(
 export function parseVtt(value: string): string {
 	const lines = value.replace(/^\uFEFF?WEBVTT[^\n]*\n?/i, "").split(/\r?\n/);
 	const output: string[] = [];
-	let inNote = false;
+	let inBlock = false;
+	let inCue = false;
 	for (const raw of lines) {
 		const line = raw.trim();
-		if (line === "NOTE" || line.startsWith("NOTE ") || line === "STYLE" || line === "REGION") {
-			inNote = true;
-			continue;
-		}
 		if (line === "") {
-			inNote = false;
+			inBlock = false;
+			inCue = false;
 			continue;
 		}
-		if (inNote || line.includes("-->") || /^\d+$/.test(line)) continue;
+		if (!inCue && (line === "NOTE" || line.startsWith("NOTE ") || line === "STYLE" || line === "REGION")) {
+			inBlock = true;
+			inCue = false;
+			continue;
+		}
+		if (inBlock) continue;
+		if (isVttCueTimingLine(line)) {
+			inCue = true;
+			continue;
+		}
+		if (!inCue) continue;
 		const clean = line.replace(/<\/?[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 		if (clean.length > 0 && output.at(-1) !== clean) output.push(clean);
 	}
 	return output.join("\n");
+}
+
+function isVttCueTimingLine(line: string): boolean {
+	return /^\d{2}:\d{2}(?::\d{2})?\.\d{3}\s+-->\s+\d{2}:\d{2}(?::\d{2})?\.\d{3}(?:\s|$)/.test(line);
 }
 
 export async function extractYouTubeTranscript(url: string, options: YouTubeExtractorOptions): Promise<YouTubeTranscriptResult> {
@@ -167,7 +179,7 @@ export async function extractYouTubeTranscript(url: string, options: YouTubeExtr
 	if (options.signal.aborted) throw canceled();
 	if (process.platform === "win32") throw extraction("Bounded YouTube caption extraction requires a POSIX process limit on this runtime");
 	const language = options.language ?? DEFAULT_YOUTUBE_LANGUAGE;
-	if (!/^[A-Za-z0-9,._-]{1,32}$/.test(language) || language.split(",").length > 3) throw new SafeFetchError({ kind: "invalidRequest", message: "captionLanguage is invalid" });
+	if (!/^[A-Za-z0-9,._*-]{1,32}$/.test(language) || language.split(",").length > 3) throw new SafeFetchError({ kind: "invalidRequest", message: "captionLanguage is invalid" });
 	const maxOutputBytes = options.maxOutputBytes ?? MAX_YOUTUBE_TRANSCRIPT_BYTES;
 	if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > MAX_YOUTUBE_TRANSCRIPT_BYTES) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "YouTube transcript limit is outside the supported bound" });
@@ -178,7 +190,6 @@ export async function extractYouTubeTranscript(url: string, options: YouTubeExtr
 		const canonicalUrl = `https://www.youtube.com/watch?v=${parsed.videoId}`;
 		await runYtDlp(options.command ?? "yt-dlp", [
 			"--ignore-config",
-			"--no-netrc",
 			"--no-playlist",
 			"--skip-download",
 			"--write-subs",
