@@ -10,13 +10,12 @@ fan-out, opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Source is at `953ab37`; the installed
-checkout is at runtime commit `9ccb378` with its unrelated local `bun.lock`
-change preserved. The latest source change after that runtime commit only
-records context, so the installed behavior is current. Pi must be reloaded
-after a runtime refresh to execute new search behavior.
-The active runtime exposes exactly `web_search`, `web_fetch`, and
-`web_research`. `pi-web-access` is not installed as an overlapping runtime.
+https://github.com/nijaru/pi-search. Repository HEAD is `52548f2`; the user's
+latest `pi update --extensions` refreshed the installed checkout through
+`146215f` before the dependency-only follow-up. The active runtime exposes
+exactly `web_search`, `web_fetch`, and `web_research`; `pi-web-access` is not
+installed as an overlapping runtime. Pi must be reloaded after a runtime
+refresh to execute new search behavior.
 
 The search-plane design and first implementation pass are complete:
 
@@ -75,13 +74,16 @@ providers merely for count or rerun paid comparisons.
 
 ## Verification
 
-`bun run check` passes: 168 tests and 402 assertions, with TypeScript clean.
-Coverage now includes registry-driven cross-provider native selection, answer
+`bun run check` passes: 168 tests and 402 assertions, with TypeScript 7.0.2
+clean after aligning the Pi development dependencies to 0.83.0, TypeBox to
+1.3.10, and adding direct `pi-ai` 0.83.0 development coverage. `bun outdated`
+reports no remaining package updates and `git diff --check` passes. Coverage
+now includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
 fetch-attempt counts, cancellation mapping, and existing safety, PDF, captions,
-cancellation, provider, and renderer fixtures. `git diff --check` passes. A
-fresh installed Pi process completed live smokes for active OpenAI/Codex,
+cancellation, provider, and renderer fixtures. A fresh installed Pi process
+completed live smokes for active OpenAI/Codex,
 explicit Exa, xAI web search, xAI X search, and bounded Readability fetch; all
 returned clean bounded output except the constrained xAI X request, which
 completed without parseable citations and was correctly rejected by the
@@ -112,12 +114,16 @@ blocker. No provider comparison calls were made.
 - No blocking implementation task remains. The constrained xAI X no-citation
   result is a conditional investigation item, not a reason to spend another
   metered request without a reproduced workflow.
+- `pi-search-pvas`: plan a light acceptance pass for shipped search, fetch, PDF,
+  YouTube, and research workflows.
+- `pi-search-3jx8`: investigate browser/Chrome MCP as a separate extension,
+  not part of pi-search's default fetch path.
 
 ## Next sequence
 
-1. Use native OpenAI/Codex search when Pi has an authenticated Responses model;
-   select Gemini Lite or Exa explicitly when that is the intended provider or
-   billing choice.
-2. Inspect a raw xAI response only if an actual X workflow reproduces the
-   no-citation result. Add a parser fixture or fix only if that evidence proves
-   a response-shape gap; do not run provider comparisons.
+1. Keep the current three-tool runtime stable; no immediate provider or browser
+   implementation is planned.
+2. Run the light acceptance pass when useful, recording only actionable results.
+3. Investigate a separate browser/Chrome MCP option when that workflow matters.
+4. Inspect a raw xAI response only if an actual X workflow reproduces the
+   no-citation result; do not run provider comparisons.

@@ -248,3 +248,15 @@ durable rationale belongs in `decisions.md`.
   query, no warnings, and no `MAX_TOKENS`. This closes the Gemini acceptance
   gate; xAI X no-citation remains conditional pending a real reproduced
   workflow, not a reason for another metered comparison call.
+
+## 2026-08-04
+
+- Updated and pushed dependency alignment in `52548f2`: Pi development
+  packages and `pi-ai` are 0.83.0, TypeBox is 1.3.10, and TypeScript is 7.0.2.
+  `bun run check` passes with 168 tests and 402 assertions; `bun outdated` is
+  clean. The package install still reports the transitive deprecated
+  `node-domexception@1.0.0` dependency.
+- The installed Pi extension was refreshed through `146215f` before the
+  dependency-only follow-up; no runtime behavior changed. Remaining work is
+  low-priority light acceptance testing and separate browser/Chrome MCP
+  research, tracked in `.tasks/`.
