@@ -28,6 +28,8 @@ This is the tracked source of truth for implementation order.
   cancellation, and untrusted-content fencing.
 - PDF URLs use bounded local `pdftotext`.
 - YouTube URLs use bounded local captions-only `yt-dlp`.
+- Local office/document conversion through `@firecrawl/anydoc` is planned
+  inside `web_fetch`; no hosted Firecrawl service or separate extension.
 
 ## 3. Capability-aware routing — complete
 
@@ -110,6 +112,38 @@ before calling the search surface production-mature:
    at both routing and adapter boundaries. Source-type filters and richer
    provider-specific controls remain deferred; normal calls remain
    single-provider and comparison/fan-out is never hidden behavior.
+
+### Next planned integration — local document conversion
+
+Task: `pi-search-obe3` (open, deliberately unstarted).
+
+`@firecrawl/anydoc` is a local Rust/N-API library that converts DOC/DOCX,
+PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF to GitHub-Flavored
+Markdown. It is useful agent functionality and belongs behind the existing
+`web_fetch` boundary, not in a separate extension. Keep the package name
+`pi-search`; document conversion is an extraction capability alongside HTML,
+PDF, and YouTube handling.
+
+Planned order:
+
+1. Add a pinned `@firecrawl/anydoc` dependency and verify the native package on
+   the current Node/Bun platform.
+2. After the existing safe byte read, detect supported document bytes/content
+   types and convert non-HTML documents to bounded untrusted Markdown. Preserve
+   source URL, content type, byte count, extraction metadata, output bounds,
+   cancellation, and error mapping.
+3. Add deterministic representative fixtures for DOCX/PPTX/XLSX/ODT/RTF/EPUB/
+   CSV and error cases. Use the same path for `web_search` source enrichment and
+   `web_research` through `fetchContent`.
+4. Compare representative anydoc PDF Markdown with current `pdftotext` before
+   changing PDF ownership. Do not require a drop-in replacement; retain either
+   path based on actual usefulness and operational behavior.
+
+Acceptance: remote document URLs work through `web_fetch` with no API key or
+hosted service; the public tool set remains exactly three tools; direct HTML,
+Markdown, text, JSON, YouTube, and the current PDF path remain correct; no
+hard constraints or trust/provenance metadata are lost; and Bun checks plus a
+clean Pi pnpm install pass.
 
 ### Long-term selective additions
 

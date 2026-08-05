@@ -68,7 +68,7 @@ Current portfolio roles and gaps:
 | Dedicated X retrieval | xAI `x_search` plus the shipped explicit X API recent-search path | xAI is best for semantic/model-mediated context; dedicated X lookup/user/archive gaps remain |
 | Hard date/path/domain retrieval | Not yet selected | Evaluate Perplexity only if the shipped set cannot guarantee it |
 | Self-hosted/privacy search | None | Evaluate SearXNG only for a concrete self-hosted requirement |
-| Search plus extraction service | Direct local fetch | Evaluate Tavily/remote extraction only when local fetch misses a required class |
+| Search plus extraction service | Direct local fetch plus planned local `anydoc` document conversion | Evaluate hosted/remote extraction only when local fetch misses a required class |
 
 The current shipped set is therefore a deliberate portfolio, not a permanent
 provider ceiling. A candidate earns implementation only after a measured gap,
@@ -174,13 +174,17 @@ constraints continue to fail before network access.
    server-provided Markdown as bounded untrusted text and reports
    `extraction: "markdown"` plus the actual content type. JSON/XML/plain text
    remain bounded text.
-3. Keep PDF and caption extraction local and bounded. Do not add browser/JS
-   rendering to the default path. If demand proves it necessary, add an
-   explicit browser mode with per-request/subresource SSRF checks, byte and
-   request limits, cancellation cleanup, and a separate privacy review.
-4. Do not add caching until repeated-fetch demand is measured. If added, start
-   with a bounded in-memory cache keyed by canonical URL plus extraction
-   options, with TTL, size, invalidation, and explicit freshness bypass.
+3. Keep PDF and caption extraction local and bounded. The planned
+   `@firecrawl/anydoc` integration belongs inside this fetch path and should
+   add local DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV
+   conversion to Markdown. It should not add a separate public extension,
+   hosted Firecrawl calls, or a package rename. Compare its PDF Markdown with
+   the current `pdftotext` path before changing PDF ownership.
+4. Preserve the existing safe response-read, output-bound, cancellation,
+   untrusted-content, and provenance layers around anydoc. Its internal Rust
+   resource limits are useful but do not replace the fetch contract.
+5. Do not add browser/JS rendering or caching until a concrete workflow
+   requires them and their separate resource/privacy policies are defined.
 
 ## Phase 3 — selective provider additions (deferred)
 

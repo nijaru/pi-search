@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "obe3",
+  "title": "Integrate anydoc local document conversion into web_fetch",
+  "description": "Plan only; leave open and unstarted. Add @firecrawl/anydoc as the local Rust/N-API document conversion backend inside the existing web_fetch pipeline, not as a separate extension and not as a package rename. Stage 1: add the pinned Node 20+ package and verify native platform installation. Stage 2: after the safe bounded response read, detect anydoc-supported document bytes/content types and convert DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and possibly PDF to Markdown; preserve direct HTML/Markdown/text/JSON, PDF/yt-dlp behavior until reviewed, and keep output untrusted. Stage 3: map anydoc coded errors, extraction metadata, output bounds, cleanup, and caller timeout/cancellation behavior through existing fetch contracts. Add deterministic fixtures for representative DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV inputs and compare representative PDF output with current pdftotext before choosing PDF ownership. Acceptance: web_fetch and source enrichment can read supported remote document URLs locally with no API key or hosted service; no separate public tool; no silent constraint loss; bun check and clean Pi pnpm install pass.",
+  "status": "open",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-05T21:30:07.55142Z",
+      "msg": "Planning only: evaluated @firecrawl/anydoc@0.1.6 as a local MIT Rust/N-API converter; temporary DOCX/PDF/CSV smoke and DOCX document-model/assets check passed. Selected integration inside web_fetch, not a separate extension or pi-fetch rename; hosted Firecrawl remains deferred; keep current pdftotext until PDF comparison. Task intentionally remains open and unstarted."
+    }
+  ],
+  "created_at": "2026-08-05T21:24:33.176695Z",
+  "updated_at": "2026-08-05T21:30:07.55142Z",
+  "completed_at": null,
+  "external": {}
+}

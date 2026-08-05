@@ -36,7 +36,9 @@ validated public DNS address. `src/direct-transport.ts` connects to that
 address while preserving Host/SNI. `src/http.ts` and `src/fetcher.ts` enforce
 streamed byte/deadline/cancellation bounds. HTML extraction runs in the local
 worker at `src/fetch-extractor-worker.mjs`; PDF and YouTube paths use bounded
-local subprocesses.
+local subprocesses. A planned `@firecrawl/anydoc` backend will extend this same
+`web_fetch` path to local office/document conversion; it is not a second
+extension or hosted Firecrawl integration.
 
 ## Extension migration
 
@@ -63,4 +65,6 @@ next gates are OpenAI/Codex correctness, direct fetch/PDF efficiency, Brave
 free-mode admission, and a provider-role evaluation harness. Browser rendering,
 remote extraction, persistent caches, media analysis, and extra overlapping
 providers remain conditional on measured workflows rather than permanently
-excluded.
+excluded. `@firecrawl/anydoc` is the selected candidate for a local document
+conversion layer, pending the open integration task; it does not imply remote
+extraction.

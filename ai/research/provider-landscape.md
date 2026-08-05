@@ -221,6 +221,36 @@ pagination, lookup, timelines, and archive access remain open additions.
 - All reviewed codebases with a declared license are MIT-licensed. Preserve
   notices when copying implementation code.
 
+## Findings — local document conversion
+
+- `firecrawl/anydoc` is a separate local Rust/N-API document converter, not the
+  hosted Firecrawl web service. The Node package `@firecrawl/anydoc@0.1.6`
+  supports DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF,
+  with content-based detection, GitHub-Flavored Markdown, and an optional
+  structured document model carrying tables, notes, links, and embedded assets.
+- It requires Node 20+, ships platform-specific native packages, and is MIT
+  licensed. The current Apple Silicon platform has a matching native package.
+  Conversion is local and does not require a service, API key, OCR model, or
+  network call. The repository is Rust-based and includes fuzz targets,
+  malformed/encrypted fixtures, and fixed resource limits for archive entries,
+  decompression, XML depth/nodes, expansion, records, and retained assets.
+- A temporary package smoke converted representative DOCX, PDF, and CSV inputs
+  and exposed a DOCX document model successfully. PDF output is structured
+  Markdown through `pdf-inspector`; scanned/image-only PDFs remain unsupported
+  without OCR. The Node API accepts full in-memory bytes or a path, returns a
+  complete string/document, and exposes coded conversion errors, but does not
+  expose the fetcher's caller cancellation or output/page controls.
+
+## Applied
+
+- `anydoc` is selected as a useful local document-conversion backend for the
+  existing `web_fetch` operation, not as a separate extension or package
+  rename. It should be added only through the open `pi-search-obe3` task.
+- Keep the existing safe HTTP byte read, provenance, untrusted-content fence,
+  output bounds, cancellation, and error normalization around the converter.
+  Compare its PDF output with current bounded `pdftotext` before changing PDF
+  ownership. Hosted Firecrawl/Jina/TinyFish remote extraction remains deferred.
+
 ## Open Questions
 
 - The official X API offers stable post URLs, text, timestamps, query
@@ -263,3 +293,6 @@ pagination, lookup, timelines, and archive access remain open additions.
 - https://docs.searxng.org/dev/search_api.html
 - https://docs.z.ai/api-reference/tools/web-search
 - https://duckduckgo.com/duckduckgo-help-pages/results/sources
+- https://github.com/firecrawl/anydoc
+- https://github.com/firecrawl/anydoc/blob/main/node/README.md
+- https://www.npmjs.com/package/@firecrawl/anydoc

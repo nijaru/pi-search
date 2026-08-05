@@ -172,3 +172,21 @@ model-default generation budget. The adapter resolves Google's grounding
 redirect URLs to canonical source URLs with one bounded HEAD request, preserving
 the redirect as `sourceUrl` and retaining it when resolution fails; this is
 metadata cleanup, not a second search.
+
+### 2026-08-05 — local document conversion belongs in consolidated fetch
+
+Evaluated `firecrawl/anydoc` and selected `@firecrawl/anydoc` as the planned
+local document-conversion backend for `web_fetch`. It is a Rust/N-API library,
+not Firecrawl's hosted web service: it converts office documents, EPUB, CSV,
+and PDF to Markdown locally, with content-based detection, a document model,
+MIT licensing, platform binaries, and internal archive/parser resource limits.
+A temporary smoke converted representative DOCX, PDF, and CSV inputs and
+exposed DOCX tables/assets successfully.
+
+Do not create a separate extension or rename `pi-search` to `pi-fetch`.
+Search, selected-source enrichment, research fetches, and document conversion
+are one agent web-access boundary. Add anydoc only through open task
+`pi-search-obe3`, behind the existing safe response read and output/trust/
+provenance/error boundaries. Keep current PDF ownership until representative
+anydoc Markdown is compared with bounded `pdftotext`; anydoc does not need to
+be a drop-in replacement. Hosted Firecrawl/remote extraction remains deferred.

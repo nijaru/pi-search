@@ -47,8 +47,10 @@ Fetching remains direct/local with pinned DNS/SSRF and redirect validation,
 streamed limits, cancellation, Readability/Markdown extraction, bounded PDF
 text, and bounded YouTube captions. The YouTube path uses local `yt-dlp` with
 configuration ignored, no media download, bounded caption files, and
-cue-aware VTT cleanup. Research remains explicit, sequential, and budgeted; it
-uses one selected provider and does not use search fallbacks.
+cue-aware VTT cleanup. `@firecrawl/anydoc` is the selected candidate for a
+local document-conversion backend inside `web_fetch`; integration is planned,
+not started. Research remains explicit, sequential, and budgeted; it uses one
+selected provider and does not use search fallbacks.
 
 ## Decisions in force
 
@@ -69,8 +71,12 @@ untrusted. Evidence remains the public source of truth; direct providers need
 not synthesize answers. Model-mediated adapters reject completed envelopes with
 no inspectable evidence.
 - Source enrichment is explicit (`includeContent`) and uses the existing safe
-fetch boundary. Browser/remote extraction, persistent cache/history, and
-curator storage remain deferred until a concrete workflow requires them.
+fetch boundary. Local `anydoc` document conversion is planned inside that
+boundary; hosted Firecrawl/remote extraction, browser rendering, persistent
+cache/history, and curator storage remain deferred until a concrete workflow
+requires them.
+- Keep `pi-search` as the consolidated three-tool extension. Do not create a
+separate document extension or rename the package for anydoc.
 - Preserve fetch safety and deterministic offline coverage. Do not add
 providers merely for count or rerun paid comparisons.
 
@@ -123,6 +129,8 @@ blocker. No provider comparison calls were made.
 - No blocking implementation task remains. The constrained xAI X no-citation
   result is a conditional investigation item, not a reason to spend another
   metered request without a reproduced workflow.
+- `pi-search-obe3`: plan and later implement local `@firecrawl/anydoc`
+  conversion inside `web_fetch`; task is open and deliberately unstarted.
 - `pi-search-3jx8`: investigate browser/Chrome MCP as a separate extension,
   not part of pi-search's default fetch path.
 
@@ -130,6 +138,9 @@ blocker. No provider comparison calls were made.
 
 1. Keep the current three-tool runtime stable; restart Pi after the latest
    extension refresh to load the dependency cleanup and YouTube fix.
-2. Investigate a separate browser/Chrome MCP option when that workflow matters.
-3. Inspect a raw xAI response only if an actual X workflow reproduces the
+2. When ready, start `pi-search-obe3`: add anydoc for supported office/document
+   formats, preserve the current fetch boundary, and compare PDF output before
+   changing PDF ownership.
+3. Investigate a separate browser/Chrome MCP option when that workflow matters.
+4. Inspect a raw xAI response only if an actual X workflow reproduces the
    no-citation result; do not run provider comparisons.

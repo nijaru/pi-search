@@ -121,10 +121,15 @@ cancellation, and local extraction. Fetched content is always untrusted data.
 this same fetcher; it never uses an implicit remote extraction service.
 
 - PDF URLs are fetched safely, validated by magic header, passed to bounded
-  local `pdftotext`, and cleaned up. No OCR or persistent download.
+  local `pdftotext`, and cleaned up. No OCR or persistent download. A planned
+  anydoc integration will be compared for document/PDF conversion before
+  changing this ownership.
 - YouTube URLs are canonicalized to HTTPS video URLs and passed to bounded
-  local `yt-dlp` captions-only extraction with `--ignore-config`, `--no-netrc`,
-  and `--no-playlist`. No media download, frames, or visual analysis.
+  local `yt-dlp` captions-only extraction with `--ignore-config` and
+  `--no-playlist`. No media download, frames, or visual analysis.
+- A planned `@firecrawl/anydoc` backend will convert supported office/document
+  bytes locally inside `web_fetch`; it is not a hosted Firecrawl integration,
+  separate public tool, or package rename.
 - Local files, repository work, video frames/downloads, OCR, and browser
   automation remain explicit Bash, `git`, `gh`, `ffmpeg`, or browser workflows.
 

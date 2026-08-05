@@ -31,7 +31,8 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Source depth and context | **Implemented**: explicit `includeContent` uses the local safe fetcher with bounded count/length/deadline | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |
-| PDF text extraction | bounded local `pdftotext`; shipped | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
+| PDF text extraction | bounded local `pdftotext`; shipped; anydoc PDF comparison pending | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
+| Local document fetch/conversion | **Planned inside `web_fetch` with `@firecrawl/anydoc`; task open, unstarted** | Remote DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV bytes convert locally to bounded untrusted Markdown; no hosted service or separate tool |
 | YouTube transcript/caption fetch | bounded local `yt-dlp`; shipped | URL validation, cue cleanup, cancellation tests |
 | Explicit bounded multi-query research | `web_research`; shipped | One provider, caller queries, fetch bounds, deadline/cost/output tests |
 
@@ -51,7 +52,7 @@ extension's runtime contract now:
 | Local video analysis, frame extraction, and OCR | `yt-dlp`, `ffmpeg`, and a dedicated vision workflow | Media download/vision requires a separate resource and privacy boundary |
 | Visual YouTube understanding | Deferred | Captions satisfy the named transcript workflow; no visual-analysis requirement is recorded |
 | Browser automation and JavaScript rendering | Deferred, explicit future adapter only | Direct local extraction is safer and cheaper; browser/remote fetch needs SSRF, privacy, and resource review |
-| Firecrawl/Jina/TinyFish remote extraction | Deferred | Remote services change privacy, cost, and SSRF ownership; no concrete required page class yet |
+| Firecrawl/Jina/TinyFish remote extraction | Deferred; distinct from local `@firecrawl/anydoc` | Hosted/remote services change privacy, cost, and SSRF ownership; `anydoc` is a local Rust document converter and is planned for `web_fetch` instead |
 | Persistent caching | Deferred | No measured repeated-fetch requirement; caching needs TTL, size, invalidation, and freshness policy |
 | `source_check` claim-audit tool | Deferred | Useful but outside the three-tool public contract; research already preserves source evidence |
 | Arbitrary extra search providers | Deferred unless a coverage gap appears | Tavily, SearXNG, Perplexity, Anthropic, and similar options overlap shipped capabilities or need a concrete auth/cost requirement |

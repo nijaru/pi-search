@@ -282,3 +282,14 @@ durable rationale belongs in `decisions.md`.
   404 assertions) pass. The actual `pi update --extensions` refresh to
   `1a137a1` completed with no deprecation warnings. A running Pi process still
   needs a restart to load the refreshed extension.
+- 2026-08-05: Evaluated `firecrawl/anydoc` as the linked local library, not the
+  hosted Firecrawl service. `@firecrawl/anydoc@0.1.6` is a MIT-licensed Rust/
+  N-API converter for DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB,
+  CSV, and PDF; it has content detection, a structured document model,
+  platform binaries, and fixed parser/archive resource limits. A temporary
+  smoke converted representative DOCX, PDF, and CSV files and exposed DOCX
+  tables/assets. Decision: integrate it inside the existing `web_fetch` path,
+  not as a separate extension or a `pi-fetch` rename. Task `pi-search-obe3` is
+  open and deliberately unstarted. Keep current `pdftotext` ownership until
+  representative PDF output is compared; hosted Firecrawl/remote extraction
+  remains deferred. No runtime source or dependency changes were made.
