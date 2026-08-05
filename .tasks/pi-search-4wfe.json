@@ -3,7 +3,7 @@
   "ref": "4wfe",
   "title": "Remove deprecated DOMException transitive dependency",
   "description": "Apply the upstream-aligned fetch-blob native DOMException fix for Pi's pnpm Git-extension install, verify Bun and pnpm dependency graphs plus runtime behavior, and remove the install warning without changing public APIs.",
-  "status": "active",
+  "status": "done",
   "priority": 3,
   "labels": null,
   "assignees": null,
@@ -19,10 +19,14 @@
     {
       "ts": "2026-08-05T18:23:54.175064Z",
       "msg": "Verified clean installs with both Bun and pnpm: node-domexception resolves to @profoundlogic/node-domexception@1.0.2, which exports native DOMException; @aws-sdk/core resolves to mature non-deprecated 3.976.0. The pnpm install emits no deprecation warning for either (only the prior 3.977.4 AWS warning is gone); stale direct package imports and the file-backed Blob NotReadableError path pass. Bun run check passes 169 tests / 404 assertions and TypeScript; bun outdated is clean. Changes are package.json, bun.lock, and pnpm-workspace.yaml; ready to commit."
+    },
+    {
+      "ts": "2026-08-05T18:25:04.829017Z",
+      "msg": "Implemented and pushed 1a137a1. package.json and Bun lock override node-domexception to @profoundlogic/node-domexception@1.0.2; pnpm-workspace.yaml mirrors overrides for Pi's pnpm installer and pins @aws-sdk/core to mature non-deprecated 3.976.0. Clean Bun/pnpm installs, native DOMException error-path test, Bun check (169/404), and outdated checks pass."
     }
   ],
   "created_at": "2026-08-05T17:58:43.165959Z",
-  "updated_at": "2026-08-05T18:23:54.175064Z",
-  "completed_at": null,
+  "updated_at": "2026-08-05T18:25:04.840848Z",
+  "completed_at": "2026-08-05T18:25:04.840848Z",
   "external": {}
 }

@@ -272,3 +272,13 @@ durable rationale belongs in `decisions.md`.
   --extensions`; the transitive `node-domexception@1.0.0` deprecation warning
   remains and is outside the direct dependency set. A running Pi process still
   needs a restart to load the refreshed extension.
+- 2026-08-05: Evaluated the deprecation instead of suppressing it. The shim was
+  only needed by `fetch-blob` for old runtimes; Node/Bun here provide native
+  `DOMException`. Added Bun and pnpm overrides to use the maintained drop-in
+  `@profoundlogic/node-domexception@1.0.2`, and pinned compatible mature
+  `@aws-sdk/core@3.976.0` after a clean pnpm install exposed its separate
+  deprecated `3.977.4` release. Clean Bun/pnpm installs, the file-backed Blob
+  `NotReadableError` native-`DOMException` path, and `bun run check` (169 tests /
+  404 assertions) pass. The actual `pi update --extensions` refresh to
+  `1a137a1` completed with no deprecation warnings. A running Pi process still
+  needs a restart to load the refreshed extension.

@@ -16,6 +16,9 @@
 6. Prefer mature existing Pi implementations for adapters and extraction, but
    preserve this package's contracts and policy. Copying MIT code requires
    attribution in `THIRD_PARTY_NOTICES.md`.
+7. Prefer maintained library and dependency updates for generic runtime
+   behavior. Keep custom code for pi-search-specific safety, bounds, provider
+   normalization, and policy rather than reimplementing generic primitives.
 
 ## Log
 

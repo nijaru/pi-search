@@ -11,12 +11,11 @@ fan-out, opaque storage, or unsafe remote extraction.
 
 `pi-search` is the public, unversioned Git Pi package at
 https://github.com/nijaru/pi-search. Repository HEAD includes the pushed
-YouTube acceptance fix and context updates; the installed checkout is
-`cbd9a81`, the latest code revision before the context-only commits. The active
-runtime exposes
-exactly `web_search`, `web_fetch`, and `web_research`; `pi-web-access` is not
-installed as an overlapping runtime. Pi must be reloaded after a runtime
-refresh to execute new search behavior.
+YouTube acceptance fix and dependency cleanup; the installed checkout was
+refreshed to `1a137a1`. The active runtime exposes exactly `web_search`,
+`web_fetch`, and `web_research`; `pi-web-access` is not installed as an
+overlapping runtime. Pi must be reloaded after a runtime refresh to execute
+new search behavior.
 
 The search-plane design and first implementation pass are complete:
 
@@ -80,10 +79,14 @@ providers merely for count or rerun paid comparisons.
 `bun run check` passes: 169 tests and 404 assertions, with TypeScript 7.0.2
 clean after aligning the Pi development dependencies to 0.83.0, TypeBox to
 1.3.10, and adding direct `pi-ai` 0.83.0 development coverage. `bun outdated`
-reports no remaining package updates and `git diff --check` passes. A live
-caption-only extraction using installed `yt-dlp` 2026.07.04 succeeded for a
-public video without media download; the old unsupported `--no-netrc` flag was
-removed and VTT header/numeric-caption handling was corrected. Coverage now
+reports no remaining package updates and `git diff --check` passes. Bun and
+pnpm installs now replace deprecated `node-domexception` with the maintained
+native-DOMException drop-in `@profoundlogic/node-domexception@1.0.2` and pin
+non-deprecated `@aws-sdk/core@3.976.0`; the actual `pi update --extensions` run
+completed without either warning. A live caption-only extraction using
+installed `yt-dlp` 2026.07.04 succeeded for a public video without media
+download; the old unsupported `--no-netrc` flag was removed and VTT
+header/numeric-caption handling was corrected. Coverage now
 includes registry-driven cross-provider native selection, answer
 normalization/citation alignment, bounded fallback behavior, optional source
 enrichment through an injected fetcher, multibyte output bounds, bounded
@@ -125,8 +128,8 @@ blocker. No provider comparison calls were made.
 
 ## Next sequence
 
-1. Keep the current three-tool runtime stable; refresh and restart Pi when the
-   YouTube fix is needed.
+1. Keep the current three-tool runtime stable; restart Pi after the latest
+   extension refresh to load the dependency cleanup and YouTube fix.
 2. Investigate a separate browser/Chrome MCP option when that workflow matters.
 3. Inspect a raw xAI response only if an actual X workflow reproduces the
    no-citation result; do not run provider comparisons.
