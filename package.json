@@ -48,6 +48,10 @@
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
+  "overrides": {
+    "@aws-sdk/core": "3.976.0",
+    "node-domexception": "npm:@profoundlogic/node-domexception@1.0.2"
+  },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "linkedom": "^0.18.13",

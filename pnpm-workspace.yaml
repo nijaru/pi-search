@@ -1,0 +1,6 @@
+# pi-ai's Google SDK chain still imports the package name, but this extension
+# runs on Node/Bun versions with a native DOMException. Keep the import name
+# while using a maintained drop-in that exports the native implementation.
+overrides:
+  "@aws-sdk/core": 3.976.0
+  node-domexception: npm:@profoundlogic/node-domexception@1.0.2
