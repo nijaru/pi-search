@@ -243,13 +243,14 @@ pagination, lookup, timelines, and archive access remain open additions.
 
 ## Applied
 
-- `anydoc` is selected as a useful local document-conversion backend for the
+- `anydoc` is integrated as the local document/PDF-conversion backend for the
   existing `web_fetch` operation, not as a separate extension or package
-  rename. It should be added only through the open `pi-search-obe3` task.
+  rename. Default text-based PDFs now use its structured `pdf-inspector` path;
+  explicit page-bounded requests retain `pdftotext` because the Node API has no
+  page-range control.
 - Keep the existing safe HTTP byte read, provenance, untrusted-content fence,
   output bounds, cancellation, and error normalization around the converter.
-  Compare its PDF output with current bounded `pdftotext` before changing PDF
-  ownership. Hosted Firecrawl/Jina/TinyFish remote extraction remains deferred.
+  Hosted Firecrawl/Jina/TinyFish remote extraction remains deferred.
 
 ## Open Questions
 

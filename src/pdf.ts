@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SafeFetchError } from "./fetch-errors";
 
+// AnyDoc owns the default PDF path. This bounded Poppler path remains for
+// explicit maxPages requests because AnyDoc 0.1.6 has no page-range option.
 export const DEFAULT_PDF_MAX_PAGES = 100;
 export const MAX_PDF_PAGES = 500;
 export const DEFAULT_PDF_TEXT_BYTES = 2 * 1024 * 1024;

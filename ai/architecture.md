@@ -35,13 +35,14 @@ Provider adapters normalize their own HTTP or model-mediated payloads:
 validated public DNS address. `src/direct-transport.ts` connects to that
 address while preserving Host/SNI. `src/http.ts` and `src/fetcher.ts` enforce
 streamed byte/deadline/cancellation bounds. HTML extraction runs in the local
-worker at `src/fetch-extractor-worker.mjs`; PDF and YouTube paths use bounded
-local subprocesses. `@firecrawl/anydoc@0.1.6` extends this same `web_fetch`
-path through `src/anydoc.ts` and `src/anydoc-worker.mjs` for local office/
-document conversion; it is not a second extension or hosted Firecrawl
-integration. The AnyDoc worker owns native binding/conversion lifetime, while
-`fetcher.ts` owns response limits, cancellation/deadlines, provenance, output
-bounds, and the untrusted-content contract.
+worker at `src/fetch-extractor-worker.mjs`; YouTube and explicit page-bounded
+PDF requests use bounded local subprocesses. `@firecrawl/anydoc@0.1.6` handles
+local office/document and default PDF conversion through `src/anydoc.ts` and
+`src/anydoc-worker.mjs`; it is not a second extension or hosted Firecrawl
+integration. AnyDoc's PDF path uses its bundled `pdf-inspector` parser for
+structured Markdown. The AnyDoc worker owns native binding/conversion lifetime,
+while `fetcher.ts` owns response limits, cancellation/deadlines, provenance,
+output bounds, and the untrusted-content contract.
 
 ## Extension migration
 

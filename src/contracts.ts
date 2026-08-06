@@ -420,7 +420,7 @@ export interface FetchRequest {
 	readonly offset?: number;
 	/** Format hint; the response reports the produced format explicitly. */
 	readonly format?: "markdown" | "text" | "html";
-	/** Maximum PDF pages to parse when the URL serves a PDF. */
+	/** Optional maximum PDF pages; explicit use selects the page-bounded PDF path. */
 	readonly maxPages?: number;
 	/** Caption language passed to the local YouTube extractor. */
 	readonly captionLanguage?: string;

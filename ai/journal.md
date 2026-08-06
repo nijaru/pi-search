@@ -298,13 +298,15 @@ durable rationale belongs in `decisions.md`.
 
 - Completed and pushed `pi-search-obe3` in `087937b`: pinned
   `@firecrawl/anydoc@0.1.6` runs in a worker inside `web_fetch` for DOC/DOCX,
-  PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV. Deterministic fixtures
-  cover supported formats, malformed/unsupported inputs, octet-stream dispatch,
-  direct HTML preservation, and cancellation. AnyDoc PDF output was compared
-  with `pdftotext`; the existing PDF path remains authoritative.
+  PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and default text-based PDF
+  conversion. Deterministic fixtures cover supported formats, malformed/
+  unsupported inputs, octet-stream dispatch, direct HTML preservation, and
+  cancellation. AnyDoc PDF now owns the default path because its structured
+  Markdown is better suited to agent evidence; explicit `maxPages` retains
+  bounded `pdftotext` because AnyDoc exposes no page-range option.
 - Pi 0.84 compatibility was integrated and pushed as `02fba19`: headers use
   `string | null` semantics with deletion-aware merges, package pins are 0.84,
-  and null-header regression tests pass. Full verification is 182 tests / 429
+  and null-header regression tests pass. Full verification is 184 tests / 432
   assertions with clean TypeScript; local `main` and `origin/main` are synced.
 - Current AnyDoc setup is considered complete: no API key or hosted service is
   needed, the fetcher owns network/output/trust/cancellation bounds, and the

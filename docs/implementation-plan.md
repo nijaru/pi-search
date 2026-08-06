@@ -26,12 +26,14 @@ This is the tracked source of truth for implementation order.
 - Direct HTTP fetching uses pinned DNS, SSRF and redirect checks, streamed
   byte limits, local Readability/Turndown extraction, one deadline,
   cancellation, and untrusted-content fencing.
-- PDF URLs use bounded local `pdftotext`; representative AnyDoc PDF output
-  was compared and did not replace this simpler path.
+- PDF URLs use pinned local `@firecrawl/anydoc`/`pdf-inspector` conversion
+  for structured Markdown. Explicit `maxPages` requests retain bounded local
+  `pdftotext` because AnyDoc 0.1.6 has no page-range option; OCR is not
+  implicit.
 - YouTube URLs use bounded local captions-only `yt-dlp`.
-- DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV conversion
-  uses pinned local `@firecrawl/anydoc` inside `web_fetch`; no hosted Firecrawl
-  service or separate extension.
+- DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF
+  conversion uses pinned local `@firecrawl/anydoc` inside `web_fetch`; no
+  hosted Firecrawl service or separate extension.
 
 ## 3. Capability-aware routing — complete
 
@@ -120,14 +122,15 @@ before calling the search surface production-mature:
 Task: `pi-search-obe3` (implemented in the existing `web_fetch` boundary).
 
 Pinned `@firecrawl/anydoc@0.1.6` runs in a worker and converts DOC/DOCX,
-PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV to GitHub-Flavored
+PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF to GitHub-Flavored
 Markdown. Format detection uses document signatures, served content types, and
-safe URL extensions; PDF remains on bounded `pdftotext` after a representative
-comparison. The worker boundary preserves caller cancellation and the fetcher's
-timeout, while coded converter failures map to stable fetch errors with the
-AnyDoc code in the bounded diagnostic.
+safe URL extensions. Explicit `maxPages` requests use bounded `pdftotext`
+because AnyDoc has no page-range option; default PDF conversion uses AnyDoc's
+structured `pdf-inspector` path. The worker boundary preserves caller
+cancellation and the fetcher's timeout, while coded converter failures map to
+stable fetch errors with the AnyDoc code in the bounded diagnostic.
 
-Deterministic fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV, including an
+Deterministic fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF, including an
 `application/octet-stream` document path, malformed/unsupported failures, and
 conversion timeout cancellation. The same `fetchContent` path serves
 `web_search` source enrichment and `web_research` fetches. Results retain the

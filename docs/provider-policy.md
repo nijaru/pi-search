@@ -134,8 +134,9 @@ The extension owns:
 - provider-neutral search routing and evidence normalization;
 - model-registry authentication boundaries;
 - direct provider HTTP, bounded responses, cancellation, and error metadata;
-- safe direct HTML/text fetching;
-- remote PDF extraction through bounded local `pdftotext`;
+- safe direct HTML/text fetching and local AnyDoc document/PDF conversion;
+- explicit page-bounded PDF extraction through local `pdftotext` when the
+  caller requests `maxPages`;
 - remote YouTube caption extraction through bounded local `yt-dlp`; and
 - explicit bounded research orchestration.
 

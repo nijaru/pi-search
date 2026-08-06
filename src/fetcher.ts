@@ -23,7 +23,9 @@ export const MAX_FETCH_RESPONSE_BYTES = 20 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 500;
 const MAX_OUTPUT_BYTES = 32_000;
 
-type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback" | "maxPages" | "captionLanguage">>;
+type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback" | "captionLanguage">> & {
+	readonly maxPages: number | undefined;
+};
 
 interface ExtractedContent {
 	readonly content: string;
@@ -118,8 +120,11 @@ export async function fetchContent(
 			});
 		}
 		const documentCandidate = !pdfExpected && (isAnyDocCandidate(bytes, mimeType, normalized.url) || isAnyDocCandidate(bytes, mimeType, finalUrl));
+		// AnyDoc 0.1.6 has no page-range option; preserve explicit maxPages through the bounded PDF path.
 		const extracted = pdfExpected
-			? await extractPdfContent(bytes, normalized, controller.signal, options.pdfCommand, options.pdfMaxOutputBytes)
+			? normalized.maxPages === undefined
+				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
+				: await extractPdfContent(bytes, normalized, controller.signal, options.pdfCommand, options.pdfMaxOutputBytes)
 			: documentCandidate
 				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
 				: await extractWithDeadline(decodeUtf8(bytes), mimeType, normalized, controller.signal);
@@ -185,8 +190,8 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 	if (format !== "markdown" && format !== "text" && format !== "html") {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "format is not supported" });
 	}
-	const maxPages = request.maxPages ?? 100;
-	if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 500) {
+	const maxPages = request.maxPages;
+	if (maxPages !== undefined && (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 500)) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "maxPages must be between 1 and 500" });
 	}
 	const captionLanguage = request.captionLanguage ?? "en";

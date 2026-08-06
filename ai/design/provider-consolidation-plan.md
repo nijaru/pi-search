@@ -175,10 +175,13 @@ constraints continue to fail before network access.
    `extraction: "markdown"` plus the actual content type. JSON/XML/plain text
    remain bounded text.
 3. Keep PDF and caption extraction local and bounded. `@firecrawl/anydoc`
-   now adds local DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV
-   conversion to Markdown inside this fetch path. It does not add a separate
-   public extension, hosted Firecrawl calls, or a package rename; PDF remains
-   on `pdftotext` after representative comparison.
+   now converts local DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV,
+   and default text-based PDFs to structured Markdown inside this fetch path.
+   AnyDoc's PDF path uses its bundled `pdf-inspector` parser; scanned/image-only
+   and encrypted PDFs remain explicit failures because OCR is not implicit. An
+   explicit `maxPages` request retains bounded `pdftotext`, since AnyDoc 0.1.6
+   has no page-range option. There is no separate public extension or hosted
+   Firecrawl call.
 4. The AnyDoc worker owns native conversion lifetime; `fetcher.ts` owns the
    safe response read, output bound, cancellation/deadline, untrusted-content,
    provenance, and error-mapping layers. AnyDoc's internal Rust resource

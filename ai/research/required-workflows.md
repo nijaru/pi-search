@@ -31,8 +31,8 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Source depth and context | **Implemented**: explicit `includeContent` uses the local safe fetcher with bounded count/length/deadline | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
 | Credential, cost, rate-limit, and request provenance | contracts/adapters; shipped | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |
-| PDF text extraction | bounded local `pdftotext`; shipped; AnyDoc comparison retained this ownership | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
-| Local document fetch/conversion | **Shipped inside `web_fetch` with `@firecrawl/anydoc@0.1.6`** | Remote DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV bytes convert locally to bounded untrusted Markdown; no hosted service or separate tool |
+| PDF extraction/conversion | **Shipped inside `web_fetch` with `@firecrawl/anydoc@0.1.6`** | Text-based PDFs convert locally to structured bounded untrusted Markdown; explicit `maxPages` retains bounded `pdftotext`; scanned/encrypted PDFs fail without OCR |
+| Local document fetch/conversion | **Shipped inside `web_fetch` with `@firecrawl/anydoc@0.1.6`** | DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV convert locally; no hosted service or separate tool; worker conversion preserves cancellation and the shared fetcher owns bounds, provenance, and trust |
 | YouTube transcript/caption fetch | bounded local `yt-dlp`; shipped | URL validation, cue cleanup, cancellation tests |
 | Explicit bounded multi-query research | `web_research`; shipped | One provider, caller queries, fetch bounds, deadline/cost/output tests |
 

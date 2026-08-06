@@ -35,6 +35,7 @@ const fixtures = [
 	{ file: "sample.odt", path: "/notes.odt", contentType: "application/vnd.oasis.opendocument.text", format: "odt", evidence: "ODT evidence." },
 	{ file: "sample.rtf", path: "/notes.rtf", contentType: "application/rtf", format: "rtf", evidence: "RTF evidence." },
 	{ file: "sample.epub", path: "/book.epub", contentType: "application/epub+zip", format: "epub", evidence: "EPUB evidence." },
+	{ file: "sample.pdf", path: "/report.pdf", contentType: "application/pdf", format: "pdf", evidence: "PDF evidence." },
 	{ file: "sample.csv", path: "/data.csv", contentType: "text/csv", format: "csv", evidence: "Evidence" },
 ] as const;
 
@@ -90,6 +91,16 @@ describe("local anydoc document conversion", () => {
 				transport: transportFor(bytes, "application/octet-stream"),
 			}),
 		).rejects.toThrow("AnyDoc unsupported");
+	});
+
+	it("maps malformed PDF conversion through the AnyDoc error boundary", async () => {
+		const bytes = new TextEncoder().encode("%PDF-1.4\\n");
+		await expect(
+			fetchContent({ url: "https://example.test/report.pdf" }, undefined, {
+				lookup: publicLookup,
+				transport: transportFor(bytes, "application/pdf"),
+			}),
+		).rejects.toThrow("AnyDoc malformed");
 	});
 
 	it("preserves timeout cancellation while conversion runs outside the event loop", async () => {

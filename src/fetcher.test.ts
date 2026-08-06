@@ -121,12 +121,12 @@ describe("direct content fetch", () => {
 		expect(read).toBe(true);
 	});
 
-	it("extracts PDF URLs locally without publishing the downloaded file", async () => {
+	it("uses bounded pdftotext for explicit PDF page limits", async () => {
 		const script = join(tmpdir(), `pi-search-pdftotext-${process.pid}-${Date.now()}.sh`);
 		writeFileSync(script, "#!/bin/sh\nprintf 'PDF passage\\n'\n");
 		chmodSync(script, 0o700);
 		try {
-			const result = await fetchContent({ ...baseRequest, url: "https://example.test/report.pdf" }, undefined, {
+			const result = await fetchContent({ ...baseRequest, url: "https://example.test/report.pdf", maxPages: 1 }, undefined, {
 				lookup: publicLookup,
 				pdfCommand: script,
 				transport: transportFor("%PDF-test", "application/pdf"),

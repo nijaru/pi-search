@@ -1,7 +1,7 @@
 import { Worker } from "node:worker_threads";
 import { SafeFetchError } from "./fetch-errors";
 
-export const ANYDOC_FORMATS = ["doc", "docx", "odt", "ppt", "pptx", "rtf", "epub", "xlsx", "ods", "odp", "csv"] as const;
+export const ANYDOC_FORMATS = ["doc", "docx", "odt", "ppt", "pptx", "rtf", "epub", "pdf", "xlsx", "ods", "odp", "csv"] as const;
 export type AnyDocFormat = (typeof ANYDOC_FORMATS)[number];
 export type AnyDocErrorCode = "unsupported" | "malformed" | "encrypted" | "resourceLimit" | "missingPart" | "io";
 
@@ -31,6 +31,7 @@ const formatByExtension: Readonly<Record<string, AnyDocFormat>> = {
 	docm: "docx",
 	docx: "docx",
 	epub: "epub",
+	pdf: "pdf",
 	ods: "ods",
 	odp: "odp",
 	odt: "odt",
@@ -63,6 +64,7 @@ const formatByMimeType: Readonly<Record<string, AnyDocFormat>> = {
 	"application/vnd.oasis.opendocument.spreadsheet": "ods",
 	"application/vnd.oasis.opendocument.text": "odt",
 	"application/epub+zip": "epub",
+	"application/pdf": "pdf",
 	"application/csv": "csv",
 	"text/csv": "csv",
 	"text/rtf": "rtf",

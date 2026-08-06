@@ -120,18 +120,19 @@ cancellation, and local extraction. Fetched content is always untrusted data.
 `web_search` can opt into bounded enrichment of selected result URLs through
 this same fetcher; it never uses an implicit remote extraction service.
 
-- PDF URLs are fetched safely, validated by magic header, passed to bounded
-  local `pdftotext`, and cleaned up. No OCR or persistent download. A
-  representative `@firecrawl/anydoc` PDF conversion was compared with this
-  path; `pdftotext` remains the simpler default and AnyDoc is not used for PDF.
+- PDF URLs are fetched safely, validated by magic header, and passed to pinned
+  local `@firecrawl/anydoc`/`pdf-inspector` conversion for structured Markdown.
+  AnyDoc detects scanned/image-only and encrypted PDFs but does not perform OCR.
+  An explicit `maxPages` request uses bounded local `pdftotext` because AnyDoc
+  0.1.6 has no page-range option; there is no persistent download.
 - YouTube URLs are canonicalized to HTTPS video URLs and passed to bounded
   local `yt-dlp` captions-only extraction with `--ignore-config` and
   `--no-playlist`. No media download, frames, or visual analysis.
 - Pinned `@firecrawl/anydoc` converts supported DOC/DOCX, PPT/PPTX, XLS/XLSX,
-  ODT/ODS/ODP, RTF, EPUB, and CSV bytes locally inside `web_fetch`; it runs in
-  a worker with caller cancellation and remains bounded, untrusted content. It
-  is not a hosted Firecrawl integration, separate public tool, or package
-  rename.
+  ODT/ODS/ODP, RTF, EPUB, CSV, and PDF bytes locally inside `web_fetch`; it
+  runs in a worker with caller cancellation and remains bounded, untrusted
+  content. It is not a hosted Firecrawl integration, separate public tool, or
+  package rename.
 - Local files, repository work, video frames/downloads, OCR, and browser
   automation remain explicit Bash, `git`, `gh`, `ffmpeg`, or browser workflows.
 

@@ -34,12 +34,14 @@ The search plane is implemented and bounded:
 
 The fetch plane is local and bounded: pinned DNS/SSRF and redirect validation,
 streamed response limits, cancellation/deadlines, Readability/Turndown,
-Markdown/text/JSON, `pdftotext`, caption-only `yt-dlp`, and local AnyDoc
-document conversion. `@firecrawl/anydoc@0.1.6` runs in a worker inside
-`web_fetch`, converting DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB,
-and CSV to bounded untrusted Markdown. Its coded failures, detected format,
-provenance, output bounds, timeout, and caller cancellation remain inside the
-existing fetch contract. PDF remains on `pdftotext` after comparison.
+Markdown/text/JSON, local AnyDoc document/PDF conversion, explicit page-bounded
+`pdftotext`, and caption-only `yt-dlp`. `@firecrawl/anydoc@0.1.6` runs in a
+worker inside `web_fetch`, converting DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP,
+RTF, EPUB, CSV, and default text-based PDFs to bounded untrusted Markdown.
+Its coded failures, detected format, provenance, output bounds, timeout, and
+caller cancellation remain inside the existing fetch contract. Explicit
+`maxPages` keeps the bounded `pdftotext` path because AnyDoc 0.1.6 exposes no
+page-range option.
 
 ## Decisions in force
 
@@ -64,11 +66,12 @@ existing fetch contract. PDF remains on `pdftotext` after comparison.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 182 tests, 429 assertions,
-and clean TypeScript. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV,
+`bun run check` passes under Pi 0.84 dependencies: 184 tests, 432 assertions,
+and clean TypeScript. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
 malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
 and cancellation. The Pi 0.84 null-header fix has dedicated model-selection
-and OpenAI tests. The final AnyDoc PDF comparison retained `pdftotext`.
+and OpenAI tests. AnyDoc now owns default PDF conversion; explicit `maxPages`
+retains bounded `pdftotext` because AnyDoc 0.1.6 exposes no page-range option.
 Credential-gated live rows remain separate from the offline suite; prior
 single-call smokes covered Codex, Exa, xAI web/X, Gemini Lite, and direct fetch,
 with constrained xAI X no-citation behavior correctly rejected.

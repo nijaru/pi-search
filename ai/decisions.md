@@ -188,6 +188,17 @@ Search, selected-source enrichment, research fetches, and document conversion
 are one agent web-access boundary. `@firecrawl/anydoc@0.1.6` is now integrated
 behind the existing safe response read and output/trust/provenance/error
 boundaries, with native conversion isolated in a worker so caller cancellation
-and deadlines remain owned by `fetcher.ts`. Keep current PDF ownership;
-representative AnyDoc Markdown was compared with bounded `pdftotext` and did
-not justify replacement. Hosted Firecrawl/remote extraction remains deferred.
+and deadlines remain owned by `fetcher.ts`. Hosted Firecrawl/remote extraction
+remains deferred.
+
+### 2026-08-06 — AnyDoc owns default PDF conversion
+
+Reconsidered the conservative `pdftotext`-only PDF choice against AnyDoc's
+actual `pdf-inspector` path. Default PDFs now use AnyDoc because its structured
+Markdown preserves reading order, headings, links, tables, and layout better
+for agent evidence than plain `pdftotext`, while remaining local and requiring
+no Poppler executable. AnyDoc detects but does not OCR scanned/image-only PDFs.
+An explicit `maxPages` request retains bounded `pdftotext` because the pinned
+AnyDoc Node API has no page-range option; this preserves the public constraint
+without silently dropping it. Hosted Firecrawl/remote extraction remains
+deferred.
