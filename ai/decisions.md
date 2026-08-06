@@ -185,8 +185,9 @@ exposed DOCX tables/assets successfully.
 
 Do not create a separate extension or rename `pi-search` to `pi-fetch`.
 Search, selected-source enrichment, research fetches, and document conversion
-are one agent web-access boundary. Add anydoc only through open task
-`pi-search-obe3`, behind the existing safe response read and output/trust/
-provenance/error boundaries. Keep current PDF ownership until representative
-anydoc Markdown is compared with bounded `pdftotext`; anydoc does not need to
-be a drop-in replacement. Hosted Firecrawl/remote extraction remains deferred.
+are one agent web-access boundary. `@firecrawl/anydoc@0.1.6` is now integrated
+behind the existing safe response read and output/trust/provenance/error
+boundaries, with native conversion isolated in a worker so caller cancellation
+and deadlines remain owned by `fetcher.ts`. Keep current PDF ownership;
+representative AnyDoc Markdown was compared with bounded `pdftotext` and did
+not justify replacement. Hosted Firecrawl/remote extraction remains deferred.

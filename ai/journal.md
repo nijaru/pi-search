@@ -293,3 +293,21 @@ durable rationale belongs in `decisions.md`.
   open and deliberately unstarted. Keep current `pdftotext` ownership until
   representative PDF output is compared; hosted Firecrawl/remote extraction
   remains deferred. No runtime source or dependency changes were made.
+
+## 2026-08-06
+
+- Completed and pushed `pi-search-obe3` in `087937b`: pinned
+  `@firecrawl/anydoc@0.1.6` runs in a worker inside `web_fetch` for DOC/DOCX,
+  PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV. Deterministic fixtures
+  cover supported formats, malformed/unsupported inputs, octet-stream dispatch,
+  direct HTML preservation, and cancellation. AnyDoc PDF output was compared
+  with `pdftotext`; the existing PDF path remains authoritative.
+- Pi 0.84 compatibility was integrated and pushed as `02fba19`: headers use
+  `string | null` semantics with deletion-aware merges, package pins are 0.84,
+  and null-header regression tests pass. Full verification is 182 tests / 429
+  assertions with clean TypeScript; local `main` and `origin/main` are synced.
+- Current AnyDoc setup is considered complete: no API key or hosted service is
+  needed, the fetcher owns network/output/trust/cancellation bounds, and the
+  worker owns native conversion lifetime. Future work needs a concrete legacy
+  XLS/DOC, scanned/encrypted document, or cross-platform workflow rather than
+  speculative provider/parser additions.

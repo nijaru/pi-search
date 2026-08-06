@@ -1,9 +1,9 @@
 # Provider consolidation and fetch plan
 
-Status: design baseline implemented in `a8dc15f`; live Pi acceptance remains
-open. The prior extension remains the operational reference. No provider-
-comparison calls or provider additions are planned until a concrete coverage
-gap is identified.
+Status: search/fetch baseline implemented and pushed through `02fba19`,
+including local AnyDoc conversion and Pi 0.84 compatibility. The prior
+extension remains the operational reference. No provider-comparison calls or
+provider additions are planned until a concrete coverage gap is identified.
 
 ## Goals
 
@@ -68,7 +68,7 @@ Current portfolio roles and gaps:
 | Dedicated X retrieval | xAI `x_search` plus the shipped explicit X API recent-search path | xAI is best for semantic/model-mediated context; dedicated X lookup/user/archive gaps remain |
 | Hard date/path/domain retrieval | Not yet selected | Evaluate Perplexity only if the shipped set cannot guarantee it |
 | Self-hosted/privacy search | None | Evaluate SearXNG only for a concrete self-hosted requirement |
-| Search plus extraction service | Direct local fetch plus planned local `anydoc` document conversion | Evaluate hosted/remote extraction only when local fetch misses a required class |
+| Search plus extraction service | Direct local fetch plus local `@firecrawl/anydoc` document conversion | Evaluate hosted/remote extraction only when local fetch misses a required class |
 
 The current shipped set is therefore a deliberate portfolio, not a permanent
 provider ceiling. A candidate earns implementation only after a measured gap,
@@ -174,15 +174,15 @@ constraints continue to fail before network access.
    server-provided Markdown as bounded untrusted text and reports
    `extraction: "markdown"` plus the actual content type. JSON/XML/plain text
    remain bounded text.
-3. Keep PDF and caption extraction local and bounded. The planned
-   `@firecrawl/anydoc` integration belongs inside this fetch path and should
-   add local DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV
-   conversion to Markdown. It should not add a separate public extension,
-   hosted Firecrawl calls, or a package rename. Compare its PDF Markdown with
-   the current `pdftotext` path before changing PDF ownership.
-4. Preserve the existing safe response-read, output-bound, cancellation,
-   untrusted-content, and provenance layers around anydoc. Its internal Rust
-   resource limits are useful but do not replace the fetch contract.
+3. Keep PDF and caption extraction local and bounded. `@firecrawl/anydoc`
+   now adds local DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV
+   conversion to Markdown inside this fetch path. It does not add a separate
+   public extension, hosted Firecrawl calls, or a package rename; PDF remains
+   on `pdftotext` after representative comparison.
+4. The AnyDoc worker owns native conversion lifetime; `fetcher.ts` owns the
+   safe response read, output bound, cancellation/deadline, untrusted-content,
+   provenance, and error-mapping layers. AnyDoc's internal Rust resource
+   limits complement but do not replace the fetch contract.
 5. Do not add browser/JS rendering or caching until a concrete workflow
    requires them and their separate resource/privacy policies are defined.
 

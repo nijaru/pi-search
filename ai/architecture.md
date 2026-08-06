@@ -36,9 +36,12 @@ validated public DNS address. `src/direct-transport.ts` connects to that
 address while preserving Host/SNI. `src/http.ts` and `src/fetcher.ts` enforce
 streamed byte/deadline/cancellation bounds. HTML extraction runs in the local
 worker at `src/fetch-extractor-worker.mjs`; PDF and YouTube paths use bounded
-local subprocesses. A planned `@firecrawl/anydoc` backend will extend this same
-`web_fetch` path to local office/document conversion; it is not a second
-extension or hosted Firecrawl integration.
+local subprocesses. `@firecrawl/anydoc@0.1.6` extends this same `web_fetch`
+path through `src/anydoc.ts` and `src/anydoc-worker.mjs` for local office/
+document conversion; it is not a second extension or hosted Firecrawl
+integration. The AnyDoc worker owns native binding/conversion lifetime, while
+`fetcher.ts` owns response limits, cancellation/deadlines, provenance, output
+bounds, and the untrusted-content contract.
 
 ## Extension migration
 
@@ -61,10 +64,9 @@ coverage, quality, cost, freshness, filtering, social retrieval, or context
 usability. New adapters and fetch layers must implement the existing contracts,
 preserve request constraints and provenance, expose costs/limits where
 available, and include offline fixtures plus explicit live smoke coverage. The
-next gates are OpenAI/Codex correctness, direct fetch/PDF efficiency, Brave
-free-mode admission, and a provider-role evaluation harness. Browser rendering,
-remote extraction, persistent caches, media analysis, and extra overlapping
-providers remain conditional on measured workflows rather than permanently
-excluded. `@firecrawl/anydoc` is the selected candidate for a local document
-conversion layer, pending the open integration task; it does not imply remote
-extraction.
+remaining gates are live provider correctness, direct fetch/PDF quality, and
+provider-role review. Browser rendering, remote extraction, persistent caches,
+media analysis, richer X lookup/thread support, and extra overlapping providers
+remain conditional on measured workflows rather than permanently excluded.
+`@firecrawl/anydoc` is shipped as a local document-conversion layer and does not
+imply remote extraction.

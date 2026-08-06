@@ -29,10 +29,10 @@ additions are tracked in `ai/design/provider-consolidation-plan.md` and
 | Official X recent search | `x`; shipped as explicit provider | Query operators, bounded handle/date options, direct post URLs/text/IDs, rate-limit fixtures; dedicated lookup/archive endpoints remain deferred |
 | Evidence normalization and cleanup | `src/search-cleanup.ts`; shipped | URL identity, deduplication, field bounds, hard domain post-filter |
 | Source depth and context | **Implemented**: explicit `includeContent` uses the local safe fetcher with bounded count/length/deadline | Optional bounded fetch of selected sources with clean excerpts, preserved URLs, and explicit truncation/provenance |
-| Credential, cost, rate-limit, and request provenance | contracts/adapters; in progress | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |
+| Credential, cost, rate-limit, and request provenance | contracts/adapters; shipped | Header-only redaction, success IDs, usage/rate-limit metadata, visible backend diagnostics |
 | Individual HTML/Markdown/text/JSON page fetch | direct pinned transport and local extraction; shipped | SSRF, redirect, byte, timeout, cancellation, extraction fixtures |
-| PDF text extraction | bounded local `pdftotext`; shipped; anydoc PDF comparison pending | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
-| Local document fetch/conversion | **Planned inside `web_fetch` with `@firecrawl/anydoc`; task open, unstarted** | Remote DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV bytes convert locally to bounded untrusted Markdown; no hosted service or separate tool |
+| PDF text extraction | bounded local `pdftotext`; shipped; AnyDoc comparison retained this ownership | Fixture and cleanup/cancellation tests; explicit failure for scanned/encrypted PDFs |
+| Local document fetch/conversion | **Shipped inside `web_fetch` with `@firecrawl/anydoc@0.1.6`** | Remote DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV bytes convert locally to bounded untrusted Markdown; no hosted service or separate tool |
 | YouTube transcript/caption fetch | bounded local `yt-dlp`; shipped | URL validation, cue cleanup, cancellation tests |
 | Explicit bounded multi-query research | `web_research`; shipped | One provider, caller queries, fetch bounds, deadline/cost/output tests |
 
@@ -52,18 +52,18 @@ extension's runtime contract now:
 | Local video analysis, frame extraction, and OCR | `yt-dlp`, `ffmpeg`, and a dedicated vision workflow | Media download/vision requires a separate resource and privacy boundary |
 | Visual YouTube understanding | Deferred | Captions satisfy the named transcript workflow; no visual-analysis requirement is recorded |
 | Browser automation and JavaScript rendering | Deferred, explicit future adapter only | Direct local extraction is safer and cheaper; browser/remote fetch needs SSRF, privacy, and resource review |
-| Firecrawl/Jina/TinyFish remote extraction | Deferred; distinct from local `@firecrawl/anydoc` | Hosted/remote services change privacy, cost, and SSRF ownership; `anydoc` is a local Rust document converter and is planned for `web_fetch` instead |
+| Firecrawl/Jina/TinyFish remote extraction | Deferred; distinct from local `@firecrawl/anydoc` | Hosted/remote services change privacy, cost, and SSRF ownership; `anydoc` is a local Rust document converter already owned by `web_fetch` |
 | Persistent caching | Deferred | No measured repeated-fetch requirement; caching needs TTL, size, invalidation, and freshness policy |
 | `source_check` claim-audit tool | Deferred | Useful but outside the three-tool public contract; research already preserves source evidence |
 | Arbitrary extra search providers | Deferred unless a coverage gap appears | Tavily, SearXNG, Perplexity, Anthropic, and similar options overlap shipped capabilities or need a concrete auth/cost requirement |
 
-## Required closure before cutover
+## Post-cutover quality gates
 
-The current adapter/test inventory is not sufficient for cutover. The quality
-contract above must pass before another package switch is considered.
+The current runtime is cut over to `pi-search`; remaining rows are live quality
+gates and conditional capability work, not a reason to add a second extension.
 
-The required rows above are not all release-verified yet. Before removing the
-old package from the active runtime:
+The required rows above are not all release-verified yet. Before claiming full
+production maturity:
 
 1. Fix the remaining contract audit items: hard constraints, auth diagnostic
    redaction, successful request IDs, bounded provider metadata, and the
@@ -74,8 +74,8 @@ old package from the active runtime:
    provider; record skipped providers without inventing credentials.
 4. Exercise representative Pi calls for native search, local-model search,
    X search, page fetch, PDF, YouTube captions, and bounded research.
-5. Remove `pi-web-access` from the active package list only after the required
-   rows pass. Its extra tools are intentionally not a hidden second runtime.
+5. Keep `pi-web-access` out of the active package list. Its extra tools are
+   intentionally not a hidden second runtime.
 
 ## Open questions
 
