@@ -34,6 +34,8 @@ export type IsoTimestamp = string;
  */
 export type RequestId = string;
 
+/** Pi's header override contract: null deletes a provider/default header. */
+export type ProviderHeaders = Readonly<Record<string, string | null>>;
 /**
  * The immutable subset of Pi's active model needed by model-mediated
  * providers. Keeping this structural avoids coupling provider adapters to Pi's
@@ -44,7 +46,7 @@ export interface ProviderModel {
 	readonly provider: string;
 	readonly api: string;
 	readonly baseUrl: string;
-	readonly headers?: Readonly<Record<string, string>>;
+	readonly headers?: ProviderHeaders;
 }
 
 /** The result of resolving credentials through Pi's model registry. */
@@ -52,7 +54,7 @@ export type ProviderAuthResult =
 	| {
 			readonly ok: true;
 			readonly apiKey?: string;
-			readonly headers?: Readonly<Record<string, string>>;
+			readonly headers?: ProviderHeaders;
 		}
 	| {
 			readonly ok: false;

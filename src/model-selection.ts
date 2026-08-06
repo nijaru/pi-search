@@ -1,4 +1,4 @@
-import type { ProviderAuthResult, ProviderContext, ProviderModel, SearchRequest } from "./contracts";
+import type { ProviderAuthResult, ProviderContext, ProviderHeaders, ProviderModel, SearchRequest } from "./contracts";
 import { createProviderError } from "./errors";
 
 export interface ModelExecution {
@@ -82,12 +82,18 @@ export interface ModelAuthHeaderOptions {
 	readonly bearerApiKey?: boolean;
 }
 
+export function applyProviderHeaders(headers: Headers, source: ProviderHeaders | undefined): void {
+	if (source === undefined) return;
+	for (const [key, value] of Object.entries(source)) {
+		if (value === null) headers.delete(key);
+		else headers.set(key, value);
+	}
+}
+
 export function modelAuthHeaders(execution: ModelExecution, options: ModelAuthHeaderOptions = {}): Headers {
 	const headers = new Headers();
-	for (const source of [execution.model.headers, execution.auth.headers]) {
-		if (source === undefined) continue;
-		for (const [key, value] of Object.entries(source)) headers.set(key, value);
-	}
+	applyProviderHeaders(headers, execution.model.headers);
+	applyProviderHeaders(headers, execution.auth.headers);
 	if (options.bearerApiKey !== false && execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("authorization", `Bearer ${execution.auth.apiKey}`);
 	return headers;
 }

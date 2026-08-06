@@ -13,6 +13,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
+import { applyProviderHeaders } from "./model-selection";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { parseProviderRateLimits } from "./provider-http";
 import { validateSearchRequest } from "./search";
@@ -739,10 +740,8 @@ export class OpenAIProvider implements Provider {
 			...(this.id === "openai" ? { max_output_tokens: 2_048 } : {}),
 		};
 		const headers = new Headers();
-		for (const source of [execution.model.headers, execution.auth.headers]) {
-			if (source === undefined) continue;
-			for (const [key, value] of Object.entries(source)) headers.set(key, value);
-		}
+		applyProviderHeaders(headers, execution.model.headers);
+		applyProviderHeaders(headers, execution.auth.headers);
 		if (execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) {
 			headers.set("Authorization", `Bearer ${execution.auth.apiKey}`);
 		}

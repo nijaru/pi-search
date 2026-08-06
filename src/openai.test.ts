@@ -88,6 +88,28 @@ describe("OpenAIProvider", () => {
 		]);
 	});
 
+	it("omits null header overrides instead of sending literal null", async () => {
+		let seenHeaders: Headers | undefined;
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				seenHeaders = new Headers(init?.headers);
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+
+		await provider.search(request, new AbortController().signal, {
+			model: { ...model(), headers: { "x-disabled": "model-value" } },
+			modelRegistry: {
+				getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key", headers: { "x-disabled": null, "x-auth": "yes" } }),
+			},
+		});
+
+		expect(seenHeaders?.get("x-disabled")).toBeNull();
+		expect(seenHeaders?.get("x-auth")).toBe("yes");
+	});
+
 	it("requests native search through the active model registry", async () => {
 		let seenUrl = "";
 		let seenInit: RequestInit | undefined;
