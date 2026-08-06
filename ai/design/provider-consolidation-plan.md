@@ -1,7 +1,7 @@
 # Provider consolidation and fetch plan
 
-Status: search/fetch baseline implemented and pushed through `02fba19`,
-including local AnyDoc conversion and Pi 0.84 compatibility. The prior
+Status: search/fetch baseline implemented and pushed through `7e263c0`,
+including local AnyDoc conversion/PDF routing and Pi 0.84 compatibility. The prior
 extension remains the operational reference. No provider-comparison calls or
 provider additions are planned until a concrete coverage gap is identified.
 

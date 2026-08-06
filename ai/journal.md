@@ -313,3 +313,8 @@ durable rationale belongs in `decisions.md`.
   worker owns native conversion lifetime. Future work needs a concrete legacy
   XLS/DOC, scanned/encrypted document, or cross-platform workflow rather than
   speculative provider/parser additions.
+- Follow-up `7e263c0` routes default text-based PDFs through AnyDoc's structured
+  `pdf-inspector` path and keeps bounded `pdftotext` only for explicit
+  `maxPages`, which AnyDoc 0.1.6 cannot express. A second-pass review found no
+  simpler replacement without dropping that public constraint. Full checks
+  remain 184 tests / 432 assertions with clean TypeScript.
