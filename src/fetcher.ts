@@ -5,6 +5,15 @@ import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } fro
 import type { DirectTransport } from "./direct-transport";
 import { extractPdfText } from "./pdf";
 import { extractYouTubeTranscript, parseYouTubeUrl } from "./youtube";
+import {
+	AnyDocConversionError,
+	anyDocFormatHint,
+	convertDocumentWithWorker,
+	isAnyDocCandidate,
+	isAnyDocMimeType,
+	type AnyDocFormat,
+	type DocumentConverter,
+} from "./anydoc";
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_LENGTH = 8_000;
@@ -19,7 +28,8 @@ type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | 
 interface ExtractedContent {
 	readonly content: string;
 	readonly outputFormat: FetchOutputFormat;
-	readonly extraction: "readability" | "raw" | "plain-text" | "markdown" | "pdf" | "youtube-transcript";
+	readonly extraction: "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript";
+	readonly documentFormat?: string;
 	readonly title?: string;
 	readonly fellBackToRaw?: boolean;
 }
@@ -34,6 +44,7 @@ export interface FetcherOptions {
 	readonly youtubeCommand?: string;
 	readonly pdfMaxOutputBytes?: number;
 	readonly youtubeMaxOutputBytes?: number;
+	readonly documentConverter?: DocumentConverter;
 }
 
 export async function fetchContent(
@@ -84,8 +95,10 @@ export async function fetchContent(
 
 		const contentType = response.headers.get("content-type") ?? "";
 		const mimeType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-		const pdfExpectedByMetadata = mimeType === "application/pdf" || mimeType === "application/octet-stream" || isPdfUrl(normalized.url);
-		if (!isSupportedContentType(mimeType) && !pdfExpectedByMetadata) {
+		const finalUrl = url.url.href;
+		const pdfExpectedByMetadata = mimeType === "application/pdf" || isPdfUrl(normalized.url) || isPdfUrl(finalUrl);
+		const documentCandidateByMetadata = isAnyDocCandidate(new Uint8Array(), mimeType, normalized.url) || isAnyDocCandidate(new Uint8Array(), mimeType, finalUrl);
+		if (!isSupportedContentType(mimeType) && !pdfExpectedByMetadata && !documentCandidateByMetadata) {
 			await closeResponseBody(response.body);
 			throw new SafeFetchError({ kind: "unsupportedContentType", message: "Response content type is not supported" });
 		}
@@ -97,16 +110,19 @@ export async function fetchContent(
 		}
 
 		const bytes = await readBoundedBody(response.body, responseByteLimit, controller.signal);
-		const pdfExpected = pdfExpectedByMetadata && hasPdfHeader(bytes);
+		const pdfExpected = hasPdfHeader(bytes);
 		if (pdfExpectedByMetadata && !pdfExpected) {
 			throw new SafeFetchError({
-				kind: mimeType === "application/octet-stream" ? "unsupportedContentType" : "extraction",
-				message: mimeType === "application/octet-stream" ? "Binary response is not a PDF" : "Response was identified as PDF but did not contain a valid PDF header",
+				kind: "extraction",
+				message: "Response was identified as PDF but did not contain a valid PDF header",
 			});
 		}
+		const documentCandidate = !pdfExpected && (isAnyDocCandidate(bytes, mimeType, normalized.url) || isAnyDocCandidate(bytes, mimeType, finalUrl));
 		const extracted = pdfExpected
 			? await extractPdfContent(bytes, normalized, controller.signal, options.pdfCommand, options.pdfMaxOutputBytes)
-			: await extractWithDeadline(decodeUtf8(bytes), mimeType, normalized, controller.signal);
+			: documentCandidate
+				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
+				: await extractWithDeadline(decodeUtf8(bytes), mimeType, normalized, controller.signal);
 		const sliced = sliceOutput(extracted.content, normalized.offset, normalized.maxLength);
 		const warnings = [
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
@@ -123,6 +139,7 @@ export async function fetchContent(
 			...(contentType === "" ? {} : { contentType }),
 			outputFormat: extracted.outputFormat,
 			extraction: extracted.extraction,
+			...(extracted.documentFormat === undefined ? {} : { documentFormat: extracted.documentFormat }),
 			fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
 			status: response.status,
 			redirectCount,
@@ -202,6 +219,33 @@ async function extractPdfContent(
 		maxOutputBytes,
 	});
 	return { content: result.text, outputFormat: "text", extraction: "pdf" };
+}
+
+async function extractAnyDocContent(
+	bytes: Uint8Array,
+	mimeType: string,
+	url: string,
+	signal: AbortSignal,
+	converter: DocumentConverter | undefined,
+): Promise<ExtractedContent> {
+	const formatHint: AnyDocFormat | undefined = anyDocFormatHint(mimeType, url);
+	try {
+		const result = await (converter ?? convertDocumentWithWorker)(bytes, formatHint, signal);
+		return {
+			content: result.content,
+			outputFormat: "markdown",
+			extraction: "document",
+			documentFormat: result.documentFormat,
+		};
+	} catch (error) {
+		if (error instanceof SafeFetchError) throw error;
+		if (error instanceof AnyDocConversionError) {
+			const message = `AnyDoc ${error.code}: ${error.message}`;
+			if (error.code === "unsupported") throw new SafeFetchError({ kind: "unsupportedContentType", message, cause: error });
+			throw new SafeFetchError({ kind: "extraction", message, cause: error });
+		}
+		throw new SafeFetchError({ kind: "extraction", message: "Local document conversion failed", cause: error });
+	}
 }
 
 async function fetchYouTubeContent(
@@ -379,7 +423,8 @@ function parseContentLength(value: string | null): number | undefined {
 
 function isSupportedContentType(mimeType: string): boolean {
 	if (mimeType === "") return true;
-	if (mimeType === "application/pdf" || mimeType === "application/octet-stream" || mimeType === "application/zip") return false;
+	if (mimeType === "application/pdf") return false;
+	if (isAnyDocMimeType(mimeType)) return true;
 	if (/^(image|audio|video)\//.test(mimeType)) return false;
 	return mimeType.startsWith("text/") || mimeType === "application/json" || mimeType === "application/xml" || mimeType === "application/javascript" || mimeType === "application/x-javascript" || mimeType === "application/graphql" || mimeType.endsWith("+json") || mimeType.endsWith("+xml");
 }

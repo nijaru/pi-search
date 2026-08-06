@@ -26,10 +26,12 @@ This is the tracked source of truth for implementation order.
 - Direct HTTP fetching uses pinned DNS, SSRF and redirect checks, streamed
   byte limits, local Readability/Turndown extraction, one deadline,
   cancellation, and untrusted-content fencing.
-- PDF URLs use bounded local `pdftotext`.
+- PDF URLs use bounded local `pdftotext`; representative AnyDoc PDF output
+  was compared and did not replace this simpler path.
 - YouTube URLs use bounded local captions-only `yt-dlp`.
-- Local office/document conversion through `@firecrawl/anydoc` is planned
-  inside `web_fetch`; no hosted Firecrawl service or separate extension.
+- DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV conversion
+  uses pinned local `@firecrawl/anydoc` inside `web_fetch`; no hosted Firecrawl
+  service or separate extension.
 
 ## 3. Capability-aware routing — complete
 
@@ -113,37 +115,28 @@ before calling the search surface production-mature:
    provider-specific controls remain deferred; normal calls remain
    single-provider and comparison/fan-out is never hidden behavior.
 
-### Next planned integration — local document conversion
+### Completed integration — local document conversion
 
-Task: `pi-search-obe3` (open, deliberately unstarted).
+Task: `pi-search-obe3` (implemented in the existing `web_fetch` boundary).
 
-`@firecrawl/anydoc` is a local Rust/N-API library that converts DOC/DOCX,
-PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF to GitHub-Flavored
-Markdown. It is useful agent functionality and belongs behind the existing
-`web_fetch` boundary, not in a separate extension. Keep the package name
-`pi-search`; document conversion is an extraction capability alongside HTML,
-PDF, and YouTube handling.
+Pinned `@firecrawl/anydoc@0.1.6` runs in a worker and converts DOC/DOCX,
+PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV to GitHub-Flavored
+Markdown. Format detection uses document signatures, served content types, and
+safe URL extensions; PDF remains on bounded `pdftotext` after a representative
+comparison. The worker boundary preserves caller cancellation and the fetcher's
+timeout, while coded converter failures map to stable fetch errors with the
+AnyDoc code in the bounded diagnostic.
 
-Planned order:
+Deterministic fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV, including an
+`application/octet-stream` document path, malformed/unsupported failures, and
+conversion timeout cancellation. The same `fetchContent` path serves
+`web_search` source enrichment and `web_research` fetches. Results retain the
+final/source URL, served content type, byte count, output bounds, content trust,
+extraction path, and detected document format.
 
-1. Add a pinned `@firecrawl/anydoc` dependency and verify the native package on
-   the current Node/Bun platform.
-2. After the existing safe byte read, detect supported document bytes/content
-   types and convert non-HTML documents to bounded untrusted Markdown. Preserve
-   source URL, content type, byte count, extraction metadata, output bounds,
-   cancellation, and error mapping.
-3. Add deterministic representative fixtures for DOCX/PPTX/XLSX/ODT/RTF/EPUB/
-   CSV and error cases. Use the same path for `web_search` source enrichment and
-   `web_research` through `fetchContent`.
-4. Compare representative anydoc PDF Markdown with current `pdftotext` before
-   changing PDF ownership. Do not require a drop-in replacement; retain either
-   path based on actual usefulness and operational behavior.
-
-Acceptance: remote document URLs work through `web_fetch` with no API key or
-hosted service; the public tool set remains exactly three tools; direct HTML,
-Markdown, text, JSON, YouTube, and the current PDF path remain correct; no
-hard constraints or trust/provenance metadata are lost; and Bun checks plus a
-clean Pi pnpm install pass.
+Acceptance is met when `bun run check` passes and a clean Pi pnpm install can
+resolve the pinned native package on the active platform; no hosted service or
+new public tool is involved.
 
 ### Long-term selective additions
 

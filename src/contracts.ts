@@ -429,7 +429,7 @@ export interface FetchRequest {
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
-export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "pdf" | "youtube-transcript";
+export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript";
 
 export interface FetchWarning {
 	readonly code: "truncated" | "raw-fallback";
@@ -457,6 +457,8 @@ export interface FetchedContent {
 	readonly outputFormat: FetchOutputFormat;
 	/** Extraction path used to produce `content`. */
 	readonly extraction: FetchExtraction;
+	/** AnyDoc format used for local document conversion. */
+	readonly documentFormat?: string;
 	/** When the content was fetched. */
 	readonly fetchedAt: IsoTimestamp;
 	/** Final HTTP status. */

@@ -53,6 +53,7 @@
     "node-domexception": "npm:@profoundlogic/node-domexception@1.0.2"
   },
   "dependencies": {
+    "@firecrawl/anydoc": "0.1.6",
     "@mozilla/readability": "^0.6.0",
     "linkedom": "^0.18.13",
     "turndown": "^7.2.4"

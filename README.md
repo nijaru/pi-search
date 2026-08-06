@@ -91,6 +91,10 @@ fetching of selected result pages with `includeContent`, `contentResults`, and
 validation, response limits, cancellation, Markdown content negotiation, local
 Readability/Turndown extraction, and untrusted-content fencing. It also supports:
 
+- Office and document URLs through pinned local `@firecrawl/anydoc` conversion
+  to Markdown: DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, and CSV.
+  Conversion is local, runs outside the event loop, and requires no API key or
+  hosted Firecrawl service.
 - Remote PDFs through bounded local `pdftotext` extraction. Scanned and
   encrypted PDFs fail explicitly; OCR is not implicit.
 - YouTube captions through bounded local `yt-dlp` with no playlist, cookie, or
