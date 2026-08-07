@@ -202,3 +202,22 @@ An explicit `maxPages` request retains bounded `pdftotext` because the pinned
 AnyDoc Node API has no page-range option; this preserves the public constraint
 without silently dropping it. Hosted Firecrawl/remote extraction remains
 deferred.
+
+### 2026-08-07 — Local context caps are not provider cost controls
+
+The small `web_search` enrichment cap (`contentResults <= 3`) and
+`web_fetch.maxLength <= 12,000` were conservative first-pass resource policies,
+not provider requirements or billing controls. They caused real Pi-subagents
+validation failures when Luna requested 4–5 enrichment pages or 20,000 fetched
+characters; the corrected calls succeeded. Source enrichment uses the local
+fetcher after the provider search, and fetch length controls model-visible
+context, so these limits do not materially prevent the already-issued provider
+search cost.
+
+Keep global output/response-byte, timeout, cancellation, SSRF, and finite
+fan-out bounds. Rework the arbitrary small caps around the actual owning
+budgets: retain a stable provider-neutral public `maxResults` default, allow a
+larger finite opt-in enrichment count, align fetch character limits with the
+existing byte bound, and make provider transport defaults explicit internally.
+Do not silently clamp invalid requests; return bounded partial output with a
+warning when the global output budget is reached.

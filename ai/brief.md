@@ -10,7 +10,7 @@ opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `7e263c0`, pushed to
+https://github.com/nijaru/pi-search. Repository HEAD is `cd0004f`, pushed to
 `origin/main`; the active runtime exposes exactly `web_search`, `web_fetch`,
 and `web_research`, and `pi-web-access` is not installed as an overlapping
 runtime. A running Pi process must be restarted after an extension refresh.
@@ -42,6 +42,26 @@ Its coded failures, detected format, provenance, output bounds, timeout, and
 caller cancellation remain inside the existing fetch contract. Explicit
 `maxPages` keeps the bounded `pdftotext` path because AnyDoc 0.1.6 exposes no
 page-range option.
+
+## Active issue and planned correction
+
+The current agent-facing caps are more conservative than their actual resource
+owners require. The Pi-subagents session produced repeated pre-execution
+validation failures for `web_search.contentResults` values of 4–5 against the
+extension's maximum of 3, and `web_fetch.maxLength` of 20,000 against the
+maximum of 12,000; corrected calls then succeeded. These are not provider
+billing controls: source enrichment and fetch length mainly affect local
+network/latency and model context, while rejecting a call can create an extra
+model turn.
+
+After compaction, revise the bounds rather than merely adding prompt guidance:
+keep global Pi output, response-byte, timeout, cancellation, SSRF, and finite
+fan-out protections; relax the arbitrary small caps; make the total output
+budget authoritative; keep public `maxResults` provider-neutral; and adapt
+provider transport settings internally. The likely first implementation is a
+larger finite enrichment cap (around 10), `web_fetch` length aligned with its
+existing 32-KB byte bound, explicit Parallel result-count settings, and tests
+for the revised contract. Do not silently clamp invalid requests.
 
 ## Decisions in force
 

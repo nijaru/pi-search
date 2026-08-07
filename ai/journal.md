@@ -318,3 +318,12 @@ durable rationale belongs in `decisions.md`.
   `maxPages`, which AnyDoc 0.1.6 cannot express. A second-pass review found no
   simpler replacement without dropping that public constraint. Full checks
   remain 184 tests / 432 assertions with clean TypeScript.
+- During the pi-subagents session review, Luna made pre-execution invalid calls
+  for `web_search.contentResults` of 5, 5, 4, and 5 against the extension's
+  maximum of 3, plus `web_fetch.maxLength` of 20,000 against 12,000. Corrected
+  calls succeeded. These values are extension policy caps, not provider billing
+  limits; rejecting them adds recovery turns while only modestly reducing local
+  context or fetch work. Planned correction: retain global resource/output
+  ownership, relax the arbitrary small caps, align fetch character limits with
+  the existing byte bound, expose Parallel result count explicitly, and test
+  bounded partial-output behavior.
