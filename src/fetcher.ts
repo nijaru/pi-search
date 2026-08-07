@@ -133,7 +133,7 @@ export async function fetchContent(
 		const sliced = sliceOutput(extracted.content, normalized.offset, normalized.maxLength);
 		const warnings = [
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
-			...(sliced.truncated ? [{ code: "truncated" as const, message: "Content was truncated to the configured output bound" }] : []),
+			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
 		];
 		const title = extracted.title === undefined ? undefined : boundText(extracted.title, MAX_TITLE_LENGTH);
 
@@ -388,17 +388,19 @@ async function readBoundedBody(body: ResponseBody | null, maxBytes: number, sign
 	return result;
 }
 
-function sliceOutput(content: string, offset: number, maxLength: number): { content: string; truncated: boolean; nextOffset?: number } {
+function sliceOutput(content: string, offset: number, maxLength: number): { content: string; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
 	if (offset >= content.length) return { content: "", truncated: false };
-	const requestedEnd = Math.min(content.length, offset + maxLength);
+	const requestedEnd = Math.min(content.length, offset + maxLength, MAX_FETCH_OFFSET);
 	const candidate = content.slice(offset, requestedEnd);
 	const bounded = boundUtf8(candidate, MAX_OUTPUT_BYTES);
 	const consumed = offset + bounded.length;
 	const truncated = consumed < content.length;
+	const pagingLimitReached = truncated && consumed >= MAX_FETCH_OFFSET;
 	return {
 		content: bounded,
 		truncated,
-		...(truncated ? { nextOffset: consumed } : {}),
+		...(truncated && !pagingLimitReached ? { nextOffset: consumed } : {}),
+		...(pagingLimitReached ? { pagingLimitReached: true } : {}),
 	};
 }
 

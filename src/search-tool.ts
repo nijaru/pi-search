@@ -352,7 +352,14 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 		seen.add(identity);
 		attempts += 1;
 		try {
-			pages.push(await fetcher({ url: result.url, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs }));
+			const page = await fetcher({ url: result.url, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs });
+			pages.push(page);
+			const boundedCandidate = boundedSearchResponse({ ...response, sourceContents: pages, warnings });
+			if ((boundedCandidate.sourceContents?.length ?? 0) < pages.length) {
+				pages.pop();
+				warnings.push({ code: "partial-results", message: "Source enrichment stopped when the model-visible search output bound was reached" });
+				break;
+			}
 		} catch (error) {
 			if (signal.aborted) throw error;
 			warnings.push({ code: "partial-results", message: `Source enrichment failed for ${result.url}: ${toFetchToolError(error).message}` });

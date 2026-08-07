@@ -254,6 +254,32 @@ export async function executeResearch(
 	const fetched: FetchedContent[] = [];
 	const warnings: SearchWarning[] = [];
 	const seenUrls = new Set<string>();
+	const currentUsage = (): ProviderUsage => ({
+		...(costUsd > 0 ? { costUsd } : {}),
+		...(hasInputTokens ? { inputTokens } : {}),
+		...(hasOutputTokens ? { outputTokens } : {}),
+		...(hasTotalTokens ? { totalTokens } : {}),
+		...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
+		...(searchQueries > 0 ? { searchQueries } : {}),
+		...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
+	});
+	const currentResponse = (): ResearchResponse => {
+		const usage = currentUsage();
+		return {
+			question: normalized.question,
+			provider: provider.id,
+			...(executionModel === undefined ? {} : { executionModel }),
+			results,
+			fetched,
+			stepsCompleted,
+			providerCalls,
+			fetchesCompleted,
+			fetchAttempts,
+			stopReason,
+			...(Object.keys(usage).length === 0 ? {} : { usage }),
+			warnings,
+		};
+	};
 	try {
 		for (const query of queries) {
 			if (stepsCompleted >= normalized.budget.maxSteps || providerCalls >= normalized.budget.maxProviderCalls) {
@@ -350,6 +376,13 @@ export async function executeResearch(
 					});
 					fetched.push(page);
 					fetchesCompleted += 1;
+					const boundedCandidate = boundedResponse(currentResponse(), normalized.budget.maxOutputChars);
+					if (boundedCandidate.fetched.length < fetched.length) {
+						fetched.pop();
+						fetchesCompleted -= 1;
+						warnings.push(warning("Research fetching stopped when the model-visible output budget was reached"));
+						break;
+					}
 				} catch (error) {
 					if (deadlineController.signal.aborted || signal?.aborted) {
 						stopReason = signal?.aborted ? "canceled" : "deadline";
@@ -360,30 +393,7 @@ export async function executeResearch(
 			}
 		}
 		if (deadlineController.signal.aborted && stopReason === "completed") stopReason = signal?.aborted ? "canceled" : "deadline";
-		const usage: ProviderUsage = {
-			...(costUsd > 0 ? { costUsd } : {}),
-			...(hasInputTokens ? { inputTokens } : {}),
-			...(hasOutputTokens ? { outputTokens } : {}),
-			...(hasTotalTokens ? { totalTokens } : {}),
-			...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
-			...(searchQueries > 0 ? { searchQueries } : {}),
-			...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
-		};
-		const response: ResearchResponse = {
-			question: normalized.question,
-			provider: provider.id,
-			...(executionModel === undefined ? {} : { executionModel }),
-			results,
-			fetched,
-			stepsCompleted,
-			providerCalls,
-			fetchesCompleted,
-			fetchAttempts,
-			stopReason,
-			...(Object.keys(usage).length === 0 ? {} : { usage }),
-			warnings,
-		};
-		return boundedResponse(response, normalized.budget.maxOutputChars);
+		return boundedResponse(currentResponse(), normalized.budget.maxOutputChars);
 	} finally {
 		clearTimeout(timeoutId);
 		signal?.removeEventListener("abort", onAbort);

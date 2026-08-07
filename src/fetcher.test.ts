@@ -177,6 +177,18 @@ describe("direct content fetch", () => {
 		expect(() => validateFetchRequest({ ...baseRequest, offset: MAX_FETCH_OFFSET + 1 })).toThrow("outside the supported bound");
 	});
 
+	it("stops paging at the accepted maximum offset", async () => {
+		const result = await fetchContent(
+			{ ...baseRequest, format: "text", offset: MAX_FETCH_OFFSET - 10, maxLength: 100 },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor("x".repeat(MAX_FETCH_OFFSET + 100), "text/plain") },
+		);
+		expect(result.content).toHaveLength(10);
+		expect(result.truncated).toBe(true);
+		expect(result.nextOffset).toBeUndefined();
+		expect(result.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("maximum paging offset") }));
+	});
+
 	it("returns bounded pages with offsets and nextOffset", async () => {
 		const result = await fetchContent(
 			{ ...baseRequest, format: "text", offset: 2, maxLength: 4 },

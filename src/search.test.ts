@@ -195,23 +195,29 @@ describe("search boundary", () => {
 		expect(result.details?.sourceContents).toBeUndefined();
 		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ code: "partial-results" }));
 
+		let boundedAttempts = 0;
 		const boundedTool = createWebSearchTool(provider, {
-			fetcher: async (request) => ({
-				url: request.url,
-				content: "🙂".repeat(8_000),
-				contentTrust: "untrusted" as const,
-				outputFormat: "markdown" as const,
-				extraction: "markdown" as const,
-				fetchedAt: "2026-01-01T00:00:00.000Z",
-				status: 200,
-				redirectCount: 0,
-				bytesRead: 32_000,
-				truncated: false,
-				offset: 0,
-				warnings: [],
-			}),
+			fetcher: async (request) => {
+				boundedAttempts += 1;
+				return {
+					url: request.url,
+					content: "🙂".repeat(8_000),
+					contentTrust: "untrusted" as const,
+					outputFormat: "markdown" as const,
+					extraction: "markdown" as const,
+					fetchedAt: "2026-01-01T00:00:00.000Z",
+					status: 200,
+					redirectCount: 0,
+					bytesRead: 32_000,
+					truncated: false,
+					offset: 0,
+					warnings: [],
+				};
+			},
 		});
 		const bounded = await boundedTool.execute("call-2", { query: "q", includeContent: true, contentResults: 3 }, undefined, undefined, {} as never);
+		expect(boundedAttempts).toBe(2);
+		expect(bounded.details?.sourceContents).toHaveLength(1);
 		expect(new TextEncoder().encode(JSON.stringify(bounded.details)).byteLength).toBeLessThanOrEqual(45_000);
 	});
 
