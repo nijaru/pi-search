@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { FetchRequest } from "./contracts";
 import { SafeFetchError } from "./fetch-errors";
-import { fetchContent } from "./fetcher";
+import { fetchContent, MAX_FETCH_LENGTH, MAX_FETCH_OFFSET, validateFetchRequest } from "./fetcher";
 import type { DirectTransport } from "./direct-transport";
 import type { ResponseBody, TransportResponse } from "./ssrf";
 
@@ -169,6 +169,12 @@ describe("direct content fetch", () => {
 			{ lookup: publicLookup, transport: transportFor(`<html><head><title>${title}</title></head><body><article><p>body</p></article></body></html>`) },
 		);
 		expect(result.title?.length).toBeLessThanOrEqual(500);
+	});
+
+	it("accepts the full fetch output bound and mirrors the offset bound", () => {
+		expect(validateFetchRequest({ ...baseRequest, maxLength: 20_000, offset: MAX_FETCH_LENGTH * 2 })).toMatchObject({ maxLength: 20_000, offset: MAX_FETCH_LENGTH * 2 });
+		expect(() => validateFetchRequest({ ...baseRequest, maxLength: MAX_FETCH_LENGTH + 1 })).toThrow("outside the supported bound");
+		expect(() => validateFetchRequest({ ...baseRequest, offset: MAX_FETCH_OFFSET + 1 })).toThrow("outside the supported bound");
 	});
 
 	it("returns bounded pages with offsets and nextOffset", async () => {

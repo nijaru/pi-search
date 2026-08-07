@@ -8,6 +8,7 @@ import {
 	DEFAULT_FETCH_TIMEOUT_MS,
 	DEFAULT_MAX_LENGTH,
 	MAX_FETCH_LENGTH,
+	MAX_FETCH_OFFSET,
 	fetchContent,
 	type FetcherOptions,
 } from "./fetcher";
@@ -17,9 +18,9 @@ const FetchFormatSchema = StringEnum(["markdown", "text", "html"] as const) as T
 export const WebFetchParameters = Type.Object({
 	url: Type.String({ minLength: 1, maxLength: 8_192, description: "HTTP(S) URL to fetch" }),
 	maxLength: Type.Optional(
-		Type.Integer({ minimum: 1, maximum: MAX_FETCH_LENGTH, default: DEFAULT_MAX_LENGTH, description: "Maximum extracted characters" }),
+		Type.Integer({ minimum: 1, maximum: MAX_FETCH_LENGTH, default: DEFAULT_MAX_LENGTH, description: `Maximum extracted characters (1-${MAX_FETCH_LENGTH})` }),
 	),
-	offset: Type.Optional(Type.Integer({ minimum: 0, description: "Character offset for bounded paging" })),
+	offset: Type.Optional(Type.Integer({ minimum: 0, maximum: MAX_FETCH_OFFSET, description: `Character offset for bounded paging (0-${MAX_FETCH_OFFSET})` })),
 	format: Type.Optional(FetchFormatSchema),
 	maxPages: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, description: "Maximum PDF pages to parse with the bounded page-limited PDF path" })),
 	captionLanguage: Type.Optional(Type.String({ minLength: 1, maxLength: 32, description: "YouTube caption language (default en)" })),

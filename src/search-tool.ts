@@ -14,6 +14,9 @@ import { SearchToolError, toSearchToolError } from "./errors";
 import { searchUrlIdentity } from "./search-cleanup";
 import {
 	DEFAULT_SEARCH_TIMEOUT_MS,
+	DEFAULT_MAX_RESULTS,
+	DEFAULT_CONTENT_RESULTS,
+	DEFAULT_CONTENT_MAX_LENGTH,
 	executeSearchSelection,
 	MAX_QUERY_LENGTH,
 	MAX_RESULTS,
@@ -23,6 +26,8 @@ import {
 	MAX_SEARCH_HANDLE_COUNT,
 	MAX_SEARCH_HANDLE_LENGTH,
 	MAX_EXECUTION_MODEL_LENGTH,
+	MAX_CONTENT_MAX_LENGTH,
+	MAX_CONTENT_RESULTS,
 } from "./search";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const) as TUnsafe<"auto" | "keyword" | "fresh">;
@@ -41,7 +46,7 @@ const SocialSearchSchema = Type.Object({
 export const WebSearchParameters = Type.Object({
 	query: Type.String({ minLength: 1, maxLength: MAX_QUERY_LENGTH, description: "Natural-language or keyword search query" }),
 	maxResults: Type.Optional(
-		Type.Integer({ minimum: 1, maximum: MAX_RESULTS, description: `Maximum results to return (1-${MAX_RESULTS})` }),
+		Type.Integer({ minimum: 1, maximum: MAX_RESULTS, default: DEFAULT_MAX_RESULTS, description: `Maximum results to return (1-${MAX_RESULTS})` }),
 	),
 	mode: Type.Optional(SearchModeSchema),
 	domains: Type.Optional(
@@ -55,9 +60,10 @@ export const WebSearchParameters = Type.Object({
 	executionModel: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_EXECUTION_MODEL_LENGTH, description: "Model id for an explicit model-mediated provider" })),
 	provider: Type.Optional(SearchProviderSchema),
 	answerMode: Type.Optional(StringEnum(["auto", "evidence"] as const) as TUnsafe<"auto" | "evidence">),
-	includeContent: Type.Optional(Type.Boolean({ description: "Fetch a small bounded set of result pages for source context" })),
-	contentResults: Type.Optional(Type.Integer({ minimum: 1, maximum: 3, description: "Number of result pages to fetch when includeContent is enabled" })),
-	contentMaxLength: Type.Optional(Type.Integer({ minimum: 1, maximum: 8_000, description: "Maximum extracted characters per fetched source" })),
+	includeContent: Type.Optional(Type.Boolean({ default: false, description: "Fetch selected result pages for source context" })),
+	contentResults: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CONTENT_RESULTS, default: DEFAULT_CONTENT_RESULTS, description: `Number of result pages to fetch when includeContent is enabled (1-${MAX_CONTENT_RESULTS})` })),
+	contentMaxLength: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CONTENT_MAX_LENGTH, default: DEFAULT_CONTENT_MAX_LENGTH, description: `Maximum extracted characters per fetched source (1-${MAX_CONTENT_MAX_LENGTH})` })),
+
 });
 
 export type WebSearchParams = Static<typeof WebSearchParameters>;
@@ -70,8 +76,8 @@ const MAX_SEARCH_JSON_CHARS = MAX_SEARCH_OUTPUT_CHARS - new TextEncoder().encode
 const MAX_SEARCH_EXCERPT_CHARS = 4_000;
 const MAX_SEARCH_TITLE_CHARS = 500;
 const MAX_SEARCH_ANSWER_CHARS = 8_000;
-const MAX_SEARCH_CONTENT_CHARS = 8_000;
-const MAX_SEARCH_CONTENT_RESULTS = 3;
+const MAX_SEARCH_CONTENT_CHARS = MAX_CONTENT_MAX_LENGTH;
+const MAX_SEARCH_CONTENT_RESULTS = MAX_CONTENT_RESULTS;
 const SEARCH_WARNING_BUDGET_CHARS = 1_000;
 
 export interface WebSearchToolOptions {

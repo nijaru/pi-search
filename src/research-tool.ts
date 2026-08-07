@@ -10,7 +10,7 @@ import { Type, type Static, type TUnsafe } from "typebox";
 import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchProviderSelection, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
 import { SearchToolError } from "./errors";
-import { fetchContent, type FetcherOptions } from "./fetcher";
+import { fetchContent, MAX_FETCH_LENGTH, type FetcherOptions } from "./fetcher";
 import { executeSearch } from "./search";
 import { providerContextFromPi } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
@@ -344,7 +344,7 @@ export async function executeResearch(
 				stepsCompleted += 1;
 				fetchAttempts += 1;
 				try {
-					const page = await fetchContent({ url: result.url, maxLength: Math.min(12_000, normalized.budget.maxOutputChars), readable: true }, deadlineController.signal, {
+					const page = await fetchContent({ url: result.url, maxLength: Math.min(MAX_FETCH_LENGTH, normalized.budget.maxOutputChars), readable: true }, deadlineController.signal, {
 						...options,
 						timeoutMs: remaining(deadline),
 					});

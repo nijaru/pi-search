@@ -21,7 +21,7 @@ describe("ParallelProvider", () => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			return response(payload);
 		} }).search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, {});
-		expect(seenBody).toMatchObject({ objective: "latest TypeScript release", search_queries: ["latest TypeScript release"], mode: "advanced" });
+		expect(seenBody).toMatchObject({ objective: "latest TypeScript release", search_queries: ["latest TypeScript release"], mode: "advanced", advanced_settings: { max_results: 1 } });
 		expect(result).toMatchObject({ provider: "parallel", requestId: "search-1", appliedOptions: ["maxResults", "mode"] });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." });
 	});

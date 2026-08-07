@@ -15,9 +15,11 @@ export const MAX_SEARCH_DATE_LENGTH = 64;
 /** Native model-mediated search can spend tens of seconds grounding a query. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
 export const DEFAULT_CONTENT_RESULTS = 2;
-export const MAX_CONTENT_RESULTS = 3;
+/** Explicit source enrichment is finite and follows the public search-result bound. */
+export const MAX_CONTENT_RESULTS = MAX_RESULTS;
 export const DEFAULT_CONTENT_MAX_LENGTH = 4_000;
-export const MAX_CONTENT_MAX_LENGTH = 8_000;
+/** Keep search enrichment aligned with the fetcher's hard 32-KB output bound. */
+export const MAX_CONTENT_MAX_LENGTH = 32_000;
 
 function invalidRequest(message: string): SearchToolError {
 	return new SearchToolError("WEB_SEARCH_INVALID_REQUEST", message);

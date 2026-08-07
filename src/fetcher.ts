@@ -17,7 +17,9 @@ import {
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_LENGTH = 8_000;
-export const MAX_FETCH_LENGTH = 12_000;
+/** Character request bound aligned with the hard output byte bound below. */
+export const MAX_FETCH_LENGTH = 32_000;
+export const MAX_FETCH_OFFSET = MAX_FETCH_LENGTH * 100;
 export const DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 export const MAX_FETCH_RESPONSE_BYTES = 20 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 500;
@@ -183,7 +185,7 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 		throw new SafeFetchError({ kind: "invalidRequest", message: "maxLength is outside the supported bound" });
 	}
 	const offset = request.offset ?? 0;
-	if (!Number.isInteger(offset) || offset < 0 || offset > MAX_FETCH_LENGTH * 100) {
+	if (!Number.isInteger(offset) || offset < 0 || offset > MAX_FETCH_OFFSET) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "offset is outside the supported bound" });
 	}
 	const format = request.format ?? "markdown";

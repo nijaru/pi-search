@@ -38,6 +38,9 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "   " })).toThrow("must not be empty");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 0 })).toThrow("maxResults");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 21 })).toThrow("maxResults");
+		expect(validateSearchRequest({ query: "q", includeContent: true, contentResults: 5, contentMaxLength: 20_000 })).toMatchObject({ contentResults: 5, contentMaxLength: 20_000 });
+		expect(() => validateSearchRequest({ query: "q", contentResults: 21 })).toThrow("between 1 and 20");
+		expect(() => validateSearchRequest({ query: "q", contentMaxLength: 32_001 })).toThrow("between 1 and 32000");
 		expect(() => validateSearchRequest({ query: "q", executionModel: 42 as never })).toThrow("executionModel must be a string");
 		expect(() => validateSearchRequest({ query: "q", domains: { include: ["example.com"], exclude: ["example.com"] } })).toThrow(
 			"both included and excluded",

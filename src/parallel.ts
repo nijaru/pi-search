@@ -60,6 +60,7 @@ export function buildParallelRequest(request: SearchRequest): ParallelRequestPla
 			objective: normalized.query,
 			search_queries: [normalized.query],
 			mode: normalized.mode === "keyword" ? "basic" : normalized.mode === "fresh" ? "advanced" : "advanced",
+			advanced_settings: { max_results: maxResults },
 			max_chars_total: Math.min(24_000, Math.max(2_000, maxResults * 2_000)),
 		},
 		appliedOptions: ["maxResults", "mode"],
