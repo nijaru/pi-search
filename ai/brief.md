@@ -10,11 +10,10 @@ opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `9192fb9`, pushed to
+https://github.com/nijaru/pi-search. The repository is clean and synced with
 `origin/main`; the active runtime exposes exactly `web_search`, `web_fetch`,
 and `web_research`, and `pi-web-access` is not installed as an overlapping
 runtime. A running Pi process must be restarted after an extension refresh.
-The repository is clean after the context save.
 
 The search plane is implemented and bounded:
 
