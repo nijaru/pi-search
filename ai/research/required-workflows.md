@@ -65,11 +65,11 @@ gates and conditional capability work, not a reason to add a second extension.
 The required rows above are not all release-verified yet. Before claiming full
 production maturity:
 
-1. Fix the remaining contract audit items: hard constraints, auth diagnostic
-   redaction, successful request IDs, bounded provider metadata, and the
-   Codex smoke endpoint.
-2. Add the search output trust fence and verify the direct installed package
-   registers only `web_search`, `web_fetch`, and `web_research`.
+1. Refresh the installed extension and restart Pi, then run a fresh
+   representative acceptance pass for the current commit; prior contract
+   audit items and the Codex endpoint are implemented and covered offline.
+2. Verify the direct installed package registers only `web_search`,
+   `web_fetch`, and `web_research` after the refresh.
 3. Run deterministic checks plus one explicit live smoke per available
    provider; record skipped providers without inventing credentials.
 4. Exercise representative Pi calls for native search, local-model search,
