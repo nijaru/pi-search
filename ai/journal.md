@@ -335,3 +335,9 @@ durable rationale belongs in `decisions.md`.
   Tool schemas now expose defaults and the fetch offset bound, and Parallel
   sends `advanced_settings.max_results`. Focused tests and full `bun run check`
   pass: 185 tests, 438 assertions, TypeScript clean.
+- 2026-08-07: Review found three concrete bound issues and they were fixed in
+  `d47d0b8`: source enrichment and research now stop after a fetched page would
+  exceed the aggregate model-visible budget, and fetch paging no longer emits
+  a `nextOffset` beyond `MAX_FETCH_OFFSET`; it reports an explicit warning at
+  that boundary. Full verification passes with 186 tests, 444 assertions, and
+  clean TypeScript.

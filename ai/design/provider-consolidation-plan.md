@@ -169,8 +169,10 @@ schemas now expose the actual defaults and non-arbitrary finite bounds:
 source enrichment follows the public 20-result maximum, and each fetched page
 may request up to 32,000 characters. Global model-visible output limits,
 response-byte limits, deadlines, cancellation, and SSRF remain the resource
-owners. Parallel maps `maxResults` to its documented
-`advanced_settings.max_results` field instead of relying on a server default.
+owners. Search and research stop source enrichment when their aggregate output
+budget cannot retain another page. Parallel maps `maxResults` to its
+documented `advanced_settings.max_results` field instead of relying on a
+server default.
 
 ## Phase 2 — optimize individual-page fetching (Markdown implemented)
 

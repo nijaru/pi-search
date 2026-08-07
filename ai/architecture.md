@@ -48,7 +48,10 @@ output bounds, and the untrusted-content contract. The fetcher accepts up to
 32,000 requested characters per page, but its hard 32-KB output-byte bound and
 model-visible renderer bound remain authoritative. Search enrichment reuses
 that fetch contract, with a finite page count tied to the public result bound
-and a separate 45-KB search output budget.
+and a separate 45-KB search output budget. Search and research check the
+bounded aggregate response after each successful source fetch and stop before
+additional pages once that budget cannot retain them. Fetch paging never emits
+a continuation cursor beyond its accepted offset bound.
 
 ## Extension migration
 

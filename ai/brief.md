@@ -10,7 +10,7 @@ opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `6f171a4`, pushed to
+https://github.com/nijaru/pi-search. Repository HEAD is `d47d0b8`, pushed to
 `origin/main`; the active runtime exposes exactly `web_search`, `web_fetch`,
 and `web_research`, and `pi-web-access` is not installed as an overlapping
 runtime. A running Pi process must be restarted after an extension refresh.
@@ -52,15 +52,18 @@ calls then succeeded. These were not provider billing controls: source
 enrichment and fetch length mainly affect local network/latency and model
 context, while rejecting a call can create an extra model turn.
 
-Commit `6f171a4` removes those arbitrary small caps without removing the real
-resource owners. Search enrichment accepts 1–20 pages, matching the public
-search-result bound, and up to 32,000 requested characters per page. Direct
-fetch accepts up to 32,000 requested characters, while its hard 32-KB byte
-bound, response-size limit, timeout, cancellation, SSRF, and output render
-bounds remain. Search still bounds model-visible output at 45 KB and fetch at
-48 KB; invalid requests are rejected rather than silently clamped. The tool
-schemas now expose defaults and mirror runtime offset bounds. Parallel now
-sends its requested result count through `advanced_settings.max_results`.
+Commits `6f171a4` and `d47d0b8` remove those arbitrary small caps without
+removing the real resource owners. Search enrichment accepts 1–20 pages,
+matching the public search-result bound, and up to 32,000 requested characters
+per page. Direct fetch accepts up to 32,000 requested characters, while its
+hard 32-KB byte bound, response-size limit, timeout, cancellation, SSRF, and
+output render bounds remain. Search and research stop optional source fetching
+when their global model-visible output budget can no longer retain another
+page; fetch paging stops at its accepted offset limit with an explicit warning.
+Search still bounds model-visible output at 45 KB and fetch at 48 KB; invalid
+requests are rejected rather than silently clamped. The tool schemas now
+expose defaults and mirror runtime offset bounds. Parallel sends its requested
+result count through `advanced_settings.max_results`.
 
 ## Decisions in force
 
@@ -85,9 +88,9 @@ sends its requested result count through `advanced_settings.max_results`.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 185 tests, 438 assertions,
-and clean TypeScript. The focused bound/Parallel tests and `git diff --check`
-also pass. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
+`bun run check` passes under Pi 0.84 dependencies: 186 tests, 444 assertions,
+and clean TypeScript. The focused bound/Parallel tests, review probes, and
+`git diff --check` also pass. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
 malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
 and cancellation. The Pi 0.84 null-header fix has dedicated model-selection
 and OpenAI tests. AnyDoc now owns default PDF conversion; explicit `maxPages`

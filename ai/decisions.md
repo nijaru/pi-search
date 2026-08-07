@@ -239,3 +239,16 @@ transport adapts internally: Parallel now sends the requested result cap in
 provider setting. Tool schemas include the actual defaults and runtime offset
 range so model calls are less likely to fail validation before execution. This
 supersedes the provisional plan to use a separate enrichment cap around 10.
+
+### 2026-08-07 — Review hardening for output-aware fetching and paging
+
+The post-implementation review found that merely raising bounds could fetch
+pages that the final model-visible budget would discard, and that the maximum
+accepted fetch offset could produce an unusable `nextOffset`. Commit `d47d0b8`
+now checks the bounded search/research response after each successful source
+fetch, retains prior pages, and stops before attempting further pages once the
+aggregate output budget is reached. It also caps fetched paging at
+`MAX_FETCH_OFFSET` and reports an explicit truncation warning instead of
+returning a continuation cursor that validation would reject. This preserves
+caller-selected bounds while avoiding unbounded or needlessly repeated local
+work.
