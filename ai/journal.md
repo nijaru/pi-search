@@ -327,3 +327,11 @@ durable rationale belongs in `decisions.md`.
   ownership, relax the arbitrary small caps, align fetch character limits with
   the existing byte bound, expose Parallel result count explicitly, and test
   bounded partial-output behavior.
+- 2026-08-07: Implemented and pushed `6f171a4`. `web_search` source
+  enrichment now accepts up to 20 pages (the public search-result maximum)
+  and 32,000 requested characters per page; `web_fetch` and research use the
+  shared 32,000-character request bound. Hard response-byte, model-visible
+  output, timeout, cancellation, SSRF, and finite fan-out protections remain.
+  Tool schemas now expose defaults and the fetch offset bound, and Parallel
+  sends `advanced_settings.max_results`. Focused tests and full `bun run check`
+  pass: 185 tests, 438 assertions, TypeScript clean.

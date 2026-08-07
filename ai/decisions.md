@@ -221,3 +221,21 @@ larger finite opt-in enrichment count, align fetch character limits with the
 existing byte bound, and make provider transport defaults explicit internally.
 Do not silently clamp invalid requests; return bounded partial output with a
 warning when the global output budget is reached.
+
+### 2026-08-07 — Relax agent-facing bounds around owning budgets
+
+Implemented the planned correction in `6f171a4`. `web_search` source
+enrichment now accepts up to `MAX_RESULTS` (20) selected pages and up to
+32,000 requested characters per page; `web_fetch` accepts up to 32,000
+requested characters. These are finite request bounds, not provider billing
+controls. The existing hard response-byte, model-visible output, timeout,
+SSRF, cancellation, and deadline owners remain authoritative, and invalid
+requests still fail before execution rather than being silently clamped.
+
+The public defaults remain provider-neutral (`maxResults` 10, source
+enrichment 2 pages/4,000 characters, fetch 8,000 characters). Provider
+transport adapts internally: Parallel now sends the requested result cap in
+`advanced_settings.max_results`; its excerpt budget remains an explicit
+provider setting. Tool schemas include the actual defaults and runtime offset
+range so model calls are less likely to fail validation before execution. This
+supersedes the provisional plan to use a separate enrichment cap around 10.

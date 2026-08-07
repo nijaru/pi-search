@@ -179,7 +179,9 @@ These current provider documents refine, but do not replace, the matrix above:
   token savings before exposing them.
 - Parallel positions objective-oriented, LLM-optimized excerpts and multi-query
   context as its differentiator. Its value should be measured by end-to-end
-  context efficiency, not just result count.
+  context efficiency, not just result count. The adapter now sends the caller's
+  provider-neutral result cap through `advanced_settings.max_results` while
+  keeping excerpt/context sizing as an explicit Parallel transport setting.
 - Perplexity Search returns structured results with snippets, dates, update
   dates, domain filters, and page-content controls, making it the leading
   candidate only for a proven hard-filter or page-context gap.

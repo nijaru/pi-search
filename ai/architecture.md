@@ -16,7 +16,9 @@ billing policy. `src/model-selection.ts` resolves an active or explicitly
 requested compatible Gemini, xAI, or OpenAI/Codex model through the supplied Pi
 registry; it never reads auth state globally. `src/search.ts` validates
 requests, combines caller cancellation with a hard deadline, and maps failures
-to stable tool errors.
+to stable tool errors. Public result defaults stay provider-neutral; provider
+adapters translate the requested result cap into their own documented request
+fields rather than relying on provider defaults.
 
 Provider adapters normalize their own HTTP or model-mediated payloads:
 
@@ -42,7 +44,11 @@ local office/document and default PDF conversion through `src/anydoc.ts` and
 integration. AnyDoc's PDF path uses its bundled `pdf-inspector` parser for
 structured Markdown. The AnyDoc worker owns native binding/conversion lifetime,
 while `fetcher.ts` owns response limits, cancellation/deadlines, provenance,
-output bounds, and the untrusted-content contract.
+output bounds, and the untrusted-content contract. The fetcher accepts up to
+32,000 requested characters per page, but its hard 32-KB output-byte bound and
+model-visible renderer bound remain authoritative. Search enrichment reuses
+that fetch contract, with a finite page count tied to the public result bound
+and a separate 45-KB search output budget.
 
 ## Extension migration
 

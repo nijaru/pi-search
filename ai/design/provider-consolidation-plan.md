@@ -164,7 +164,13 @@ Commit `a1f51e1` closed the first three gates:
 
 Provider adapters still own request construction and payload parsing. Shared
 normalization and output bounds remain at the tool boundary; unsupported hard
-constraints continue to fail before network access.
+constraints continue to fail before network access. The model-facing request
+schemas now expose the actual defaults and non-arbitrary finite bounds:
+source enrichment follows the public 20-result maximum, and each fetched page
+may request up to 32,000 characters. Global model-visible output limits,
+response-byte limits, deadlines, cancellation, and SSRF remain the resource
+owners. Parallel maps `maxResults` to its documented
+`advanced_settings.max_results` field instead of relying on a server default.
 
 ## Phase 2 — optimize individual-page fetching (Markdown implemented)
 
@@ -185,7 +191,9 @@ constraints continue to fail before network access.
 4. The AnyDoc worker owns native conversion lifetime; `fetcher.ts` owns the
    safe response read, output bound, cancellation/deadline, untrusted-content,
    provenance, and error-mapping layers. AnyDoc's internal Rust resource
-   limits complement but do not replace the fetch contract.
+   limits complement but do not replace the fetch contract. `web_fetch` accepts
+   up to 32,000 requested characters while retaining its hard 32-KB output-byte
+   bound; research uses the same shared fetcher limit.
 5. Do not add browser/JS rendering or caching until a concrete workflow
    requires them and their separate resource/privacy policies are defined.
 

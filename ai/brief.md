@@ -10,11 +10,11 @@ opaque storage, or unsafe remote extraction.
 ## Current state
 
 `pi-search` is the public, unversioned Git Pi package at
-https://github.com/nijaru/pi-search. Repository HEAD is `cd0004f`, pushed to
+https://github.com/nijaru/pi-search. Repository HEAD is `6f171a4`, pushed to
 `origin/main`; the active runtime exposes exactly `web_search`, `web_fetch`,
 and `web_research`, and `pi-web-access` is not installed as an overlapping
 runtime. A running Pi process must be restarted after an extension refresh.
-The repository is clean.
+The repository is clean after the context save.
 
 The search plane is implemented and bounded:
 
@@ -43,25 +43,24 @@ caller cancellation remain inside the existing fetch contract. Explicit
 `maxPages` keeps the bounded `pdftotext` path because AnyDoc 0.1.6 exposes no
 page-range option.
 
-## Active issue and planned correction
+## Completed correction
 
-The current agent-facing caps are more conservative than their actual resource
-owners require. The Pi-subagents session produced repeated pre-execution
-validation failures for `web_search.contentResults` values of 4–5 against the
-extension's maximum of 3, and `web_fetch.maxLength` of 20,000 against the
-maximum of 12,000; corrected calls then succeeded. These are not provider
-billing controls: source enrichment and fetch length mainly affect local
-network/latency and model context, while rejecting a call can create an extra
-model turn.
+The Pi-subagents session produced repeated pre-execution validation failures for
+`web_search.contentResults` values of 4–5 against the old maximum of 3, and
+`web_fetch.maxLength` of 20,000 against the old maximum of 12,000; corrected
+calls then succeeded. These were not provider billing controls: source
+enrichment and fetch length mainly affect local network/latency and model
+context, while rejecting a call can create an extra model turn.
 
-After compaction, revise the bounds rather than merely adding prompt guidance:
-keep global Pi output, response-byte, timeout, cancellation, SSRF, and finite
-fan-out protections; relax the arbitrary small caps; make the total output
-budget authoritative; keep public `maxResults` provider-neutral; and adapt
-provider transport settings internally. The likely first implementation is a
-larger finite enrichment cap (around 10), `web_fetch` length aligned with its
-existing 32-KB byte bound, explicit Parallel result-count settings, and tests
-for the revised contract. Do not silently clamp invalid requests.
+Commit `6f171a4` removes those arbitrary small caps without removing the real
+resource owners. Search enrichment accepts 1–20 pages, matching the public
+search-result bound, and up to 32,000 requested characters per page. Direct
+fetch accepts up to 32,000 requested characters, while its hard 32-KB byte
+bound, response-size limit, timeout, cancellation, SSRF, and output render
+bounds remain. Search still bounds model-visible output at 45 KB and fetch at
+48 KB; invalid requests are rejected rather than silently clamped. The tool
+schemas now expose defaults and mirror runtime offset bounds. Parallel now
+sends its requested result count through `advanced_settings.max_results`.
 
 ## Decisions in force
 
@@ -86,8 +85,9 @@ for the revised contract. Do not silently clamp invalid requests.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 184 tests, 432 assertions,
-and clean TypeScript. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
+`bun run check` passes under Pi 0.84 dependencies: 185 tests, 438 assertions,
+and clean TypeScript. The focused bound/Parallel tests and `git diff --check`
+also pass. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
 malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
 and cancellation. The Pi 0.84 null-header fix has dedicated model-selection
 and OpenAI tests. AnyDoc now owns default PDF conversion; explicit `maxPages`
