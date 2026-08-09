@@ -105,9 +105,10 @@ malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
 and cancellation. The Pi 0.84 null-header fix has dedicated model-selection
 and OpenAI tests. AnyDoc now owns default PDF conversion; explicit `maxPages`
 retains bounded `pdftotext` because AnyDoc 0.1.6 exposes no page-range option.
-Credential-gated live rows remain separate from the offline suite; the Fedora
-llama.cpp live rerun is external to this suite and was the source of the
-verified grammar failure.
+Credential-gated live rows remain separate from the offline suite. The
+Fedora llama.cpp acceptance rerun against checkout `86ac641` succeeded after a
+Pi restart with `--model fedora/qwen3.6:27b --no-session`; Pi read `AGENTS.md`
+without the prior grammar-parser 400.
 
 ## Active tasks
 

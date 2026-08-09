@@ -366,3 +366,7 @@ durable rationale belongs in `decisions.md`.
   Corrected the classifier for actual IPv6 literals, `.localhost`,
   `host.docker.internal`, `.home.arpa`, and `100.64.0.0/10`; full verification
   now passes with 192 tests, 467 assertions, and clean TypeScript.
+- Live acceptance then confirmed the fix: the Fedora extension checkout was
+  refreshed to `86ac641`, Pi was restarted, and the original
+  `--model fedora/qwen3.6:27b --no-session` invocation succeeded and read
+  `AGENTS.md` without the grammar-parser 400.
