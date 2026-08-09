@@ -19,8 +19,14 @@ describe("local llama schema compatibility", () => {
 		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://fedora:8080/v1" })).toBe(true);
 		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://localhost:11434/v1" })).toBe(true);
 		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://[::1]:8080/v1" })).toBe(true);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://host.docker.internal:8080/v1" })).toBe(true);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://llama.home.arpa:8080/v1" })).toBe(true);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://sub.localhost:8080/v1" })).toBe(true);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "http://100.64.0.1:8080/v1" })).toBe(true);
 		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "https://api.openai.com/v1" })).toBe(false);
 		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "https://llama-cloud.example/v1" })).toBe(false);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "https://fc.example.com/v1" })).toBe(false);
+		expect(isLocalOpenAICompatibleModel({ api: "openai-completions", baseUrl: "https://[2001:db8::1]/v1" })).toBe(false);
 		expect(isLocalOpenAICompatibleModel({ api: "anthropic-messages", baseUrl: "http://localhost:8080" })).toBe(false);
 	});
 

@@ -1,3 +1,5 @@
+import net from "node:net";
+
 const LLAMA_NESTED_MAX_LENGTH_THRESHOLD = 2_000;
 export const LLAMA_SAFE_NESTED_MAX_LENGTH = LLAMA_NESTED_MAX_LENGTH_THRESHOLD - 1;
 
@@ -13,24 +15,32 @@ export interface ModelEndpointIdentity {
 	readonly baseUrl: string;
 }
 
+function normalizedHostname(hostname: string): string {
+	return hostname.toLowerCase().replace(/^\[|\]$/g, "");
+}
+
 function isPrivateIpv4(hostname: string): boolean {
+	if (net.isIP(hostname) !== 4) return false;
 	const parts = hostname.split(".").map(Number);
-	if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
 	const [first, second] = parts;
-	return first === 10 || first === 127 || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+	return first === 10 || first === 127 || (first === 100 && second >= 64 && second <= 127) || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
 }
 
 function isPrivateIpv6(hostname: string): boolean {
-	const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-	return normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:");
+	const normalized = normalizedHostname(hostname);
+	if (net.isIP(normalized) !== 6) return false;
+	if (normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:")) return true;
+	return normalized.startsWith("::ffff:") && isPrivateIpv4(normalized.slice("::ffff:".length));
 }
 
 function isLocalEndpoint(baseUrl: string): boolean {
 	try {
 		const url = new URL(baseUrl);
 		if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-		const hostname = url.hostname.toLowerCase();
-		return hostname === "localhost" || hostname.endsWith(".local") || !hostname.includes(".") || isPrivateIpv4(hostname) || isPrivateIpv6(hostname);
+		const hostname = normalizedHostname(url.hostname);
+		const isLocalName = hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".home.arpa") || hostname === "host.docker.internal" || hostname === "gateway.docker.internal";
+		const isSingleLabelName = net.isIP(hostname) === 0 && !hostname.includes(".");
+		return isLocalName || isSingleLabelName || isPrivateIpv4(hostname) || isPrivateIpv6(hostname);
 	} catch {
 		return false;
 	}

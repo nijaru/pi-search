@@ -360,3 +360,9 @@ durable rationale belongs in `decisions.md`.
   than provider implementation detail. Full `bun run check` passes: 192 tests,
   461 assertions, clean TypeScript. No live Fedora rerun was performed from
   this macOS checkout.
+- A Sol review confirmed the Pi hook and both OpenAI payload shapes, found
+  classifier-only gaps around public IPv6/name handling and common local
+  endpoints, and found no other #25746-family trigger in the three schemas.
+  Corrected the classifier for actual IPv6 literals, `.localhost`,
+  `host.docker.internal`, `.home.arpa`, and `100.64.0.0/10`; full verification
+  now passes with 192 tests, 467 assertions, and clean TypeScript.

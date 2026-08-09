@@ -94,10 +94,11 @@ result count through `advanced_settings.max_results`.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 192 tests, 461 assertions,
+`bun run check` passes under Pi 0.84 dependencies: 192 tests, 467 assertions,
 and clean TypeScript. The focused local-llama compatibility tests cover Fedora-
 style single-label hosts, loopback IPv6, chat-completions and Responses tool
-payloads, immutable rewriting, and unchanged hosted URLs. Runtime research
+payloads, immutable rewriting, public IPv6/name isolation, and unchanged
+hosted URLs. Runtime research
 validation still accepts 2,000-character queries and rejects 2,001-character
 queries. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
 malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
