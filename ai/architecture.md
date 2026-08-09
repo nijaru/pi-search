@@ -80,3 +80,13 @@ media analysis, richer X lookup/thread support, and extra overlapping providers
 remain conditional on measured workflows rather than permanently excluded.
 `@firecrawl/anydoc` is shipped as a local document-conversion layer and does not
 imply remote extraction.
+
+## Provider request compatibility
+
+`src/index.ts` registers a `before_provider_request` handler for a narrow local
+llama.cpp compatibility layer in `src/local-llama-compat.ts`. Pi serializes tool
+schemas before this hook, so the layer can adapt the outgoing OpenAI
+completions/Responses payload without changing the public TypeBox schema or
+runtime validation. The layer identifies local/private endpoints from the URL,
+rewrites only `web_research`'s nested query bound from 2,000 to 1,999, returns
+unchanged payloads when no target exists, and does not run for hosted URLs.

@@ -78,6 +78,14 @@ selected source pages are needed; this reuses the safe local fetch path. For
 `web_research`, use `executionModel` with an explicit model-mediated `provider`
 when a multi-query run should use a specific Gemini, xAI, or OpenAI model.
 
+### Local OpenAI-compatible endpoints
+
+The extension keeps the public and runtime 2,000-character query limit. For
+local/private OpenAI-compatible endpoints, it applies a compatibility-only
+outgoing schema adjustment for llama.cpp's nested-string grammar boundary; the
+schema sent to hosted GPT and other public providers is unchanged. No setting
+or tool toggle is required.
+
 ## Fetch coverage
 
 Tool results use compact readable model content and a compact Pi display;

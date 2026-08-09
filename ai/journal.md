@@ -341,3 +341,22 @@ durable rationale belongs in `decisions.md`.
   a `nextOffset` beyond `MAX_FETCH_OFFSET`; it reports an explicit warning at
   that boundary. Full verification passes with 186 tests, 444 assertions, and
   clean TypeScript.
+
+## 2026-08-09
+
+- Fedora direct testing reproduced llama.cpp b10327/Qwen3.6:27b HTTP 400
+  `Failed to initialize samplers: failed to parse grammar` with the extension
+  loaded. Removing extensions (`-ne`) succeeded; disabling skills (`-ns`) did
+  not reliably change the result. The isolated trigger is
+  `web_research.queries.items.maxLength: 2000`, matching llama.cpp issue #25746.
+- Implemented `src/local-llama-compat.ts` using Pi 0.84's
+  `before_provider_request` hook. OpenAI-compatible models targeting local or
+  private URLs receive an immutable outgoing-only rewrite of that nested bound
+  to 1,999; public TypeBox/runtime validation remains 2,000 and hosted URLs are
+  unchanged. Added chat-completions/Responses, Fedora hostname, IPv6, hosted,
+  and identity-preservation tests.
+- Reworked agent-facing descriptions and parameter descriptions around tool
+  choice, output shape, bounded/untrusted content, and automatic routing rather
+  than provider implementation detail. Full `bun run check` passes: 192 tests,
+  461 assertions, clean TypeScript. No live Fedora rerun was performed from
+  this macOS checkout.

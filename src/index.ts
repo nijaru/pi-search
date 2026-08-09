@@ -8,6 +8,7 @@ import { createParallelProvider } from "./parallel";
 import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
+import { adaptLocalLlamaPayload, isLocalOpenAICompatibleModel } from "./local-llama-compat";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 
@@ -55,6 +56,10 @@ export default function (pi: ExtensionAPI): void {
 		braveFreeCapacityConfigured,
 		braveCapacity,
 		billingPolicy,
+	});
+	pi.on("before_provider_request", (event, context) => {
+		if (!isLocalOpenAICompatibleModel(context.model)) return;
+		return adaptLocalLlamaPayload(event.payload);
 	});
 	registerWebSearch(pi, route);
 	registerWebFetch(pi);

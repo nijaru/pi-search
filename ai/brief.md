@@ -42,6 +42,13 @@ caller cancellation remain inside the existing fetch contract. Explicit
 `maxPages` keeps the bounded `pdftotext` path because AnyDoc 0.1.6 exposes no
 page-range option.
 
+Pi 0.84's `before_provider_request` hook now provides a local llama.cpp
+compatibility boundary. For OpenAI-compatible models targeting loopback,
+private/link-local, `.local`, or single-label local endpoints, the extension
+rewrites only the outgoing `web_research.queries.items.maxLength` from 2,000 to
+1,999 to avoid llama.cpp issue #25746. The public TypeBox schema and runtime
+validation remain 2,000; public hosted URLs are unchanged.
+
 ## Completed correction
 
 The Pi-subagents session produced repeated pre-execution validation failures for
@@ -87,20 +94,25 @@ result count through `advanced_settings.max_results`.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 186 tests, 444 assertions,
-and clean TypeScript. The focused bound/Parallel tests, review probes, and
-`git diff --check` also pass. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
+`bun run check` passes under Pi 0.84 dependencies: 192 tests, 461 assertions,
+and clean TypeScript. The focused local-llama compatibility tests cover Fedora-
+style single-label hosts, loopback IPv6, chat-completions and Responses tool
+payloads, immutable rewriting, and unchanged hosted URLs. Runtime research
+validation still accepts 2,000-character queries and rejects 2,001-character
+queries. The AnyDoc fixtures cover DOCX/PPTX/XLSX/ODT/RTF/EPUB/CSV/PDF,
 malformed/unsupported conversion, octet-stream dispatch, HTML preservation,
 and cancellation. The Pi 0.84 null-header fix has dedicated model-selection
 and OpenAI tests. AnyDoc now owns default PDF conversion; explicit `maxPages`
 retains bounded `pdftotext` because AnyDoc 0.1.6 exposes no page-range option.
-Credential-gated live rows remain separate from the offline suite; prior
-single-call smokes covered Codex, Exa, xAI web/X, Gemini Lite, and direct fetch,
-with constrained xAI X no-citation behavior correctly rejected.
+Credential-gated live rows remain separate from the offline suite; the Fedora
+llama.cpp live rerun is external to this suite and was the source of the
+verified grammar failure.
 
 ## Active tasks
 
-- No blocking implementation task remains.
+- `pi-search-9hhe`: fix local llama.cpp `web_research` grammar compatibility;
+  implementation and offline verification are complete, pending task closure
+  and commit.
 - `pi-search-3jx8`: investigate browser/Chrome MCP as a separate extension,
   not part of pi-search's default fetch path.
 

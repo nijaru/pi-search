@@ -36,6 +36,12 @@ describe("web_research", () => {
 		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
 	});
 
+	it("keeps the 2000-character runtime query bound independent of outgoing schema adaptation", async () => {
+		const accepted = await executeResearch({ question: "main", queries: ["q".repeat(2_000)], budget: { ...budget, maxProviderCalls: 1 } }, () => provider(), context());
+		expect(accepted.providerCalls).toBe(1);
+		await expect(executeResearch({ question: "main", queries: ["q".repeat(2_001)], budget }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_INVALID_REQUEST" });
+	});
+
 	it("propagates an explicit execution model through every research query", async () => {
 		const seenModels: string[] = [];
 		const selected: Provider = {

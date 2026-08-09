@@ -1,0 +1,32 @@
+{
+  "project": "pi-search",
+  "ref": "9hhe",
+  "title": "Fix local llama.cpp web_research grammar compatibility",
+  "description": "Preserve 2000-character runtime validation while avoiding llama.cpp nested maxLength \u003e= 2000 grammar failure; improve agent-facing descriptions without degrading hosted-provider behavior; add deterministic regression tests.",
+  "status": "done",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-09T06:16:14.588291Z",
+      "msg": "Confirmed llama.cpp #25746 nested maxLength \u003e= 2000 failure on web_research. Investigating Pi provider request hook for provider-specific outgoing schema adaptation."
+    },
+    {
+      "ts": "2026-08-09T06:18:45.782908Z",
+      "msg": "Pi 0.84 provides before_provider_request after provider serialization; ctx.model exposes api/provider/baseUrl. Implementing local-endpoint-only adaptation of web_research outgoing parameters, leaving public TypeBox and runtime maxLength 2000 unchanged. This avoids hosted-provider changes."
+    },
+    {
+      "ts": "2026-08-09T06:31:38.51284Z",
+      "msg": "Implemented local/private OpenAI-compatible before_provider_request adaptation; preserved public/runtime 2000 bound; rewrote agent-facing descriptions and schemas; full bun run check passes (192 tests, 461 assertions)."
+    }
+  ],
+  "created_at": "2026-08-09T06:16:11.857813Z",
+  "updated_at": "2026-08-09T06:31:38.537551Z",
+  "completed_at": "2026-08-09T06:31:38.537551Z",
+  "external": {}
+}

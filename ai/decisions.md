@@ -252,3 +252,22 @@ aggregate output budget is reached. It also caps fetched paging at
 returning a continuation cursor that validation would reject. This preserves
 caller-selected bounds while avoiding unbounded or needlessly repeated local
 work.
+
+### 2026-08-09 — local llama.cpp schema compatibility and agent-facing descriptions
+
+Pi's `before_provider_request` hook is the correct compatibility boundary for
+llama.cpp issue #25746. Keep `web_research`'s public TypeBox schema and runtime
+validation at 2,000 characters, but for OpenAI-compatible models targeting
+loopback, private/link-local, `.local`, or single-label local endpoints, rewrite
+only the outgoing `queries.items.maxLength` to 1,999. Do not use provider-name
+heuristics: a public URL must remain unchanged regardless of its configured
+provider name. Hosted GPT and other public providers therefore retain their
+original outgoing schema.
+
+Tool descriptions should optimize agent decisions, not document implementation
+routing. State when to use the tool, what it returns, and decision-relevant
+trust/resource constraints; keep provider routing automatic and omit backend
+implementation details unless the caller must choose them. `web_search` is the
+single-search path, `web_research` is for hard multi-step questions, and
+`web_fetch` requires an already-selected URL. Keep untrusted-content fencing
+visible in all relevant descriptions.
