@@ -112,9 +112,9 @@ without the prior grammar-parser 400.
 
 ## Active tasks
 
-- `pi-search-9hhe`: fix local llama.cpp `web_research` grammar compatibility;
-  implementation and offline verification are complete, pending task closure
-  and commit.
+- No blocking implementation task remains. `pi-search-9hhe` is complete;
+  commits `64f0b2e`, `86ac641`, and `3dd2faf` are pushed and the Fedora live
+  acceptance passed.
 - `pi-search-3jx8`: investigate browser/Chrome MCP as a separate extension,
   not part of pi-search's default fetch path.
 
