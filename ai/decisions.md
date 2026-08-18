@@ -253,6 +253,27 @@ returning a continuation cursor that validation would reject. This preserves
 caller-selected bounds while avoiding unbounded or needlessly repeated local
 work.
 
+### 2026-08-18 — Exa default, Parallel explicit, hosted Firecrawl deferred
+
+Audited the current provider schemas, router, credentials, normalized output,
+fallbacks, and current official Parallel/Firecrawl documentation. `provider` is
+already an optional enum in both public search tools, so Parallel is fully
+agent-selectable without a separate strategy schema or material prompt cost.
+Keep Exa as the automatic non-native default and Parallel as an explicit
+specialist; do not make Parallel automatic or an automatic fallback. Credentials
+remain construction-boundary values and are never exposed in tool schemas,
+prompts, normalized output, or diagnostics.
+
+Current Parallel Search documentation exposes `advanced_settings.max_results`
+and `source_policy` domain include/exclude plus `after_date`. Corrected the
+adapter to map the supported domain/lower-date constraints and reject upper
+bounds, social constraints, and combined include/exclude requests rather than
+silently dropping them. Hosted Firecrawl Search is not part of the extension:
+Firecrawl's local AnyDoc package remains the `web_fetch` document/PDF backend;
+hosted search/extraction would add overlapping cost, privacy, and resource
+ownership without a demonstrated workflow gap. Revisit only after measured
+JavaScript-rendering or search-plus-full-Markdown needs defeat the local path.
+
 ### 2026-08-09 — local llama.cpp schema compatibility and agent-facing descriptions
 
 Pi's `before_provider_request` hook is the correct compatibility boundary for

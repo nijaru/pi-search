@@ -23,7 +23,7 @@ The search plane is implemented and bounded:
 - Automatic routing uses active native search, authenticated registry
   OpenAI/Codex search, Exa, then paced Brave; only one visible alternative is
   allowed for safe availability-like failures. Parallel and official X remain
-  explicit.
+  explicit. Exa is the automatic non-native default; Parallel is explicit-only.
 - Hard constraints are capability-checked and post-filtered where required;
   unsupported constraints are rejected rather than silently dropped.
 - `web_search` source enrichment and `web_research` use the shared bounded,
@@ -69,7 +69,8 @@ page; fetch paging stops at its accepted offset limit with an explicit warning.
 Search still bounds model-visible output at 45 KB and fetch at 48 KB; invalid
 requests are rejected rather than silently clamped. The tool schemas now
 expose defaults and mirror runtime offset bounds. Parallel sends its requested
-result count through `advanced_settings.max_results`.
+result count through `advanced_settings.max_results` and maps supported domain
+and lower-date filters through `advanced_settings.source_policy`.
 
 ## Decisions in force
 
@@ -87,14 +88,16 @@ result count through `advanced_settings.max_results`.
 - Source enrichment is explicit and local. AnyDoc is local document conversion,
   not the hosted Firecrawl service; browser rendering, remote extraction,
   persistent cache/history, and curator storage remain deferred until a
-  concrete workflow requires them.
+  concrete workflow requires them. Hosted Firecrawl search/extraction remains
+  deferred; Firecrawl is used only for local AnyDoc conversion behind
+  `web_fetch`.
 - Keep exactly three public tools. Do not add providers merely for count or
   preserve third-party behavior that conflicts with cost, safety, or evidence
   policy.
 
 ## Verification
 
-`bun run check` passes under Pi 0.84 dependencies: 192 tests, 467 assertions,
+`bun run check` passes under Pi 0.84 dependencies: 193 tests, 470 assertions,
 and clean TypeScript. The focused local-llama compatibility tests cover Fedora-
 style single-label hosts, loopback IPv6, chat-completions and Responses tool
 payloads, immutable rewriting, public IPv6/name isolation, and unchanged

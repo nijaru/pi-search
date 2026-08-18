@@ -28,7 +28,7 @@ Provider adapters normalize their own HTTP or model-mediated payloads:
 - `xai.ts`: xAI web and X grounding, documented handle/date/media options, and explicit model selection;
 - `brave.ts`: keyword/freshness/domain search and quota observations;
 - `exa.ts`: semantic search, highlights, domains/date ranges, and reported cost; and
-- `parallel.ts`: objective-oriented search and bounded excerpts with explicit constraint rejection;
+- `parallel.ts`: objective-oriented search, bounded excerpts, and documented domain/lower-date source policies with explicit rejection of unsupported constraints;
 - `x.ts`: explicit official X recent search with post-level evidence, OR-grouped handle filters, and date ranges.
 
 ## Fetch path
@@ -71,7 +71,10 @@ opt-in comparison mode may use multiple providers without hidden fan-out.
 
 Provider-landscape research should add only capabilities that materially improve
 coverage, quality, cost, freshness, filtering, social retrieval, or context
-usability. New adapters and fetch layers must implement the existing contracts,
+usability. Exa remains the automatic non-native default; Parallel remains an
+explicit specialist, and hosted Firecrawl search/extraction remains deferred
+because local AnyDoc already owns document conversion behind `web_fetch`. New
+adapters and fetch layers must implement the existing contracts,
 preserve request constraints and provenance, expose costs/limits where
 available, and include offline fixtures plus explicit live smoke coverage. The
 remaining gates are live provider correctness, direct fetch/PDF quality, and

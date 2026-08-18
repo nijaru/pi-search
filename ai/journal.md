@@ -370,3 +370,16 @@ durable rationale belongs in `decisions.md`.
   refreshed to `86ac641`, Pi was restarted, and the original
   `--model fedora/qwen3.6:27b --no-session` invocation succeeded and read
   `AGENTS.md` without the grammar-parser 400.
+
+## 2026-08-18
+
+- Audited Exa, Parallel, and hosted Firecrawl against the provider-neutral
+  contract and current official documentation. Kept Exa as the automatic
+  non-native default, Parallel as an explicit specialist, and hosted Firecrawl
+  deferred; local `@firecrawl/anydoc` remains behind `web_fetch`.
+- Corrected and pushed `3106bd5`: Parallel now maps documented domain source
+  policies and the lower publication-date bound, while rejecting unsupported
+  upper dates, social constraints, and combined domain lists. `provider` was
+  already present in both public tool schemas, so no schema or prompt expansion
+  was needed. Full verification passes with 193 tests, 470 assertions, and
+  clean TypeScript; the tree is clean and synced with `origin/main`.
