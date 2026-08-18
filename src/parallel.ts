@@ -29,6 +29,8 @@ const capabilities: ProviderCapabilities = {
 	freshness: true,
 	semantic: true,
 	excerpts: true,
+	domainFilter: true,
+	dateFilter: true,
 };
 
 const profile: ProviderProfile = {
@@ -44,26 +46,40 @@ export interface ParallelRequestPlan {
 
 export function buildParallelRequest(request: SearchRequest): ParallelRequestPlan {
 	const normalized = validateSearchRequest(request);
-	if (normalized.dateRange !== undefined || normalized.social !== undefined) {
-		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search does not expose exact date-range or dedicated social/X constraints", retryable: false });
+	if (normalized.social !== undefined) {
+		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search does not expose dedicated social/X constraints", retryable: false });
 	}
-	if (normalized.domains?.include?.length || normalized.domains?.exclude?.length) {
-		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search does not expose domain filters in the stable request contract", retryable: false });
+	if (normalized.dateRange?.to !== undefined) {
+		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search supports a date-range start but not an upper date bound", retryable: false });
+	}
+	if (normalized.domains?.include?.length && normalized.domains?.exclude?.length) {
+		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search accepts either included or excluded domains, not both", retryable: false });
 	}
 	const warnings: SearchWarning[] = [];
 	if (normalized.mode === "fresh") {
 		warnings.push({ code: "unsupported-option", option: "mode", message: "Parallel Search can prioritize current sources but this request does not impose a date cutoff" });
 	}
 	const maxResults = normalized.maxResults ?? 10;
+	const sourcePolicy = {
+		...(normalized.domains?.include === undefined ? {} : { include_domains: [...normalized.domains.include] }),
+		...(normalized.domains?.exclude === undefined ? {} : { exclude_domains: [...normalized.domains.exclude] }),
+		...(normalized.dateRange?.from === undefined ? {} : { after_date: normalized.dateRange.from.slice(0, 10) }),
+	};
+	const appliedOptions: SearchOption[] = ["maxResults", "mode"];
+	if (normalized.domains !== undefined && (normalized.domains.include !== undefined || normalized.domains.exclude !== undefined)) appliedOptions.push("domains");
+	if (normalized.dateRange !== undefined && normalized.dateRange.from !== undefined) appliedOptions.push("dateRange");
 	return {
 		body: {
 			objective: normalized.query,
 			search_queries: [normalized.query],
 			mode: normalized.mode === "keyword" ? "basic" : normalized.mode === "fresh" ? "advanced" : "advanced",
-			advanced_settings: { max_results: maxResults },
+			advanced_settings: {
+				max_results: maxResults,
+				...(Object.keys(sourcePolicy).length === 0 ? {} : { source_policy: sourcePolicy }),
+			},
 			max_chars_total: Math.min(24_000, Math.max(2_000, maxResults * 2_000)),
 		},
-		appliedOptions: ["maxResults", "mode"],
+		appliedOptions,
 		warnings,
 	};
 }

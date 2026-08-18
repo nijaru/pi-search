@@ -86,7 +86,9 @@ Unsupported hard constraints are rejected or surfaced:
 - Gemini grounding has no hard domain-filter contract.
 - xAI web search supports allowed/excluded domains; xAI X search supports
   bounded handles, ISO date ranges, and opt-in image/video understanding.
-- Parallel's stable Search API contract does not expose domain filters.
+- Parallel Search supports include/exclude domain source policies and a lower
+  publication-date bound through `advanced_settings.source_policy`; it does not
+  support both include and exclude lists together or an upper date bound.
 - Exa applies domain and published-date filters; Brave applies domain filters
   and returns normalized evidence.
 - Official X recent search maps bounded date ranges and handle operators; it

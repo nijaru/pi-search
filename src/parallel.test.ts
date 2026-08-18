@@ -26,11 +26,23 @@ describe("ParallelProvider", () => {
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." });
 	});
 
-	it("rejects hard domain constraints before network access", async () => {
+	it("maps supported domain and date constraints into source policy", async () => {
+		let seenBody: Record<string, unknown> | undefined;
+		const configured = provider({ fetchImpl: async (_input, init) => {
+			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+			return response(payload);
+		} });
+		const result = await configured.search({ query: "q", domains: { include: ["example.com"] }, dateRange: { from: "2026-01-01" } }, new AbortController().signal, {});
+		expect(seenBody).toMatchObject({ advanced_settings: { max_results: 10, source_policy: { include_domains: ["example.com"], after_date: "2026-01-01" } } });
+		expect(result.appliedOptions).toEqual(["maxResults", "mode", "domains", "dateRange"]);
+	});
+
+	it("rejects unsupported domain combination, upper date, and social constraints before network access", async () => {
 		let calls = 0;
 		const configured = provider({ fetchImpl: async () => { calls += 1; return response(payload); } });
-		await expect(configured.search({ query: "q", domains: { include: ["example.com"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
-		await expect(configured.search({ query: "q", dateRange: { from: "2026-01-01" } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
+		await expect(configured.search({ query: "q", domains: { include: ["example.com"], exclude: ["blocked.example"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
+		await expect(configured.search({ query: "q", dateRange: { from: "2026-01-01", to: "2026-01-02" } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
+		await expect(configured.search({ query: "q", social: { includeHandles: ["parallel"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
 		expect(calls).toBe(0);
 	});
 

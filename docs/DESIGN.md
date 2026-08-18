@@ -31,7 +31,7 @@ Shipped search adapters:
 | xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
 | Exa | Other/local model with configured key | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model when Exa is unavailable; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
-| Parallel | — | `parallel` with configured key | Search objective/excerpts; no stable domain filter |
+| Parallel | — | `parallel` with configured key | Search objective/excerpts; include/exclude domain policies and lower date bound |
 | Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
 Explicit provider failures are final. Automatic routing may use one visible
