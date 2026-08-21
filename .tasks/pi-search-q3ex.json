@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "q3ex",
+  "title": "Verify OpenAI/Codex adapter against Pi 0.84.2 and clean review findings",
+  "description": null,
+  "status": "done",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-21T06:10:06.814258Z",
+      "msg": "Verified openai.ts against pi-ai/pi-coding-agent 0.84.2: model-registry.d.ts byte-identical, extension API additive-only, Codex JWT claim path (https://api.openai.com/auth -\u003e chatgpt_account_id), base URL chatgpt.com/backend-api, and headers (chatgpt-account-id, originator: pi, OpenAI-Beta: responses=experimental) all unchanged. bun run check: 193 tests, 470 assertions, clean tsc. Fixed three P3 findings: removed unexplained terra rank-0 model preference, collapsed dead endpointFor ternary, relaxed pi-ai peer pin to ^0.84.0. Residual: no recent credential-gated live smoke of codex search path."
+    }
+  ],
+  "created_at": "2026-08-21T06:09:56.737091Z",
+  "updated_at": "2026-08-21T06:10:18.997307Z",
+  "completed_at": "2026-08-21T06:10:18.997307Z",
+  "external": {}
+}

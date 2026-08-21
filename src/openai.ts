@@ -367,7 +367,6 @@ export function normalizeOpenAIResponse(
 function modelSearchRank(model: ProviderModel): [number, string] {
 	const segments = model.id.toLowerCase().split("-");
 	if (segments.some((segment) => SEARCH_MODEL_EXCLUDED_SEGMENTS.has(segment))) return [3, model.id];
-	if (segments.includes("terra")) return [0, model.id];
 	if (/^gpt-\d+(?:\.\d+)?$/.test(model.id)) return [1, model.id];
 	return [2, model.id];
 }
@@ -526,7 +525,7 @@ function endpointFor(model: ProviderModel, provider: OpenAIProviderId, override?
 	if (provider === "openai-codex") {
 		url.pathname = path.endsWith("/codex") ? `${path}/responses` : `${path}/codex/responses`;
 	} else {
-		url.pathname = path.endsWith("/v1") ? `${path}/responses` : `${path}/responses`;
+		url.pathname = `${path}/responses`;
 	}
 	return url.toString();
 }
