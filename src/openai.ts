@@ -70,6 +70,8 @@ interface SearchExecution {
 }
 
 const SEARCH_MODEL_EXCLUDED_SEGMENTS = new Set(["pro", "ultra"]);
+// Prefer the Luna family for native search; executionModel remains an explicit override.
+const SEARCH_MODEL_PREFERRED_SEGMENTS = new Set(["luna"]);
 
 const capabilities: ProviderCapabilities = {
 	keyword: true,
@@ -367,18 +369,24 @@ export function normalizeOpenAIResponse(
 function modelSearchRank(model: ProviderModel): [number, string] {
 	const segments = model.id.toLowerCase().split("-");
 	if (segments.some((segment) => SEARCH_MODEL_EXCLUDED_SEGMENTS.has(segment))) return [3, model.id];
+	if (segments.some((segment) => SEARCH_MODEL_PREFERRED_SEGMENTS.has(segment))) return [0, model.id];
 	if (/^gpt-\d+(?:\.\d+)?$/.test(model.id)) return [1, model.id];
 	return [2, model.id];
 }
 
-function searchModelCandidates(provider: OpenAIProviderId, active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"]): ProviderModel[] {
+function searchModelCandidates(
+	provider: OpenAIProviderId,
+	active: ProviderModel | undefined,
+	registry: ProviderContext["modelRegistry"],
+	executionModel: string | undefined,
+): ProviderModel[] {
 	const seen = new Set<string>();
 	const candidates = [...(active === undefined ? [] : [active]), ...(registry?.getModels?.() ?? [])].filter((candidate) => {
 		if (candidate.provider !== provider || candidate.api !== (provider === "openai" ? "openai-responses" : "openai-codex-responses")) return false;
 		const key = `${candidate.provider}:${candidate.api}:${candidate.id}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
-		return modelSearchRank(candidate)[0] < 3;
+		return executionModel !== undefined || modelSearchRank(candidate)[0] < 3;
 	});
 	candidates.sort((left, right) => {
 		const [leftRank, leftId] = modelSearchRank(left);
@@ -392,9 +400,11 @@ async function selectSearchExecution(provider: OpenAIProviderId, active: Provide
 	if (registry === undefined) {
 		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
 	}
-	const candidates = searchModelCandidates(provider, active, registry);
-	const selected = request.executionModel === undefined ? candidates[0] : candidates.find((candidate) => candidate.id === request.executionModel);
-	if (selected === undefined) {
+	const candidates = searchModelCandidates(provider, active, registry, request.executionModel);
+	const selectedCandidates = request.executionModel === undefined
+		? candidates
+		: candidates.filter((candidate) => candidate.id === request.executionModel);
+	if (selectedCandidates.length === 0) {
 		throw createProviderError({
 			provider,
 			kind: "unsupported",
@@ -404,16 +414,26 @@ async function selectSearchExecution(provider: OpenAIProviderId, active: Provide
 			retryable: false,
 		});
 	}
-	let auth: ProviderAuthResult;
-	try {
-		auth = await registry.getApiKeyAndHeaders(selected);
-	} catch (error) {
-		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
+
+	for (const selected of selectedCandidates) {
+		let auth: ProviderAuthResult;
+		try {
+			auth = await registry.getApiKeyAndHeaders(selected);
+		} catch (error) {
+			throw createProviderError({ provider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
+		}
+		if (auth.ok) return { model: selected, auth };
+		if (request.executionModel !== undefined) {
+			throw createProviderError({ provider, kind: "auth", message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
+		}
 	}
-	if (!auth.ok) {
-		throw createProviderError({ provider, kind: "auth", message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
-	}
-	return { model: selected, auth };
+
+	throw createProviderError({
+		provider,
+		kind: "auth",
+		message: `No authenticated ${provider} Responses model is available for native search`,
+		retryable: false,
+	});
 }
 
 function domainFilters(request: SearchRequest): { allowed_domains?: string[]; blocked_domains?: string[] } | undefined {

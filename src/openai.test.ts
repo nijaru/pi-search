@@ -183,6 +183,78 @@ describe("OpenAIProvider", () => {
 		expect(body?.model).toBe("gpt-5.5");
 	});
 
+	it("prefers an authenticated Luna model for native search", async () => {
+		let authenticatedModel = "";
+		let body: Record<string, unknown> | undefined;
+		const luna = { ...model("openai"), id: "gpt-5.6-luna" };
+		const fallback = { ...model("openai"), id: "gpt-5.5" };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			model: { ...model("openai"), id: "gpt-5.6-sol" },
+			modelRegistry: {
+				getModels: () => [fallback, luna],
+				getApiKeyAndHeaders: async (requested) => { authenticatedModel = requested.id; return { ok: true, apiKey: "registry-key" }; },
+			},
+		});
+		expect(authenticatedModel).toBe("gpt-5.6-luna");
+		expect(body?.model).toBe("gpt-5.6-luna");
+	});
+
+	it("falls back during model selection when Luna authentication is unavailable", async () => {
+		const attempts: string[] = [];
+		let body: Record<string, unknown> | undefined;
+		const luna = { ...model("openai"), id: "gpt-5.6-luna" };
+		const fallback = { ...model("openai"), id: "gpt-5.5" };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			model: { ...model("openai"), id: "gpt-5.6-sol" },
+			modelRegistry: {
+				getModels: () => [fallback, luna],
+				getApiKeyAndHeaders: async (requested) => {
+					attempts.push(requested.id);
+					return requested.id === luna.id ? { ok: false, error: "not configured" } : { ok: true, apiKey: "registry-key" };
+				},
+			},
+		});
+		expect(attempts).toEqual(["gpt-5.6-luna", "gpt-5.5"]);
+		expect(body?.model).toBe("gpt-5.5");
+	});
+
+	it("honors an explicit OpenAI search model, including normally excluded models", async () => {
+		let body: Record<string, unknown> | undefined;
+		const selected = { ...model("openai"), id: "gpt-5.6-pro" };
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			endpoint: "https://example.test/v1/responses",
+			fetchImpl: (async (_input, init) => {
+				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search({ query: "q", executionModel: selected.id }, new AbortController().signal, {
+			model: { ...model("openai"), id: "gpt-5.6-sol" },
+			modelRegistry: {
+				getModels: () => [selected],
+				getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "registry-key" }),
+			},
+		});
+		expect(body?.model).toBe(selected.id);
+	});
+
 	it("selects an authenticated same-provider search model", async () => {
 		let authenticatedModel = "";
 		let body: Record<string, unknown> | undefined;
