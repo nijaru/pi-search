@@ -24,10 +24,14 @@
     {
       "ts": "2026-08-23T21:49:27.59568Z",
       "msg": "Follow-up tightened compact web_fetch URL previews with the same explicit shortening marker; full check still passes."
+    },
+    {
+      "ts": "2026-08-23T22:02:05.939714Z",
+      "msg": "Applied third-party review follow-ups: unified raw-input URL fallback handling, process answer links before compacting collapsed previews, avoid false fetch-preview truncation notices after whitespace normalization, and label expanded fetched previews as untrusted."
     }
   ],
   "created_at": "2026-08-23T21:40:05.695215Z",
-  "updated_at": "2026-08-23T21:49:27.59568Z",
+  "updated_at": "2026-08-23T22:02:05.939714Z",
   "completed_at": "2026-08-23T21:47:53.101439Z",
   "external": {}
 }

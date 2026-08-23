@@ -189,13 +189,14 @@ function compactUsage(usage: SearchResponse["usage"]): string | undefined {
 
 function renderAnswerText(response: SearchResponse, maxLength: number): string {
 	const resultUrls = new Set(response.results.map((result) => normalizeSearchUrl(result.url)?.url ?? result.url));
-	return compactText(response.answer?.text ?? "", maxLength).replace(SEARCH_LINK_PATTERN, (match, label: string | undefined, markdownUrl: string | undefined) => {
+	const rendered = (response.answer?.text ?? "").replace(SEARCH_LINK_PATTERN, (match, label: string | undefined, markdownUrl: string | undefined) => {
 		const rawUrl = markdownUrl ?? match;
 		const canonical = normalizeSearchUrl(rawUrl)?.url;
 		if (canonical === undefined || !resultUrls.has(canonical)) return label === undefined ? UNLISTED_SOURCE_MARKER : `${label} ${UNLISTED_SOURCE_MARKER}`;
 		if (isDisplayUrlShortened(canonical)) return label === undefined ? SHORTENED_SOURCE_MARKER : `${label} ${SHORTENED_SOURCE_MARKER}`;
 		return label === undefined ? renderSafeUrl(canonical) : `[${label}](${renderSafeUrl(canonical)})`;
 	});
+	return compactText(rendered, maxLength);
 }
 
 /** Render useful untrusted search content for model-visible chat. */
@@ -265,7 +266,7 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	if (!expanded && count > limit) text += `\n${theme.fg("muted", `… ${count - limit} more; expand for details`)}`;
 	if (expanded) {
 		if (sourceContents.length > 0) {
-			text += `\n${theme.fg("toolOutput", "Fetched source pages:")}`;
+			text += `\n${theme.fg("toolOutput", "Fetched source pages (untrusted):")}`;
 			for (const page of sourceContents.slice(0, 4)) {
 				const title = compactText(page.title ?? renderSafeUrl(page.url), 180);
 				text += `\n${theme.fg("toolOutput", `  ${title} · ${renderSafeUrl(page.url)} · ${page.content.length} chars`)}`;

@@ -92,8 +92,10 @@ export function renderFetchedResult(response: WebFetchDetails, expanded: boolean
 	if (expanded) {
 		text += `\n${theme.fg("dim", fetchMetadata(response).join(" · "))}`;
 		if (response.content.length > 0) {
-			text += `\n${theme.fg("toolOutput", compactText(response.content, MAX_FETCH_PREVIEW_CHARS))}`;
-			if (response.content.length > MAX_FETCH_PREVIEW_CHARS) text += `\n${theme.fg("warning", "Preview truncated; full content is in tool output.")}`;
+			const normalizedContent = response.content.replace(/\s+/g, " ").trim();
+			text += `\n${theme.fg("muted", "Preview (untrusted):")}`;
+			text += `\n${theme.fg("toolOutput", normalizedContent.slice(0, MAX_FETCH_PREVIEW_CHARS))}`;
+			if (normalizedContent.length > MAX_FETCH_PREVIEW_CHARS) text += `\n${theme.fg("warning", "Preview truncated; full content is in tool output.")}`;
 		}
 	}
 	return text;

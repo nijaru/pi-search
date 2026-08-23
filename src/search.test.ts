@@ -332,7 +332,7 @@ describe("search boundary", () => {
 		const collapsed = renderSearchResult(response, false, theme);
 		const expanded = renderSearchResult(response, true, theme);
 		expect(collapsed).toContain("1 source page fetched");
-		expect(expanded).toContain("Fetched source pages:");
+		expect(expanded).toContain("Fetched source pages (untrusted):");
 		expect(expanded).toContain("Fetched source · https://example.com/source · 23 chars");
 		expect(expanded).toContain("Readable source preview");
 	});
@@ -360,6 +360,21 @@ describe("search boundary", () => {
 		expect(rendered).toContain("[the listed source](https://example.com/)");
 		expect(rendered).toContain("an unlisted source [unlisted source omitted]");
 		expect(rendered).not.toContain("https://evil.example/");
+
+		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const collapsed = renderSearchResult({
+			...successResponse(),
+			results: [{ ...successResponse().results[0]!, url: longUrl }],
+			answer: {
+				text: `See ${longUrl}`,
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [{ url: longUrl }],
+			},
+		}, false, theme);
+		expect(collapsed).toContain("[source URL shortened; full URL is in structured details]");
+		expect(collapsed).not.toContain("[unlisted source omitted]");
 	});
 
 	it("renders compact readable evidence while preserving metadata", () => {

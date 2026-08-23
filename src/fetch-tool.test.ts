@@ -60,6 +60,10 @@ describe("web_fetch tool", () => {
 		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
 		const rendered = renderFetchedResult(details, true, theme);
 		expect(rendered).toContain("Preview truncated; full content is in tool output.");
+
+		const whitespaceDetails = { ...result.details!, content: `${" ".repeat(2_001)}x` };
+		const whitespaceRendered = renderFetchedResult(whitespaceDetails, true, theme);
+		expect(whitespaceRendered).not.toContain("Preview truncated; full content is in tool output.");
 	});
 
 	it("shortens long fetch URLs explicitly while retaining bounded output", async () => {
