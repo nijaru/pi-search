@@ -15,6 +15,7 @@ import { executeSearch } from "./search";
 import { providerContextFromPi } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
 import { searchUrlIdentity } from "./search-cleanup";
+import { renderSafeUrl } from "./url-rendering";
 import { MAX_EXECUTION_MODEL_LENGTH } from "./search";
 
 const ResearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x"] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x">;
@@ -134,7 +135,7 @@ export function renderResearchResponse(response: ResearchResponse, maxChars = MA
 	} else {
 		lines.push("", "Search evidence:");
 		response.results.forEach((result, index) => {
-			lines.push(`${index + 1}. ${compactText(result.title ?? result.domain ?? result.url, 500)}`, `   URL: ${result.url}`);
+			lines.push(`${index + 1}. ${compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), 500)}`, `   URL: ${renderSafeUrl(result.url)}`);
 			if (result.publishedAt !== undefined) lines.push(`   Published: ${compactText(result.publishedAt, 100)}`);
 			if (result.excerpt !== undefined) lines.push(`   Excerpt: ${compactText(result.excerpt, 4_000)}`);
 		});
@@ -142,7 +143,7 @@ export function renderResearchResponse(response: ResearchResponse, maxChars = MA
 	if (response.fetched.length > 0) {
 		lines.push("", "Fetched sources:");
 		response.fetched.forEach((page, index) => {
-			lines.push(`${index + 1}. ${compactText(page.title ?? page.url, 500)}`, `   URL: ${page.url}`, `   Extraction: ${page.extraction} · status ${page.status}`);
+			lines.push(`${index + 1}. ${compactText(page.title ?? renderSafeUrl(page.url), 500)}`, `   URL: ${renderSafeUrl(page.url)}`, `   Extraction: ${page.extraction} · status ${page.status}`);
 			if (page.content.length > 0) lines.push(`   Content:\n${page.content}`);
 		});
 	}
@@ -167,8 +168,8 @@ export function renderResearchResult(response: ResearchResponse, expanded: boole
 	text += theme.fg("muted", ` · ${providerLabel} · ${response.providerCalls} search${response.providerCalls === 1 ? "" : "es"} · ${response.results.length} result${response.results.length === 1 ? "" : "s"} · ${response.fetched.length} fetched`);
 	if (response.warnings.length > 0) text += theme.fg("warning", ` · ${response.warnings.length} warning${response.warnings.length === 1 ? "" : "s"}`);
 	if (expanded) {
-		for (const result of response.results.slice(0, 8)) text += `\n${theme.fg("accent", compactText(result.title ?? result.domain ?? result.url, 160))} ${theme.fg("dim", result.url)}`;
-		for (const page of response.fetched.slice(0, 4)) text += `\n${theme.fg("toolOutput", `${compactText(page.title ?? page.url, 160)} · ${page.extraction} · ${page.content.length} chars`)}`;
+		for (const result of response.results.slice(0, 8)) text += `\n${theme.fg("accent", compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), 160))} ${theme.fg("dim", renderSafeUrl(result.url))}`;
+		for (const page of response.fetched.slice(0, 4)) text += `\n${theme.fg("toolOutput", `${compactText(page.title ?? renderSafeUrl(page.url), 160)} · ${renderSafeUrl(page.url)} · ${page.extraction} · ${page.content.length} chars`)}`;
 		for (const warning of response.warnings) text += `\n${theme.fg("warning", `Warning: ${compactText(warning.message, 300)}`)}`;
 	}
 	return text;
@@ -396,7 +397,7 @@ export async function executeResearch(
 						stopReason = signal?.aborted ? "canceled" : "deadline";
 						break;
 					}
-					warnings.push(warning(`Research fetch failed for ${result.url}: ${toFetchToolError(error).message}`));
+					warnings.push(warning(`Research fetch failed for ${renderSafeUrl(result.url)}: ${toFetchToolError(error).message}`));
 				}
 			}
 		}

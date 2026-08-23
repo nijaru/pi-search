@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Provider, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
-import { createWebResearchTool, executeResearch, renderResearchResponse } from "./research-tool";
+import { createWebResearchTool, executeResearch, renderResearchResponse, renderResearchResult } from "./research-tool";
 
 function context(): never {
 	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
@@ -113,6 +113,43 @@ describe("web_research", () => {
 		expect(rendered).toContain("Search evidence:");
 		expect(rendered).toContain("URL: https://example.com/1");
 		expect(rendered).not.toContain('"results"');
+	});
+
+	it("shortens long URLs explicitly in model and Pi research renderers", () => {
+		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
+		const response = {
+			question: "main",
+			provider: "openai" as const,
+			results: [{ url: longUrl, title: "Long source", provider: "openai" as const, searchQuery: "main" }],
+			fetched: [{
+				url: longUrl,
+				title: "Long page",
+				content: "Fetched content",
+				contentTrust: "untrusted" as const,
+				outputFormat: "markdown" as const,
+				extraction: "markdown" as const,
+				fetchedAt: "2026-01-01T00:00:00.000Z",
+				status: 200,
+				redirectCount: 0,
+				bytesRead: 15,
+				truncated: false,
+				offset: 0,
+				warnings: [],
+			}],
+			stepsCompleted: 1,
+			providerCalls: 1,
+			fetchesCompleted: 1,
+			fetchAttempts: 1,
+			stopReason: "completed" as const,
+			warnings: [],
+		};
+		const rendered = renderResearchResponse(response);
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const tui = renderResearchResult(response, true, theme);
+		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
+		expect(rendered).not.toContain(longUrl);
+		expect(tui).toContain("Long page ·");
+		expect(tui).toContain("[URL shortened; full URL is in structured details]");
 	});
 
 	it("keeps the complete model-visible research result within its budget", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createWebFetchTool, registerWebFetch, renderFetchedContent } from "./fetch-tool";
+import { createWebFetchTool, registerWebFetch, renderFetchedContent, renderFetchedResult } from "./fetch-tool";
 import type { DirectTransport } from "./direct-transport";
 import type { ResponseBody } from "./ssrf";
 
@@ -51,6 +51,24 @@ describe("web_fetch tool", () => {
 			expect(text.text).not.toContain('"content":');
 		}
 		expect(renderFetchedContent(result.details!)).toContain("Characters: 11");
+	});
+
+	it("marks the expanded preview when fetched content is capped", async () => {
+		const tool = createWebFetchTool({ lookup, transport });
+		const result = await tool.execute("call-1", { url: "https://example.test/" }, undefined, undefined, {} as never);
+		const details = { ...result.details!, content: "x".repeat(2_001) };
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const rendered = renderFetchedResult(details, true, theme);
+		expect(rendered).toContain("Preview truncated; full content is in tool output.");
+	});
+
+	it("shortens long fetch URLs explicitly while retaining bounded output", async () => {
+		const tool = createWebFetchTool({ lookup, transport });
+		const result = await tool.execute("call-1", { url: "https://example.test/" }, undefined, undefined, {} as never);
+		const longUrl = `https://example.test/${"a".repeat(3_000)}`;
+		const rendered = renderFetchedContent({ ...result.details!, url: longUrl });
+		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
+		expect(rendered).not.toContain(longUrl);
 	});
 
 	it("keeps the complete model-visible result within the output bound", async () => {

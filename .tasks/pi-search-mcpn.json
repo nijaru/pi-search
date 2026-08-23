@@ -1,0 +1,33 @@
+{
+  "project": "pi-search",
+  "ref": "mcpn",
+  "title": "Harden web tool UI and URL rendering",
+  "description": "Apply the reviewed follow-ups: share safe URL rendering across web_search, web_research, and web_fetch; make long URL truncation explicit/non-misleading; expose source enrichment in the TUI; mark fetch previews as truncated; and make omitted answer links explicit. Preserve structured details and untrusted-content boundaries.",
+  "status": "done",
+  "priority": 2,
+  "labels": [
+    "ux",
+    "ui",
+    "url",
+    "search"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-23T21:47:53.086104Z",
+      "msg": "Implemented shared safe URL rendering for all three web tools, explicit shortened/unlisted source markers, source enrichment previews in web_search, and fetch preview truncation notices. Added deterministic regression coverage; bun run check passes (204 tests, 500 assertions)."
+    },
+    {
+      "ts": "2026-08-23T21:49:27.59568Z",
+      "msg": "Follow-up tightened compact web_fetch URL previews with the same explicit shortening marker; full check still passes."
+    }
+  ],
+  "created_at": "2026-08-23T21:40:05.695215Z",
+  "updated_at": "2026-08-23T21:49:27.59568Z",
+  "completed_at": "2026-08-23T21:47:53.101439Z",
+  "external": {}
+}

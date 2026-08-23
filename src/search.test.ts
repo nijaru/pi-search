@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
-import { createWebSearchTool, registerWebSearch, renderSearchResponse } from "./search-tool";
+import { createWebSearchTool, registerWebSearch, renderSearchResponse, renderSearchResult } from "./search-tool";
 import { executeSearch, executeSearchSelection, validateSearchRequest } from "./search";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -311,14 +311,55 @@ describe("search boundary", () => {
 		expect(expanded).toContain("Source 5");
 	});
 
-	it("bounds rendered source URLs without changing structured evidence", () => {
+	it("shows fetched source context in the expanded Pi renderer", () => {
+		const page: FetchedContent = {
+			url: "https://example.com/source",
+			title: "Fetched source",
+			content: "Readable source preview",
+			contentTrust: "untrusted",
+			outputFormat: "markdown",
+			extraction: "markdown",
+			fetchedAt: "2026-01-01T00:00:00.000Z",
+			status: 200,
+			redirectCount: 0,
+			bytesRead: 24,
+			truncated: false,
+			offset: 0,
+			warnings: [],
+		};
+		const response = { ...successResponse(), sourceContents: [page] };
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const collapsed = renderSearchResult(response, false, theme);
+		const expanded = renderSearchResult(response, true, theme);
+		expect(collapsed).toContain("1 source page fetched");
+		expect(expanded).toContain("Fetched source pages:");
+		expect(expanded).toContain("Fetched source · https://example.com/source · 23 chars");
+		expect(expanded).toContain("Readable source preview");
+	});
+
+	it("bounds rendered source URLs without presenting a shortened URL as exact", () => {
 		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
 		const rendered = renderSearchResponse({
 			...successResponse(),
 			results: [{ ...successResponse().results[0]!, url: longUrl }],
 		});
-		expect(rendered).toContain(`${longUrl.slice(0, 2_047)}…`);
+		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
 		expect(rendered).not.toContain(longUrl);
+	});
+
+	it("marks answer links that are not listed search sources", () => {
+		const rendered = renderSearchResponse({
+			...successResponse(),
+			answer: {
+				text: "See [the listed source](https://example.com/) and [an unlisted source](https://evil.example/).",
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [{ url: "https://example.com/" }],
+			},
+		});
+		expect(rendered).toContain("[the listed source](https://example.com/)");
+		expect(rendered).toContain("an unlisted source [unlisted source omitted]");
+		expect(rendered).not.toContain("https://evil.example/");
 	});
 
 	it("renders compact readable evidence while preserving metadata", () => {
