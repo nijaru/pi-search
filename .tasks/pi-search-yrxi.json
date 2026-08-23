@@ -1,0 +1,28 @@
+{
+  "project": "pi-search",
+  "ref": "yrxi",
+  "title": "Canonicalize repeated percent-encoded search result URLs",
+  "description": "Investigate and fix pi-search URLs that surface repeated percent-encoding such as %2525..., preserving useful canonical links or safely truncating malformed URLs. Do not edit pi-fast-mode.",
+  "status": "done",
+  "priority": 2,
+  "labels": [
+    "bug",
+    "url",
+    "search"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-23T21:28:09.11362Z",
+      "msg": "Root cause: provider URLs pass through URL parsing that preserves nested percent encoding; shared cleanup only stripped fragments/host noise, and renderers emitted raw result/answer URLs. Implemented bounded cleanup of path tails matching nested %25 encoding, shared it with provider URL parsers, sanitized answer links to normalized returned sources, and bounded rendered URLs. Offline tests cover the help.openai.com-style URL and enrichment/rendering; typecheck and full test suite pass."
+    }
+  ],
+  "created_at": "2026-08-23T21:00:57.05398Z",
+  "updated_at": "2026-08-23T21:30:18.474132Z",
+  "completed_at": "2026-08-23T21:30:18.474132Z",
+  "external": {}
+}

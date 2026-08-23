@@ -14,7 +14,7 @@ import type {
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
-import { matchesSearchDomain } from "./search-cleanup";
+import { matchesSearchDomain, normalizeSearchUrl } from "./search-cleanup";
 
 export const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 export const DEFAULT_BRAVE_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -180,16 +180,9 @@ function optionalTimestamp(value: unknown, label: string): string | undefined {
 function normalizedUrl(value: unknown): { url: string; domain: string } {
 	if (typeof value !== "string" || value.trim().length === 0) return malformed("web.results[].url is missing");
 	if (value.length > 8_192) return malformed("web.results[].url exceeds the supported length limit");
-	const raw = value.trim();
-	try {
-		const url = new URL(raw);
-		if (url.protocol !== "http:" && url.protocol !== "https:") {
-			return malformed("web.results[].url is not an HTTP(S) URL");
-		}
-		return { url: url.toString(), domain: url.hostname.toLowerCase().replace(/\.$/, "") };
-	} catch (error) {
-		return malformed("web.results[].url is not a valid URL", error);
-	}
+	const normalized = normalizeSearchUrl(value);
+	if (normalized === undefined) return malformed("web.results[].url is not a valid HTTP(S) URL");
+	return { url: normalized.url, domain: normalized.domain };
 }
 
 function resultAllowed(result: SearchResult, request: SearchRequest): boolean {

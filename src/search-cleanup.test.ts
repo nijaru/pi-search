@@ -105,6 +105,25 @@ describe("search result cleanup", () => {
 		expect(cleanupSearchResponse({ ...response, answer: { ...response.answer!, citations: [{ url: "https://example.com" }] } }, validateSearchRequest({ query: "q", answerMode: "evidence" }), "openai").answer).toBeUndefined();
 	});
 
+	it("removes nested percent-encoded path tails without decoding reserved characters", () => {
+		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
+		expect(cleanupSearchResponse({
+			query: "q",
+			provider: "brave",
+			results: [{ url: nested, provider: "brave", searchQuery: "q" }],
+			appliedOptions: [],
+			warnings: [],
+		}, validateSearchRequest({ query: "q" }), "brave").results).toEqual([{
+			url: "https://help.openai.com/en/articles/20001106-codex-rate-card",
+			sourceUrl: nested,
+			domain: "help.openai.com",
+			provider: "brave",
+			searchQuery: "q",
+		}]);
+		expect(searchUrlIdentity("https://example.com/%2525literal")).toBe("https://example.com/%2525literal");
+		expect(searchUrlIdentity("https://example.com/%2Freserved%3Fvalue")).toBe("https://example.com/%2Freserved%3Fvalue");
+	});
+
 	it("uses the same conservative identity for research fetch deduplication", () => {
 		expect(searchUrlIdentity("https://EXAMPLE.com:443/page#part")).toBe("https://example.com/page");
 		expect(searchUrlIdentity("https://example.com/page")).toBe("https://example.com/page");

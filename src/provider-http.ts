@@ -1,6 +1,7 @@
 import type { ProviderId, ProviderRateLimitInfo, ProviderRateLimitWindow } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
+import { normalizeSearchUrl } from "./search-cleanup";
 
 export type SearchHttpFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -186,15 +187,9 @@ export function optionalString(value: unknown, maxLength = Number.POSITIVE_INFIN
 	return typeof value === "string" && value.trim().length > 0 ? value.slice(0, maxLength) : undefined;
 }
 
-export function httpSource(value: unknown, provider: ProviderId): { url: string; domain: string } | undefined {
-	if (typeof value !== "string" || value.trim().length === 0 || value.length > 8_192) return undefined;
-	try {
-		const url = new URL(value);
-		if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-		return { url: url.toString(), domain: url.hostname.toLowerCase() };
-	} catch {
-		return undefined;
-	}
+export function httpSource(value: unknown, _provider: ProviderId): { url: string; domain: string } | undefined {
+	const normalized = normalizeSearchUrl(value);
+	return normalized === undefined ? undefined : { url: normalized.url, domain: normalized.domain };
 }
 
 export function optionalTimestamp(value: unknown, maxLength = 100): string | undefined {

@@ -17,6 +17,7 @@ import { applyProviderHeaders } from "./model-selection";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { parseProviderRateLimits } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { normalizeSearchUrl } from "./search-cleanup";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 export const CODEX_RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
@@ -191,20 +192,15 @@ function cleanSourceUrl(rawUrl: string): string {
 }
 
 function parseHttpUrl(value: unknown): { url: string; sourceUrl?: string; domain: string } | undefined {
-	const rawUrl = typeof value === "string" && value.trim().length > 0 ? value : undefined;
+	const rawUrl = typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 	if (rawUrl === undefined || rawUrl.length > MAX_SOURCE_URL_LENGTH) return undefined;
-	try {
-		const parsed = new URL(rawUrl);
-		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
-		const url = cleanSourceUrl(rawUrl);
-		return {
-			url,
-			...(url === rawUrl ? {} : { sourceUrl: rawUrl }),
-			domain: new URL(url).hostname.toLowerCase(),
-		};
-	} catch {
-		return undefined;
-	}
+	const normalized = normalizeSearchUrl(cleanSourceUrl(rawUrl));
+	if (normalized === undefined) return undefined;
+	return {
+		url: normalized.url,
+		...(normalized.url === rawUrl ? {} : { sourceUrl: rawUrl }),
+		domain: normalized.domain,
+	};
 }
 
 function candidateFromRecord(value: unknown): SourceCandidate | undefined {

@@ -8,6 +8,9 @@ export const MAX_SEARCH_SOURCE_ID_LENGTH = 500;
 export const MAX_SEARCH_QUERY_LENGTH = 2_000;
 const MAX_SEARCH_ANSWER_LENGTH = 8_000;
 const MAX_SEARCH_CITATIONS = 20;
+// A run this deep is almost always an accidentally nested URL encoding. Keep
+// one safe path prefix rather than surfacing or fetching the encoded tail.
+const REPEATED_PERCENT_ENCODING = /%(?:25){3,}/i;
 
 export interface CanonicalSearchUrl {
 	readonly url: string;
@@ -22,7 +25,7 @@ function boundedString(value: unknown, maxLength: number): string | undefined {
 	return trimmed.slice(0, maxLength);
 }
 
-/** Normalize only URL components whose identity is unambiguous. */
+/** Normalize URL identity while preserving opaque encoding except for bounded nested-encoding tails. */
 export function normalizeSearchUrl(value: unknown): CanonicalSearchUrl | undefined {
 	if (typeof value !== "string") return undefined;
 	const raw = value.trim();
@@ -31,6 +34,14 @@ export function normalizeSearchUrl(value: unknown): CanonicalSearchUrl | undefin
 		const parsed = new URL(raw);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
 		if (parsed.username || parsed.password) return undefined;
+		const repeatedEncoding = REPEATED_PERCENT_ENCODING.exec(parsed.pathname);
+		if (repeatedEncoding !== null && repeatedEncoding.index > 0) {
+			// The prefix is the useful page path. Dropping the encoded suffix is
+			// safer than repeatedly decoding reserved URL characters or sending
+			// a provider-generated encoding bomb through source enrichment.
+			parsed.pathname = parsed.pathname.slice(0, repeatedEncoding.index);
+			parsed.search = "";
+		}
 		parsed.hash = "";
 		parsed.hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
 		const url = parsed.href;

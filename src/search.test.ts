@@ -140,6 +140,35 @@ describe("search boundary", () => {
 		expect(fallbackCalls).toBe(0);
 	});
 
+	it("canonicalizes nested percent-encoded source URLs before rendering and enrichment", async () => {
+		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
+		const canonical = "https://help.openai.com/en/articles/20001106-codex-rate-card";
+		let fetchedUrl = "";
+		const tool = createWebSearchTool(makeProvider(async (request) => ({
+			query: request.query,
+			results: [{ url: nested, provider: "brave", searchQuery: request.query, title: "Codex rate card" }],
+			answer: { text: `See [the rate card](${nested})`, contentTrust: "untrusted", provider: "brave", citations: [{ url: nested }] },
+			provider: "brave",
+			appliedOptions: [],
+			warnings: [],
+		})), {
+			fetcher: async (request) => {
+				fetchedUrl = request.url;
+				return { url: canonical, content: "Rate card", contentTrust: "untrusted", outputFormat: "markdown", extraction: "markdown", fetchedAt: "2026-01-01T00:00:00.000Z", status: 200, redirectCount: 0, bytesRead: 9, truncated: false, offset: 0, warnings: [] };
+			},
+		});
+		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		expect(result.details?.results[0]).toMatchObject({ url: canonical, sourceUrl: nested });
+		expect(fetchedUrl).toBe(canonical);
+		const content = result.content[0];
+		expect(content.type).toBe("text");
+		if (content.type === "text") {
+			expect(content.text).toContain(canonical);
+			expect(content.text).not.toContain("%252525");
+			expect(content.text).toContain("the rate card");
+		}
+	});
+
 	it("enriches selected sources through the bounded fetch path only when requested", async () => {
 		const page: FetchedContent = {
 			url: "https://example.com/",
@@ -280,6 +309,16 @@ describe("search boundary", () => {
 		expect(collapsed).toContain("2 more; expand for details");
 		expect(collapsed).not.toContain("Source 4");
 		expect(expanded).toContain("Source 5");
+	});
+
+	it("bounds rendered source URLs without changing structured evidence", () => {
+		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
+		const rendered = renderSearchResponse({
+			...successResponse(),
+			results: [{ ...successResponse().results[0]!, url: longUrl }],
+		});
+		expect(rendered).toContain(`${longUrl.slice(0, 2_047)}…`);
+		expect(rendered).not.toContain(longUrl);
 	});
 
 	it("renders compact readable evidence while preserving metadata", () => {

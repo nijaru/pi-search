@@ -11,7 +11,7 @@ import type { FetchedContent, Provider, ProviderContext, ProviderModel, SearchPr
 import { toFetchToolError } from "./fetch-errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
 import { SearchToolError, toSearchToolError } from "./errors";
-import { searchUrlIdentity } from "./search-cleanup";
+import { normalizeSearchUrl, searchUrlIdentity } from "./search-cleanup";
 import {
 	DEFAULT_SEARCH_TIMEOUT_MS,
 	DEFAULT_MAX_RESULTS,
@@ -88,6 +88,8 @@ const MAX_SEARCH_ANSWER_CHARS = 8_000;
 const MAX_SEARCH_CONTENT_CHARS = MAX_CONTENT_MAX_LENGTH;
 const MAX_SEARCH_CONTENT_RESULTS = MAX_CONTENT_RESULTS;
 const SEARCH_WARNING_BUDGET_CHARS = 1_000;
+const MAX_RENDERED_SEARCH_URL_LENGTH = 2_048;
+const SEARCH_LINK_PATTERN = /\[([^\]\r\n]{1,500})\]\((https?:\/\/[^\s<>)\]]+)\)|https?:\/\/[^\s<>\]\)]+/gi;
 
 export interface WebSearchToolOptions {
 	readonly timeoutMs?: number;
@@ -183,6 +185,23 @@ function compactUsage(usage: SearchResponse["usage"]): string | undefined {
 	return parts.length === 0 ? undefined : parts.join("; ");
 }
 
+function renderedSearchUrl(value: string): string {
+	const canonical = normalizeSearchUrl(value)?.url ?? value;
+	return canonical.length <= MAX_RENDERED_SEARCH_URL_LENGTH
+		? canonical
+		: `${canonical.slice(0, MAX_RENDERED_SEARCH_URL_LENGTH - 1)}…`;
+}
+
+function renderAnswerText(response: SearchResponse, maxLength: number): string {
+	const resultUrls = new Set(response.results.map((result) => normalizeSearchUrl(result.url)?.url ?? result.url));
+	return compactText(response.answer?.text ?? "", maxLength).replace(SEARCH_LINK_PATTERN, (match, label: string | undefined, markdownUrl: string | undefined) => {
+		const rawUrl = markdownUrl ?? match;
+		const canonical = normalizeSearchUrl(rawUrl)?.url;
+		if (canonical === undefined || !resultUrls.has(canonical)) return label ?? "[source link omitted]";
+		return label === undefined ? renderedSearchUrl(canonical) : `[${label}](${renderedSearchUrl(canonical)})`;
+	});
+}
+
 /** Render useful untrusted search content for model-visible chat. */
 export function renderSearchResponse(response: SearchResponse): string {
 	const providerLabel = response.executionModel === undefined ? response.provider : `${response.provider}/${response.executionModel}`;
@@ -190,10 +209,10 @@ export function renderSearchResponse(response: SearchResponse): string {
 	if (response.latencyMs !== undefined) lines[1] += ` (${response.latencyMs}ms)`;
 	if (response.attemptedProviders !== undefined && response.attemptedProviders.length > 1) lines.push(`Attempted: ${response.attemptedProviders.join(" → ")}`);
 	if (response.answer !== undefined) {
-		lines.push("", "Answer (untrusted provider output; verify against sources):", compactText(response.answer.text, MAX_SEARCH_ANSWER_CHARS));
+		lines.push("", "Answer (untrusted provider output; verify against sources):", renderAnswerText(response, MAX_SEARCH_ANSWER_CHARS));
 		if (response.answer.citations.length > 0) {
 			lines.push("", "Citations:");
-			for (const citation of response.answer.citations.slice(0, 20)) lines.push(`- ${compactText(citation.title ?? citation.url, MAX_SEARCH_TITLE_CHARS)}: ${citation.url}`);
+			for (const citation of response.answer.citations.slice(0, 20)) lines.push(`- ${compactText(citation.title ?? citation.url, MAX_SEARCH_TITLE_CHARS)}: ${renderedSearchUrl(citation.url)}`);
 		}
 	}
 	if (response.results.length === 0) {
@@ -202,14 +221,14 @@ export function renderSearchResponse(response: SearchResponse): string {
 		lines.push("", "Sources:");
 		response.results.forEach((result, index) => {
 			const title = compactText(result.title ?? result.domain ?? result.url, MAX_SEARCH_TITLE_CHARS);
-			lines.push(`[${index + 1}] ${title}`, `URL: ${result.url}`);
+			lines.push(`[${index + 1}] ${title}`, `URL: ${renderedSearchUrl(result.url)}`);
 			if (result.publishedAt !== undefined) lines.push(`Published: ${compactText(result.publishedAt, 100)}`);
 			if (result.excerpt !== undefined) lines.push(`Excerpt: ${compactText(result.excerpt, MAX_SEARCH_EXCERPT_CHARS)}`);
 		});
 	}
 	if (response.sourceContents !== undefined && response.sourceContents.length > 0) {
 		lines.push("", "Fetched source context (untrusted):");
-		for (const page of response.sourceContents) lines.push(`${compactText(page.title ?? page.url, MAX_SEARCH_TITLE_CHARS)} — ${page.url}`, page.content);
+		for (const page of response.sourceContents) lines.push(`${compactText(page.title ?? page.url, MAX_SEARCH_TITLE_CHARS)} — ${renderedSearchUrl(page.url)}`, page.content);
 	}
 	if (response.appliedOptions.length > 0) lines.push(`Applied: ${response.appliedOptions.join(", ")}`);
 	for (const warning of response.warnings) lines.push(`Warning [${warning.code}]: ${compactText(warning.message, 1_000)}`);
@@ -222,7 +241,7 @@ export function renderSearchResponse(response: SearchResponse): string {
 function searchResultPreview(result: SearchResponse["results"][number]): string {
 	const title = compactText(result.title ?? result.domain ?? result.url, 180);
 	const excerpt = result.excerpt === undefined ? undefined : compactText(result.excerpt, 240);
-	const lines = [`${title}`, `  ${result.url}`];
+	const lines = [`${title}`, `  ${renderedSearchUrl(result.url)}`];
 	if (excerpt !== undefined && excerpt.length > 0) lines.push(`  ${excerpt}`);
 	return lines.join("\n");
 }
@@ -234,12 +253,12 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	const providerLabel = response.executionModel === undefined ? response.provider : `${response.provider}/${response.executionModel}`;
 	const meta = [providerLabel, response.latencyMs === undefined ? undefined : `${response.latencyMs}ms`].filter(Boolean).join(" · ");
 	let text = theme.fg(response.warnings.length > 0 ? "warning" : "success", status);
-	if (response.answer !== undefined) text += `\n${theme.fg("accent", `Answer: ${compactText(response.answer.text, expanded ? 500 : 220)}`)}`;
+	if (response.answer !== undefined) text += `\n${theme.fg("accent", `Answer: ${renderAnswerText(response, expanded ? 500 : 220)}`)}`;
 	if (meta.length > 0) text += theme.fg("muted", ` · ${meta}`);
 	const limit = expanded ? count : Math.min(count, 3);
 	for (const result of response.results.slice(0, limit)) {
 		text += `\n${theme.fg("accent", searchResultPreview(result).split("\n")[0]!)}`;
-		text += `\n${theme.fg("dim", `  ${result.url}`)}`;
+		text += `\n${theme.fg("dim", `  ${renderedSearchUrl(result.url)}`)}`;
 		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${result.domain}`)}`;
 		if (expanded && result.publishedAt !== undefined) text += `\n${theme.fg("muted", `  Published: ${result.publishedAt}`)}`;
 		if (expanded && result.sourceId !== undefined) text += `\n${theme.fg("muted", `  Source ID: ${result.sourceId}`)}`;
