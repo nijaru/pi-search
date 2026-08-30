@@ -100,6 +100,7 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	const sourceId = boundedString(result.sourceId, MAX_SEARCH_SOURCE_ID_LENGTH);
 	const score = optionalScore(result.score);
 	const suppliedSource = normalizeSearchUrl(result.sourceUrl);
+	const sourcePage = normalizeSearchUrl(result.sourcePageUrl);
 	const sourceUrl = suppliedSource === undefined
 		? parsed.sourceUrl
 		: suppliedSource.url === parsed.url
@@ -108,6 +109,7 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	return {
 		url: parsed.url,
 		...(sourceUrl === undefined ? {} : { sourceUrl }),
+		...(sourcePage === undefined || sourcePage.url === parsed.url ? {} : { sourcePageUrl: sourcePage.url }),
 		...(title === undefined ? {} : { title }),
 		domain: parsed.domain,
 		...(publishedAt === undefined ? {} : { publishedAt }),
@@ -157,6 +159,7 @@ function mergeResult(current: SearchResult, candidate: SearchResult): SearchResu
 	return {
 		...current,
 		...(current.sourceUrl === undefined && candidate.sourceUrl !== undefined ? { sourceUrl: candidate.sourceUrl } : {}),
+		...(current.sourcePageUrl === undefined && candidate.sourcePageUrl !== undefined ? { sourcePageUrl: candidate.sourcePageUrl } : {}),
 		...(current.title === undefined && candidate.title !== undefined ? { title: candidate.title } : {}),
 		...(current.publishedAt === undefined && candidate.publishedAt !== undefined ? { publishedAt: candidate.publishedAt } : {}),
 		...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),

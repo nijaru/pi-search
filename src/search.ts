@@ -218,6 +218,7 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	const userLocation = normalizeLocation(request.userLocation);
 	const searchContentTypes = normalizeContentTypes(request.searchContentTypes);
 	const imageSettings = normalizeImageSettings(request.imageSettings);
+	if (imageSettings !== undefined && !searchContentTypes?.includes("image")) throw invalidRequest("Search imageSettings requires searchContentTypes to include image");
 	const searchContextSize = request.searchContextSize ?? undefined;
 	if (searchContextSize !== undefined && !["low", "medium", "high"].includes(searchContextSize)) throw invalidRequest("Search searchContextSize must be low, medium, or high");
 	const returnTokenBudget = request.returnTokenBudget ?? undefined;

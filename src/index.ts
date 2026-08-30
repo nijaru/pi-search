@@ -15,7 +15,7 @@ import { registerWebSearch } from "./search-tool";
 
 /**
  * Native grounding is selected for supported active models. Exa is the
- * configured non-native default when its key is present; Brave is the paced
+ * metered non-native default only when explicitly allowed; Brave is the paced
  * last-resort keyword path. Automatic availability failures may use one
  * visible fallback.
  */
@@ -38,7 +38,9 @@ export default function (pi: ExtensionAPI): void {
 	const exa = createExaProvider({ apiKey: exaKey });
 	const parallel = createParallelProvider({ apiKey: parallelKey });
 	const x = createXProvider({ bearerToken: xToken });
-	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1" ? "allow-configured-metered" : "free-only";
+	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1"
+		? "allow-configured-metered"
+		: process.env.PI_SEARCH_PREFER_FREE === "1" ? "prefer-free" : "free-only";
 	const braveFreeCapacityConfigured = braveFreeOnly;
 	const route = createSearchRouter({
 		openai,

@@ -322,6 +322,38 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
+	it("includes structured image results and preserves their source page", () => {
+		const result = normalizeOpenAIResponse({
+			output: [{
+				type: "web_search_call",
+				results: [{ type: "image_result", image_url: "https://cdn.example/image.jpg", source_website_url: "https://example.com/gallery", caption: "Example image" }],
+			}],
+		}, { query: "example", searchContentTypes: ["image"] }, "openai");
+		expect(result.results).toEqual([{
+			url: "https://cdn.example/image.jpg",
+			sourcePageUrl: "https://example.com/gallery",
+			title: "Example image",
+			domain: "cdn.example",
+			excerpt: "Example image",
+			provider: "openai",
+			searchQuery: "example",
+		}]);
+	});
+
+	it("preserves citation offsets relative to the returned answer text", () => {
+		const result = normalizeOpenAIResponse({
+			output: [{
+				type: "message",
+				content: [{ type: "output_text", text: "  Fact\ncontinued  ", annotations: [{ type: "url_citation", url: "https://example.com/source", start_index: 2, end_index: 6 }] }],
+			}, {
+				type: "web_search_call",
+				results: [{ url: "https://example.com/source", title: "Source" }],
+			}],
+		}, { query: "q" }, "openai");
+		expect(result.answer?.text).toBe("  Fact\ncontinued  ");
+		expect(result.answer?.citations[0]).toMatchObject({ startIndex: 2, endIndex: 6 });
+	});
+
 	it("sends allowed and blocked domain filters to native search", async () => {
 		let body: Record<string, unknown> | undefined;
 		const provider = createOpenAIProvider({
@@ -352,8 +384,9 @@ describe("OpenAIProvider", () => {
 			external_web_access: false,
 			user_location: { type: "approximate", country: "US", city: "Austin" },
 			search_content_types: ["text", "image"],
-			image_settings: { maxResults: 3, caption: true },
+			image_settings: { max_results: 3, caption: true },
 		}]);
+		expect(plan.body.include).toEqual(["web_search_call.action.sources", "web_search_call.results"]);
 		expect(plan.appliedOptions).toEqual(expect.arrayContaining(["searchContextSize", "returnTokenBudget", "externalWebAccess", "userLocation", "searchContentTypes", "imageSettings"]));
 	});
 

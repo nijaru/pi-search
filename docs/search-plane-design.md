@@ -33,9 +33,11 @@ not only on the active model:
 3. an active Gemini or xAI Responses model uses its native grounding;
 4. explicit `gemini`, `xai`, or `xai-x` hints may resolve a compatible registry
    model through `executionModel` without changing the active model;
-5. configured Exa is the automatic direct path for other models;
-6. configured Brave is the last direct path when Exa is unavailable and its
-   free-mode admission policy allows it;
+5. configured Exa is the automatic direct path for other models only when
+   metered search is allowed; an explicit Exa hint is always intentional;
+6. configured Brave is the automatic direct path in free-only mode, or the
+   preferred path under `PI_SEARCH_PREFER_FREE=1`, when its free-mode admission
+   policy allows it;
 7. Parallel and exact X search remain explicit capabilities.
 
 Cross-provider native search is an intentional use of credentials already

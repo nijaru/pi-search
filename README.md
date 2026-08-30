@@ -21,11 +21,11 @@ Pi tools:
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
-- Other/local models use configured Exa automatically when `EXA_API_KEY` is
-  available; Exa returns semantic results with excerpts and reported usage.
-- When Exa is unavailable, configured Brave is the conservative paced
-  keyword/fresh path. Parallel and the official X API remain explicit
-  providers.
+- Other/local models use configured Exa automatically only when metered search
+  is allowed; Exa returns semantic results with excerpts and reported usage.
+- In free-only mode, configured Brave is the conservative paced keyword/fresh
+  path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered Exa.
+  Parallel and the official X API remain explicit providers.
 - Automatic routing permits at most one visible fallback after a safe
   authentication, rate-limit, or unavailable failure. Network, timeout, and
   post-dispatch HTTP failures remain final because their effects are uncertain.
@@ -43,8 +43,12 @@ The extension reads credentials only at construction or through Pi's model
 registry; it never logs keys.
 
 ```bash
-# Preferred non-native/local-model search
+# Optional metered semantic search for non-native/local models
 export EXA_API_KEY=...
+# Allow Exa (and deliberate metered fallback) in automatic routing:
+# export PI_SEARCH_ALLOW_METERED=1
+# Prefer admitted free-mode Brave before Exa, but allow Exa if Brave is absent:
+# export PI_SEARCH_PREFER_FREE=1
 
 # Optional last-resort keyword/fresh search
 export BRAVE_API_KEY=...
@@ -54,6 +58,7 @@ export BRAVE_API_KEY=...
 # metered Brave with the opt-in below.
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
+# Explicit `provider: "exa"` remains an intentional per-call opt-in.
 
 # Explicit secondary providers
 export PARALLEL_API_KEY=...

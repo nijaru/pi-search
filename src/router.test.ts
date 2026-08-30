@@ -26,7 +26,7 @@ function availableModel(provider: string, api: string, id = "gpt-5.5"): Record<s
 }
 
 describe("search provider router", () => {
-	const nativeOpenAI = provider("openai", { keyword: true, freshness: true, domainFilter: true });
+	const nativeOpenAI = provider("openai", { keyword: true, freshness: true, domainFilter: true }, "modelRegistry");
 	const nativeCodex = provider("openai-codex", { keyword: true, freshness: true, domainFilter: true });
 	const nativeGemini = provider("gemini", { freshness: true, semantic: true }, "modelRegistry");
 	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true }, "modelRegistry");
@@ -42,7 +42,7 @@ describe("search provider router", () => {
 	});
 
 	it("uses an authenticated registry OpenAI model before direct search", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true });
+		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		const selected = route({ query: "q" }, context("openrouter", "openai-completions", [availableModel("openai", "openai-responses")]));
 		expect(selected.provider.id).toBe("openai");
 		expect(selected.automatic).toBe(true);
@@ -50,7 +50,7 @@ describe("search provider router", () => {
 	});
 
 	it("uses configured Exa before Brave for non-native search", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "allow-configured-metered" });
 		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("exa");
 		expect(route({ query: "q" }, context("openrouter", "openai-completions")).provider.id).toBe("exa");
 	});
@@ -59,6 +59,16 @@ describe("search provider router", () => {
 		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("brave");
 		expect(route({ query: "q" }, context("openrouter", "openai-completions")).provider.id).toBe("brave");
+	});
+
+	it("does not automatically spend configured Exa in free-only mode", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true });
+		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/No eligible search provider/);
+	});
+
+	it("prefers admitted Brave over metered Exa", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "prefer-free" });
+		expect(route({ query: "q" }, context("anthropic")).provider.id).toBe("brave");
 	});
 
 	it("selects configured native grounding before Brave without an extra opt-in", () => {
@@ -71,13 +81,18 @@ describe("search provider router", () => {
 	});
 
 	it("does not dispatch active Gemini when it cannot honor a hard domain filter", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, exa, exaConfigured: true });
+		const route = createSearchRouter({ gemini: nativeGemini, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("google", "google-generative-ai")).provider.id).toBe("exa");
 	});
 
 	it("does not silently drop hard date constraints on native OpenAI", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true });
+		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("openai", "openai-responses")).provider.id).toBe("exa");
+	});
+
+	it("allows an explicit same-provider execution model from the registry", () => {
+		const route = createSearchRouter({ openai: nativeOpenAI });
+		expect(route({ query: "q", providerHint: "openai", executionModel: "gpt-5.6" }, context("openai", "openai-responses", [availableModel("openai", "openai-responses", "gpt-5.6")])).provider.id).toBe("openai");
 	});
 
 	it("allows explicit registry-backed Gemini and xAI execution", () => {

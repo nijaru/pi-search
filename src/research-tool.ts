@@ -377,7 +377,8 @@ export async function executeResearch(
 					if ((stopReason === "completed" || stopReason === "budget") && (fetchAttempts < fetchLimit || stepsCompleted >= normalized.budget.maxSteps)) stopReason = "budget";
 					break;
 				}
-				const fetchIdentity = searchUrlIdentity(result.url);
+				const fetchUrl = result.sourcePageUrl ?? result.url;
+				const fetchIdentity = searchUrlIdentity(fetchUrl);
 				if (fetchIdentity === undefined || seenUrls.has(fetchIdentity)) continue;
 				seenUrls.add(fetchIdentity);
 				if (deadlineController.signal.aborted || remaining(deadline) <= 1) {
@@ -387,7 +388,7 @@ export async function executeResearch(
 				stepsCompleted += 1;
 				fetchAttempts += 1;
 				try {
-					const page = await fetchContent({ url: result.url, maxLength: Math.min(MAX_FETCH_LENGTH, normalized.budget.maxOutputChars), readable: true }, deadlineController.signal, {
+					const page = await fetchContent({ url: fetchUrl, maxLength: Math.min(MAX_FETCH_LENGTH, normalized.budget.maxOutputChars), readable: true }, deadlineController.signal, {
 						...options,
 						timeoutMs: remaining(deadline),
 					});
@@ -405,7 +406,7 @@ export async function executeResearch(
 						stopReason = signal?.aborted ? "canceled" : "deadline";
 						break;
 					}
-					warnings.push(warning(`Research fetch failed for ${renderSafeUrl(result.url)}: ${toFetchToolError(error).message}`));
+					warnings.push(warning(`Research fetch failed for ${renderSafeUrl(fetchUrl)}: ${toFetchToolError(error).message}`));
 				}
 			}
 		}

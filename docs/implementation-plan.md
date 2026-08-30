@@ -15,8 +15,9 @@ This is the tracked source of truth for implementation order.
 - Native OpenAI Responses search and standalone Codex `alpha/search` are the
   first routes for compatible active models and for authenticated same-provider models available in Pi's registry
   when another model is active.
-- Exa is the automatic non-native path when `EXA_API_KEY` is configured;
-  Brave remains a paced last-resort keyword path.
+- Exa is the automatic non-native path only when metered search is allowed;
+  `PI_SEARCH_PREFER_FREE=1` prefers admitted Brave before Exa, while free-only
+  mode keeps Exa explicit and Brave paced.
 - Automatic routing permits one visible fallback only after an authentication,
   rate-limit, or unavailable failure known not to have produced a billable
   result; explicit provider hints never fall through.

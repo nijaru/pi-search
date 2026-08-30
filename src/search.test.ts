@@ -3,6 +3,7 @@ import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./
 import { createProviderError, SearchToolError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
 import { createWebSearchTool, registerWebSearch, renderSearchResponse, renderSearchResult } from "./search-tool";
+import { createSearchRouter } from "./router";
 import { executeSearch, executeSearchSelection, validateSearchRequest } from "./search";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -57,6 +58,7 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-02-30" } })).toThrow("ISO-8601");
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-01T12:00" } })).toThrow("ISO-8601");
 		expect(() => validateSearchRequest({ query: "q", social: { includeHandles: ["xai"], excludeHandles: ["@xai"] } })).toThrow("both included and excluded");
+		expect(() => validateSearchRequest({ query: "q", imageSettings: { caption: true } })).toThrow("requires searchContentTypes to include image");
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {
@@ -185,11 +187,14 @@ describe("search boundary", () => {
 			warnings: [],
 		};
 		let fetchedUrl = "";
-		const tool = createWebSearchTool(makeProvider(async (request) => successResponse(request.query)), {
+		const tool = createWebSearchTool(makeProvider(async (request) => ({
+			...successResponse(request.query),
+			results: [{ ...successResponse(request.query).results[0]!, sourcePageUrl: "https://example.com/source-page" }],
+		})), {
 			fetcher: async (request) => { fetchedUrl = request.url; return page; },
 		});
 		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
-		expect(fetchedUrl).toBe("https://example.com/");
+		expect(fetchedUrl).toBe("https://example.com/source-page");
 		expect(result.details?.sourceContents?.[0]?.content).toBe("Readable source content");
 	});
 
@@ -460,6 +465,26 @@ describe("search boundary", () => {
 		await tool.execute("call-1", { query: "q" }, undefined, undefined, context);
 		expect(selected).toBe(true);
 		expect(authResult).toEqual({ ok: true, apiKey: "test-key" });
+	});
+
+	it("executes the selected router provider through the tool boundary", async () => {
+		const openai: Provider = {
+			id: "openai",
+			capabilities: { domainFilter: true },
+			profile: { auth: "modelRegistry", costModel: "unknown" },
+			search: async (request) => ({
+				...successResponse(request.query),
+				provider: "openai",
+				results: [{ url: "https://example.com/", domain: "example.com", provider: "openai", searchQuery: request.query }],
+			}),
+		};
+		const route = createSearchRouter({ openai });
+		const tool = createWebSearchTool(route);
+		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {
+			model: { id: "gpt-test", provider: "openai", api: "openai-responses", baseUrl: "https://api.openai.com/v1" },
+			modelRegistry: { getAvailable: () => [], getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }) },
+		} as never);
+		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
 	});
 
 	it("keeps SearchToolError instances stable when converting results", () => {

@@ -58,6 +58,7 @@ interface OpenAIRequestPlan {
 interface SourceCandidate {
 	readonly url: string;
 	readonly sourceUrl?: string;
+	readonly sourcePageUrl?: string;
 	readonly title?: string;
 	readonly excerpt?: string;
 	readonly publishedAt?: string;
@@ -202,15 +203,19 @@ function parseHttpUrl(value: unknown): { url: string; sourceUrl?: string; domain
 function candidateFromRecord(value: unknown): SourceCandidate | undefined {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
 	const record = value as Record<string, unknown>;
-	const parsed = parseHttpUrl(record.url ?? record.source_website_url ?? record.sourceUrl);
+	const parsed = parseHttpUrl(record.url ?? record.image_url ?? record.sourceUrl ?? record.source_website_url);
 	if (parsed === undefined) return undefined;
+	const sourcePage = parseHttpUrl(record.source_website_url);
+	const sourceUrl = parsed.sourceUrl;
+	const sourcePageUrl = sourcePage !== undefined && sourcePage.url !== parsed.url ? sourcePage.url : undefined;
 	const title = optionalString(record.title ?? record.caption, MAX_SOURCE_TITLE_LENGTH);
-	const excerpt = optionalString(record.snippet ?? record.text ?? record.description, MAX_SOURCE_EXCERPT_LENGTH);
+	const excerpt = optionalString(record.snippet ?? record.text ?? record.description ?? record.caption, MAX_SOURCE_EXCERPT_LENGTH);
 	const publishedAt = optionalTimestamp(record.published_at ?? record.publishedDate ?? record.published_date);
-	const sourceId = optionalString(record.id ?? record.source_id, MAX_SOURCE_ID_LENGTH);
+	const sourceId = optionalString(record.id ?? record.source_id ?? record.ref_id, MAX_SOURCE_ID_LENGTH);
 	return {
 		url: parsed.url,
-		...(parsed.sourceUrl === undefined ? {} : { sourceUrl: parsed.sourceUrl }),
+		...(sourceUrl === undefined ? {} : { sourceUrl }),
+		...(sourcePageUrl === undefined ? {} : { sourcePageUrl }),
 		...(title === undefined ? {} : { title }),
 		...(excerpt === undefined ? {} : { excerpt }),
 		...(publishedAt === undefined ? {} : { publishedAt }),
@@ -262,6 +267,7 @@ function mergeCandidate(
 	results.set(candidate.url, {
 		...current,
 		...(current.sourceUrl === undefined && candidate.sourceUrl !== undefined ? { sourceUrl: candidate.sourceUrl } : {}),
+		...(current.sourcePageUrl === undefined && candidate.sourcePageUrl !== undefined ? { sourcePageUrl: candidate.sourcePageUrl } : {}),
 		...(current.title === undefined && candidate.title !== undefined ? { title: candidate.title } : {}),
 		...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),
 		...(current.publishedAt === undefined && candidate.publishedAt !== undefined ? { publishedAt: candidate.publishedAt } : {}),
@@ -274,6 +280,7 @@ function resultFromCandidate(candidate: SourceCandidate, query: string, provider
 	return {
 		url: candidate.url,
 		...(candidate.sourceUrl === undefined ? {} : { sourceUrl: candidate.sourceUrl }),
+		...(candidate.sourcePageUrl === undefined ? {} : { sourcePageUrl: candidate.sourcePageUrl }),
 		...(candidate.title === undefined ? {} : { title: candidate.title }),
 		domain: parsed.hostname.toLowerCase(),
 		...(candidate.publishedAt === undefined ? {} : { publishedAt: candidate.publishedAt }),
@@ -354,7 +361,9 @@ export function normalizeOpenAIResponse(
 	}
 	const results = ordered.map((candidate) => resultFromCandidate(candidate, normalized.query, provider));
 	const resultUrls = new Set(results.map((result) => result.url));
-	const answerText = answerTextParts.join("\n").replace(/\s+/g, " ").trim().slice(0, MAX_ANSWER_LENGTH);
+	// OpenAI citation offsets refer to the exact output_text value. Do not
+	// collapse whitespace or trim before returning it, or the offsets move.
+	const answerText = answerTextParts.join("").slice(0, MAX_ANSWER_LENGTH);
 	const citations = [...answerCitations.values()].filter((citation) => resultUrls.has(citation.url));
 	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && citations.length > 0
 		? { text: answerText, contentTrust: "untrusted" as const, provider, citations }
@@ -494,6 +503,10 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 	}
 
 	const filters = domainFilters(normalized);
+	const imageSettings = normalized.imageSettings === undefined ? undefined : {
+		...(normalized.imageSettings.maxResults === undefined ? {} : { max_results: normalized.imageSettings.maxResults }),
+		...(normalized.imageSettings.caption === undefined ? {} : { caption: normalized.imageSettings.caption }),
+	};
 	if (filters !== undefined) appliedOptions.push("domains");
 	if (normalized.searchContextSize !== undefined) appliedOptions.push("searchContextSize");
 	if (normalized.returnTokenBudget !== undefined) appliedOptions.push("returnTokenBudget");
@@ -509,7 +522,7 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 		...(normalized.externalWebAccess === undefined ? {} : { external_web_access: normalized.externalWebAccess }),
 		...(normalized.userLocation === undefined ? {} : { user_location: normalized.userLocation }),
 		...(normalized.searchContentTypes === undefined ? {} : { search_content_types: [...normalized.searchContentTypes] }),
-		...(normalized.imageSettings === undefined ? {} : { image_settings: normalized.imageSettings }),
+		...(imageSettings === undefined ? {} : { image_settings: imageSettings }),
 		...(normalized.returnTokenBudget === undefined || normalized.returnTokenBudget === "default" ? {} : { return_token_budget: normalized.returnTokenBudget }),
 	};
 	return {
@@ -518,7 +531,10 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 			instructions: buildInstructions(normalized),
 			input: [{ role: "user", content: [{ type: "input_text", text: normalized.query }] }],
 			tools: [tool],
-			include: ["web_search_call.action.sources"],
+			include: [
+				"web_search_call.action.sources",
+				...(normalized.searchContentTypes?.includes("image") ? ["web_search_call.results"] : []),
+			],
 			store: false,
 			stream: true,
 			tool_choice: "required",

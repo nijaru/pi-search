@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "2pvs",
+  "title": "Fix OpenAI image search, model routing, billing policy, and integration coverage",
+  "description": "Fix the concrete review findings: OpenAI image result inclusion/parsing and source-page enrichment, citation offset integrity, explicit same-provider execution model routing, consistent metered-provider policy, and mocked end-to-end routing coverage. Validate with offline tests, typecheck, diff review, and live smoke when credentials are available.",
+  "status": "done",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-30T09:26:37.236674Z",
+      "msg": "Fixed OpenAI image-result inclusion/parsing, snake_case image settings, citation offset preservation, source-page enrichment, same-provider execution-model routing, and metered Exa policy. Added integration/regression tests. Exa and Brave live smoke passed; OpenAI/Codex credentials unavailable."
+    }
+  ],
+  "created_at": "2026-08-30T09:15:55.754526Z",
+  "updated_at": "2026-08-30T09:26:37.248408Z",
+  "completed_at": "2026-08-30T09:26:37.248408Z",
+  "external": {}
+}

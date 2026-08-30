@@ -73,7 +73,7 @@ function availableNativeModel(provider: ProviderId, context: ExtensionContext, r
 		if (provider === "xai" || provider === "xai-x") return model.provider === "xai" && model.api === "openai-responses";
 		return false;
 	};
-	if (requestedModel !== undefined && context.model !== undefined && compatible(context.model)) return context.model.id === requestedModel;
+	if (requestedModel !== undefined && context.model !== undefined && compatible(context.model) && context.model.id === requestedModel) return true;
 	if (requestedModel === undefined && nativeModelCompatible(provider, context.model)) return true;
 	try {
 		return context.modelRegistry.getAvailable().some((model) => compatible(model) && (requestedModel === undefined || model.id === requestedModel));
@@ -92,7 +92,7 @@ function directFallback(
 	options: SearchRouterOptions,
 	policy: SearchBillingPolicy,
 ): readonly Provider[] {
-	if (primary.id !== "exa" && options.exaConfigured === true && options.exa !== undefined && canServe(options.exa, request)) return [options.exa];
+	if (policy !== "free-only" && primary.id !== "exa" && options.exaConfigured === true && options.exa !== undefined && canServe(options.exa, request)) return [options.exa];
 	const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
 	if (primary.id !== "brave" && options.braveConfigured === true && options.brave !== undefined && braveAllowed && canServe(options.brave, request)) return [options.brave];
 	return [];
@@ -212,13 +212,19 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 
 		const mode = normalized.mode ?? "auto";
 		const exaConfigured = options.exaConfigured === true;
-		const exaCanMatchMode = options.exa !== undefined && canServe(options.exa, normalized);
-		if (exaConfigured && exaCanMatchMode) return selection(options.exa!, true, directFallback(options.exa!, normalized, options, policy));
-		if (exaConfigured && mode !== "auto" && options.exa !== undefined && !exaCanMatchMode) return unavailable(`Exa cannot satisfy ${mode} search semantics`, "exa");
+		const exaAllowed = policy !== "free-only";
+		const exaCanMatchMode = exaAllowed && options.exa !== undefined && canServe(options.exa, normalized);
 
 		const braveCanMatchMode = options.brave !== undefined && canServe(options.brave, normalized);
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
+		// prefer-free chooses the admitted Brave path before a metered Exa call.
+		if (policy === "prefer-free" && braveCanMatchMode && braveConfigured && braveAllowed) {
+			checkBraveCapacity(options);
+			return selection(options.brave!, true);
+		}
+		if (exaConfigured && exaCanMatchMode) return selection(options.exa!, true, directFallback(options.exa!, normalized, options, policy));
+		if (exaAllowed && exaConfigured && mode !== "auto" && options.exa !== undefined && !exaCanMatchMode) return unavailable(`Exa cannot satisfy ${mode} search semantics`, "exa");
 		if (braveCanMatchMode && braveConfigured && braveAllowed) {
 			checkBraveCapacity(options);
 			return selection(options.brave!, true);

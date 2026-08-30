@@ -178,7 +178,7 @@ function sourceFromRecord(value: unknown, query: string): SearchResult | undefin
 		provider: "openai-codex",
 		searchQuery: query,
 		...(sourceId === undefined ? {} : { sourceId }),
-		...(sourcePage === undefined || sourcePage.url === parsed.url ? {} : { sourceUrl: sourcePage.url }),
+		...(sourcePage === undefined || sourcePage.url === parsed.url ? {} : { sourcePageUrl: sourcePage.url }),
 	};
 }
 

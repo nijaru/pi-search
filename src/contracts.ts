@@ -334,6 +334,8 @@ export interface SearchResult {
 	readonly url: Url;
 	/** Original URL as supplied, when it differs from the canonical `url`. */
 	readonly sourceUrl?: Url;
+	/** Readable page associated with a media or indirect result URL. */
+	readonly sourcePageUrl?: Url;
 	/** Page title. */
 	readonly title?: string;
 	/** Publishing host / domain. */

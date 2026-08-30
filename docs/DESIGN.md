@@ -30,8 +30,8 @@ Shipped search adapters:
 | Gemini grounding | Active Google Gemini model | `gemini` plus optional `executionModel` | No hard domain filter; grounding citations required for typed answers |
 | xAI web grounding | Active xAI Responses model | `xai` plus optional `executionModel` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
-| Exa | Other/local model with configured key | `exa` | Semantic retrieval, excerpts, and domains |
-| Brave | Other/local model when Exa is unavailable; free-mode pacing by default | `brave` | Keyword/fresh/domain filters |
+| Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
+| Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; include/exclude domain policies and lower date bound |
 | Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
@@ -55,14 +55,14 @@ at most one visible fallback:
    the model is the user's metered-call decision. Explicit `gemini`, `xai`, and
    `xai-x` hints may use a compatible Pi-registry model via `executionModel`;
    `xai-x` remains explicit for X-specific grounding.
-4. Exa for other models when `EXA_API_KEY` exists and its hard constraints
-   are supported. Exa is selected before Brave because it supplies semantic
-   retrieval, highlights, and reported cost.
-5. Brave when Exa is unavailable and `BRAVE_API_KEY` exists. It uses
-   conservative free-mode admission by default (1 RPS local pacing plus
-   observed quota windows); set `PI_SEARCH_BRAVE_FREE_ONLY=0` only when
-   `PI_SEARCH_ALLOW_METERED=1` explicitly permits deliberately unpaced,
-   configured metered Brave.
+4. Exa for other models when `EXA_API_KEY` exists, metered search is allowed,
+   and its hard constraints are supported. Exa supplies semantic retrieval,
+   highlights, and reported cost. An explicit Exa hint is always intentional.
+5. In free-only mode, Brave is the automatic direct path when
+   `BRAVE_API_KEY` exists. It uses conservative free-mode admission by default
+   (1 RPS local pacing plus observed quota windows). `PI_SEARCH_PREFER_FREE=1`
+   prefers Brave before metered Exa; `PI_SEARCH_ALLOW_METERED=1` permits
+   automatic Exa and deliberately metered Brave.
 6. Parallel and official X API remain explicit until their quality/role
    evaluation justifies default routing.
 

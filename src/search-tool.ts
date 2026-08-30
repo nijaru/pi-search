@@ -246,6 +246,7 @@ export function renderSearchResponse(response: SearchResponse): string {
 		response.results.forEach((result, index) => {
 			const title = compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), MAX_SEARCH_TITLE_CHARS);
 			lines.push(`[${index + 1}] ${title}`, `URL: ${renderSafeUrl(result.url)}`);
+			if (result.sourcePageUrl !== undefined) lines.push(`Source page: ${renderSafeUrl(result.sourcePageUrl)}`);
 			if (result.publishedAt !== undefined) lines.push(`Published: ${compactText(result.publishedAt, 100)}`);
 			if (result.excerpt !== undefined) lines.push(`Excerpt: ${compactText(result.excerpt, MAX_SEARCH_EXCERPT_CHARS)}`);
 		});
@@ -286,6 +287,7 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 		text += `\n${theme.fg("accent", searchResultPreview(result).split("\n")[0]!)}`;
 		text += `\n${theme.fg("dim", `  ${renderSafeUrl(result.url)}`)}`;
 		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${result.domain}`)}`;
+		if (expanded && result.sourcePageUrl !== undefined) text += `\n${theme.fg("muted", `  Source page: ${renderSafeUrl(result.sourcePageUrl)}`)}`;
 		if (expanded && result.publishedAt !== undefined) text += `\n${theme.fg("muted", `  Published: ${result.publishedAt}`)}`;
 		if (expanded && result.sourceId !== undefined) text += `\n${theme.fg("muted", `  Source ID: ${result.sourceId}`)}`;
 		if (result.excerpt !== undefined) text += `\n${theme.fg("muted", `  ${compactText(result.excerpt, expanded ? 400 : 240)}`)}`;
@@ -361,6 +363,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		results: response.results.map((result) => ({
 			url: result.url,
 			...(result.sourceUrl === undefined ? {} : { sourceUrl: result.sourceUrl.slice(0, 8_192) }),
+			...(result.sourcePageUrl === undefined ? {} : { sourcePageUrl: result.sourcePageUrl.slice(0, 8_192) }),
 			...(result.title === undefined ? {} : { title: result.title.slice(0, MAX_SEARCH_TITLE_CHARS) }),
 			...(result.domain === undefined ? {} : { domain: result.domain.slice(0, 500) }),
 			...(result.publishedAt === undefined ? {} : { publishedAt: result.publishedAt.slice(0, 100) }),
@@ -412,12 +415,15 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 	let attempts = 0;
 	for (const result of response.results) {
 		if (attempts >= (request.contentResults ?? 2)) break;
-		const identity = searchUrlIdentity(result.url);
+		// Image results point at binary media while sourcePageUrl identifies the
+		// readable page that should be enriched.
+		const fetchUrl = result.sourcePageUrl ?? result.url;
+		const identity = searchUrlIdentity(fetchUrl);
 		if (identity === undefined || seen.has(identity)) continue;
 		seen.add(identity);
 		attempts += 1;
 		try {
-			const page = await fetcher({ url: result.url, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs });
+			const page = await fetcher({ url: fetchUrl, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs });
 			pages.push(page);
 			const boundedCandidate = boundedSearchResponse({ ...response, sourceContents: pages, warnings });
 			if ((boundedCandidate.sourceContents?.length ?? 0) < pages.length) {
@@ -427,7 +433,7 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 			}
 		} catch (error) {
 			if (signal.aborted) throw error;
-			warnings.push({ code: "partial-results", message: `Source enrichment failed for ${renderSafeUrl(result.url)}: ${toFetchToolError(error).message}` });
+			warnings.push({ code: "partial-results", message: `Source enrichment failed for ${renderSafeUrl(fetchUrl)}: ${toFetchToolError(error).message}` });
 		}
 	}
 	return { ...response, ...(pages.length === 0 ? {} : { sourceContents: pages }), warnings };

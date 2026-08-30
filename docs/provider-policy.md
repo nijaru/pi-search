@@ -18,16 +18,17 @@ call for automatic routing:
    decision. Explicit `gemini`, `xai`, and `xai-x` hints may use a compatible
    Pi-registry model through `executionModel`; `xai-x` is explicit for
    X-specific retrieval.
-4. Other/local models use configured Exa automatically when its hard
-   constraints are supported. Exa is preferred because it returns semantic
-   evidence and highlights.
-5. Brave is the last direct path when Exa is unavailable and
+4. Other/local models use configured Exa automatically only when metered
+   search is allowed. Exa is preferred because it returns semantic evidence
+   and highlights. An explicit `provider: "exa"` is always an intentional
+   per-call opt-in when configured.
+5. In free-only mode, Brave is the direct automatic path when
    `BRAVE_API_KEY` is configured. The default is conservative free-mode
    admission: local request starts are spaced by one second and observed
-   provider quota windows are honored. `PI_SEARCH_BRAVE_FREE_ONLY=0` disables
-   that pacing only for deliberate metered use with
-   `PI_SEARCH_ALLOW_METERED=1`; neither mode inspects account billing or
-   guarantees against paid overage.
+   provider quota windows are honored. `PI_SEARCH_PREFER_FREE=1` prefers this
+   admitted Brave path before metered Exa. `PI_SEARCH_ALLOW_METERED=1` allows
+   automatic Exa and deliberate metered Brave use. Neither mode inspects
+   account billing or guarantees against paid overage.
 6. Parallel and official X API require an explicit provider hint.
 
 An automatic primary failure may use at most one eligible alternative for
@@ -48,7 +49,7 @@ hidden fan-out, or provider comparisons.
 | xAI | Native web grounding for active xAI Responses; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including xAI OAuth |
 | xAI X | Explicit social/X grounding with handle/date/media controls | Explicit `xai-x`; no fallback | Pi model registry, including xAI OAuth |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
-| Exa | Automatic non-native semantic path | Selected automatically when configured; one visible fallback may use Brave | `EXA_API_KEY` |
+| Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
@@ -68,10 +69,12 @@ model. Explicit Gemini and xAI hints can use a registry model selected through
 spending it during automatic routing. This avoids forcing a model switch while
 keeping credentials inside Pi's registry boundary.
 
-Exa is the automatic semantic option for local and other models because it
-returns useful highlights and source evidence. Brave is the cost-controlled
-last direct path when Exa is absent; its free-mode admission remains
-conservative. Parallel is a useful explicit objective-oriented provider. The
+Exa is the automatic semantic option for local and other models when the
+billing policy permits metered use because it returns useful highlights and
+source evidence. `PI_SEARCH_PREFER_FREE=1` makes admitted Brave the first
+non-native path while retaining Exa as a fallback. Free-only mode never
+silently dispatches Exa; explicit Exa hints remain user-directed. Parallel is
+an objective-oriented provider. The
 official X API is a separate exact recent-search path; X query operators can
 target posts or users, but dedicated lookup and archive endpoints are not
 implemented. xAI X remains the semantic, model-mediated path. None of these
