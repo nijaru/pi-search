@@ -38,6 +38,11 @@ supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`, `x`,
 | `exa` | `PI_SEARCH_LIVE_EXA_API_KEY` |
 | `parallel` | `PI_SEARCH_LIVE_PARALLEL_API_KEY` |
 
+Codex smoke calls use the ChatGPT backend's standalone `alpha/search`
+endpoint (`https://chatgpt.com/backend-api/codex/alpha/search`), not the public
+OpenAI API Responses endpoint. Use a token accepted by that backend; when it is
+an OAuth JWT, the adapter forwards its ChatGPT account id when present.
+
 Use a dedicated smoke key or token. The acknowledgement flag is required
 because these calls may consume quota or incur charges, including native
 model-mediated search.

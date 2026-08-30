@@ -47,6 +47,12 @@ function canServe(provider: Provider, request: SearchRequest): boolean {
 		if ((request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined) && provider.capabilities.handleFilter !== true) return false;
 		if ((request.social.understandImages === true || request.social.understandVideos === true) && provider.capabilities.mediaUnderstanding !== true) return false;
 	}
+	if (request.searchContextSize !== undefined && provider.capabilities.searchContextSize !== true) return false;
+	if (request.returnTokenBudget !== undefined && provider.capabilities.returnTokenBudget !== true) return false;
+	if (request.externalWebAccess !== undefined && provider.capabilities.externalWebAccess !== true) return false;
+	if (request.userLocation !== undefined && provider.capabilities.userLocation !== true) return false;
+	if (request.searchContentTypes !== undefined && provider.capabilities.searchContentTypes !== true) return false;
+	if (request.imageSettings !== undefined && provider.capabilities.imageSettings !== true) return false;
 	return true;
 }
 

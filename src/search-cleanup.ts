@@ -132,10 +132,14 @@ function normalizeAnswer(answer: SearchAnswer | undefined, provider: ProviderId,
 		if (parsed === undefined || !resultUrls.has(parsed.url) || citations.some((item) => item.url === parsed.url)) continue;
 		const title = boundedString(citation.title, MAX_SEARCH_TITLE_LENGTH);
 		const sourceId = boundedString(citation.sourceId, MAX_SEARCH_SOURCE_ID_LENGTH);
+		const startIndex = typeof citation.startIndex === "number" && Number.isInteger(citation.startIndex) && citation.startIndex >= 0 && citation.startIndex <= text.length ? citation.startIndex : undefined;
+		const endIndex = typeof citation.endIndex === "number" && Number.isInteger(citation.endIndex) && citation.endIndex >= (startIndex ?? 0) && citation.endIndex <= text.length ? citation.endIndex : undefined;
 		citations.push({
 			url: parsed.url,
 			...(title === undefined ? {} : { title }),
 			...(sourceId === undefined ? {} : { sourceId }),
+			...(startIndex === undefined ? {} : { startIndex }),
+			...(endIndex === undefined ? {} : { endIndex }),
 		});
 		if (citations.length >= MAX_SEARCH_CITATIONS) break;
 	}

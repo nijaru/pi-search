@@ -25,7 +25,8 @@ Shipped search adapters:
 
 | Adapter | Active/default use | Explicit use | Hard constraints |
 | --- | --- | --- | --- |
-| OpenAI/Codex Responses | Active supported OpenAI model | `openai`/`openai-codex` | Responses APIs only; allowed and blocked domains |
+| OpenAI Responses | Active supported OpenAI model | `openai` | Responses API web_search; domain, context, location, live-access, and content-type controls |
+| Codex standalone search | Active supported Codex model | `openai-codex` | Codex `alpha/search`; domain, context, location, live-access, and content-type controls |
 | Gemini grounding | Active Google Gemini model | `gemini` plus optional `executionModel` | No hard domain filter; grounding citations required for typed answers |
 | xAI web grounding | Active xAI Responses model | `xai` plus optional `executionModel` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
@@ -45,9 +46,9 @@ There are no adapter retries or hidden provider changes.
 Normal `web_search` resolves one primary provider and, for automatic routing,
 at most one visible fallback:
 
-1. OpenAI Responses or Codex Responses native search when that is the active
-   compatible model.
-2. For another active model, an authenticated OpenAI/Codex Responses model
+1. OpenAI Responses web search or Codex standalone `alpha/search` when that is
+   the active compatible model.
+2. For another active model, an authenticated OpenAI/Codex search model
    available through Pi's model registry is eligible, preserving built-in
    search without requiring a model switch.
 3. Gemini or xAI grounding when that provider is the active model; selecting
@@ -71,29 +72,27 @@ Network, timeout, and post-dispatch HTTP failures remain final because their
 effects are uncertain. Explicit provider hints, invalid/unsupported/malformed
 requests, and cancellation remain final. There are no retry loops, paid
 fan-out, or provider comparisons. Provider profile usage and selected execution
-model are surfaced when available. A research cost ceiling is rejected when a provider
-cannot provide a reliable per-call estimate; this prevents a false guarantee
+model are surfaced when available. A research cost ceiling is rejected when a provider cannot provide a reliable
+per-call estimate; this prevents a false guarantee
 for native grounding, Exa, and Parallel.
 
 ## Native OpenAI stability contract
 
-The OpenAI/Codex adapter is regression-protected separately from the other
-adapters:
+The OpenAI and Codex paths are separate adapters with shared normalization:
 
-- OpenAI uses only `openai-responses`; Codex uses only
-  `openai-codex-responses`.
-- The active model selects the native provider; the adapter then selects one
-  authenticated same-provider Responses model from Pi's registry for search.
-- Credentials and model headers are resolved for that selected registry model.
-- Codex OAuth account headers are derived from the resolved token.
-- Responses streaming accepts LF and CRLF SSE, requires a terminal completed
-  event, rejects incomplete/truncated streams, and bounds body bytes.
-- HTTP errors preserve status, request ID, retry timing, and retryability.
-- OpenAI/Codex domain filters are sent as allowed/blocked domains and
-  enforced again by shared result cleanup.
+- OpenAI uses `openai-responses` and the hosted Responses `web_search` tool.
+- Codex uses `openai-codex-responses` and the official standalone `alpha/search`
+  request/response contract.
+- Both resolve credentials and model headers through Pi's registry.
+- Codex derives the ChatGPT account header from OAuth tokens when available.
+- OpenAI streaming accepts LF and CRLF SSE, requires a terminal completed event,
+  rejects incomplete/truncated streams, and bounds body bytes.
+- Both preserve request IDs, retry timing, rate limits, and explicit search
+  controls.
+- Domain filters are enforced again by shared result cleanup.
 
-This adapter never treats a completion-only or partial response as successful
-search evidence.
+Neither path treats a completion-only or partial response as successful search
+evidence.
 
 ## Evidence normalization
 
@@ -102,7 +101,8 @@ Every provider returns:
 - source URL and hostname;
 - optional title, excerpt, publication timestamp, score, and source ID;
 - provider identity, executed query, and execution model when available;
-- an optional typed, bounded provider answer with source URL citations;
+- an optional typed, bounded provider answer with source URL citations and
+  citation positions when the backend supplies them;
 - applied options and explicit unsupported-option warnings; and
 - request ID, latency, and provider usage when available.
 

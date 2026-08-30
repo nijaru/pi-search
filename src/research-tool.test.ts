@@ -31,7 +31,7 @@ const budget = { maxSteps: 3, maxProviderCalls: 2, maxFetches: 0, timeoutMs: 5_0
 
 describe("web_research", () => {
 	it("runs only caller-supplied queries under one provider and explicit bounds", async () => {
-		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget }, () => provider(), context());
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget }, () => provider(false, undefined, ["https://example.com/1", "https://example.com/2"]), context());
 		expect(result).toMatchObject({ question: "main", providerCalls: 2, stepsCompleted: 2, fetchesCompleted: 0, fetchAttempts: 0, stopReason: "completed" });
 		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
 	});
@@ -71,6 +71,33 @@ describe("web_research", () => {
 		expect(result.stopReason).toBe("provider-error");
 		expect(result.providerCalls).toBe(1);
 		expect(result.warnings[0]?.message).toContain("rate limit");
+	});
+
+	it("fetches retained results after a later search provider failure", async () => {
+		let calls = 0;
+		const selected: Provider = {
+			...provider(),
+			search: async (request) => {
+				calls += 1;
+				if (calls === 2) throw new SearchToolError("WEB_SEARCH_RATE_LIMIT", "later search failed");
+				return { query: request.query, results: [{ url: "https://example.com/first", provider: "openai", searchQuery: request.query }], provider: "openai", appliedOptions: [], warnings: [] };
+			},
+		};
+		const transport = (async () => ({
+			status: 200,
+			statusText: "OK",
+			headers: new Headers({ "content-type": "text/plain" }),
+			body: {
+				async *[Symbol.asyncIterator]() { yield new TextEncoder().encode("fetched evidence"); },
+				cancel() {},
+				destroy() {},
+			},
+		})) as never;
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], fetchResults: 1, budget: { ...budget, maxFetches: 1 } }, () => selected, context(), { transport, lookup: async () => [{ address: "93.184.216.34", family: 4 as const }] });
+		expect(result.stopReason).toBe("provider-error");
+		expect(result.fetchAttempts).toBe(1);
+		expect(result.fetchesCompleted).toBe(1);
+		expect(result.fetched[0]?.content).toContain("fetched evidence");
 	});
 
 	it("preserves warnings returned by each provider call", async () => {

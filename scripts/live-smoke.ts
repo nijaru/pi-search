@@ -1,6 +1,7 @@
 import { BraveQuotaTracker, createBraveProvider } from "../src/brave";
 import { createExaProvider } from "../src/exa";
 import { createGeminiProvider } from "../src/gemini";
+import { createCodexProvider } from "../src/codex";
 import { createOpenAIProvider } from "../src/openai";
 import { createParallelProvider } from "../src/parallel";
 import { executeSearch } from "../src/search";
@@ -40,7 +41,7 @@ function isDryRun(): boolean {
 }
 
 export function modelBaseUrlForProvider(provider: string): string {
-	if (provider === "openai-codex") return "https://chatgpt.com/backend-api";
+	if (provider === "openai-codex") return "https://chatgpt.com/backend-api/codex";
 	if (provider === "xai") return "https://api.x.ai/v1";
 	if (provider === "google") return "https://generativelanguage.googleapis.com/v1beta";
 	return "https://api.openai.com/v1";
@@ -72,7 +73,7 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 		case "openai-codex": {
 			const token = required("PI_SEARCH_LIVE_CODEX_TOKEN");
 			const model = required("PI_SEARCH_LIVE_CODEX_MODEL");
-			return { provider: createOpenAIProvider({ provider: "openai-codex" }), context: modelContext("openai-codex", "openai-codex-responses", model, token), secret: token, requiredEnv: ["PI_SEARCH_LIVE_CODEX_TOKEN", "PI_SEARCH_LIVE_CODEX_MODEL"] };
+			return { provider: createCodexProvider(), context: modelContext("openai-codex", "openai-codex-responses", model, token), secret: token, requiredEnv: ["PI_SEARCH_LIVE_CODEX_TOKEN", "PI_SEARCH_LIVE_CODEX_MODEL"] };
 		}
 		case "gemini": {
 			const key = required("PI_SEARCH_LIVE_GEMINI_API_KEY");

@@ -8,8 +8,9 @@ records current routing and spending policy, not a permanent provider ranking.
 The extension selects one primary provider and may make one visible fallback
 call for automatic routing:
 
-1. Active OpenAI Responses and Codex Responses models use native OpenAI search.
-2. With another active model, an authenticated OpenAI/Codex Responses model in
+1. Active OpenAI Responses models use hosted Responses web search; active Codex
+   Responses models use the standalone Codex `alpha/search` endpoint.
+2. With another active model, an authenticated OpenAI/Codex search model in
    Pi's registry is eligible, so built-in search does not require changing the
    active model.
 3. Active Google Gemini and xAI Responses models use native grounding
@@ -41,7 +42,8 @@ hidden fan-out, or provider comparisons.
 
 | Provider | Role | Billing/routing policy | Auth |
 | --- | --- | --- | --- |
-| OpenAI/Codex | Native and registry-available built-in search | Active model first; one authenticated registry model may serve other models | Pi model registry |
+| OpenAI | Responses web search | Active model first; one authenticated registry model may serve other models | Pi model registry |
+| Codex | Standalone `alpha/search` | Active model first; one authenticated registry model may serve other models | Pi model registry |
 | Gemini | Native Google Search grounding for active Gemini; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including Pi xAI/Gemini auth |
 | xAI | Native web grounding for active xAI Responses; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including xAI OAuth |
 | xAI X | Explicit social/X grounding with handle/date/media controls | Explicit `xai-x`; no fallback | Pi model registry, including xAI OAuth |
@@ -58,7 +60,7 @@ explicit providers never use this behavior.
 ## Why both native and direct providers exist
 
 Native grounding is appropriate when the active model already owns a search
-capability, especially OpenAI/Codex, Gemini, and xAI. When another model is
+capability, especially OpenAI, Codex, Gemini, and xAI. When another model is
 active, an already authenticated OpenAI/Codex model in Pi's registry can still
 provide the built-in search path; the response identifies that execution
 model. Explicit Gemini and xAI hints can use a registry model selected through
@@ -81,8 +83,10 @@ ceiling, so unsupported cost ceilings are rejected before calls.
 
 Unsupported hard constraints are rejected or surfaced:
 
-- OpenAI/Codex Responses accept allowed and blocked domain filters; the shared
-  cleanup boundary still enforces the returned evidence.
+- OpenAI Responses and Codex `alpha/search` accept allowed and blocked domain
+  filters; the shared cleanup boundary still enforces returned evidence.
+  Their native context size, location, live-access, and content-type controls
+  are exposed only when the selected adapter supports them.
 - Gemini grounding has no hard domain-filter contract.
 - xAI web search supports allowed/excluded domains; xAI X search supports
   bounded handles, ISO date ranges, and opt-in image/video understanding.

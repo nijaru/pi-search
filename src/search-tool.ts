@@ -29,6 +29,8 @@ import {
 	MAX_EXECUTION_MODEL_LENGTH,
 	MAX_CONTENT_MAX_LENGTH,
 	MAX_CONTENT_RESULTS,
+	MAX_SEARCH_LOCATION_FIELD_LENGTH,
+	MAX_SEARCH_CONTENT_TYPES,
 } from "./search";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const, { description: "Search mode; auto selects the provider path" }) as TUnsafe<"auto" | "keyword" | "fresh">;
@@ -39,6 +41,25 @@ const SearchDateRangeSchema = Type.Object(
 		to: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DATE_LENGTH, description: "Inclusive end date, YYYY-MM-DD" })),
 	},
 	{ description: "Optional publication date range" },
+);
+const SearchContextSizeSchema = StringEnum(["low", "medium", "high"] as const, { description: "Provider-native search context size" }) as TUnsafe<"low" | "medium" | "high">;
+const ReturnTokenBudgetSchema = StringEnum(["default", "unlimited"] as const, { description: "Provider-native returned-token budget" }) as TUnsafe<"default" | "unlimited">;
+const SearchUserLocationSchema = Type.Object(
+	{
+		type: StringEnum(["approximate"] as const) as TUnsafe<"approximate">,
+		country: Type.Optional(Type.String({ minLength: 2, maxLength: 2, description: "Two-letter ISO country code" })),
+		region: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_LOCATION_FIELD_LENGTH })),
+		city: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_LOCATION_FIELD_LENGTH })),
+		timezone: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_LOCATION_FIELD_LENGTH })),
+	},
+	{ description: "Approximate location for localized search results" },
+);
+const SearchImageSettingsSchema = Type.Object(
+	{
+		maxResults: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_RESULTS })),
+		caption: Type.Optional(Type.Boolean()),
+	},
+	{ description: "Image search result settings" },
 );
 const SocialSearchSchema = Type.Object(
 	{
@@ -70,6 +91,12 @@ export const WebSearchParameters = Type.Object({
 	executionModel: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_EXECUTION_MODEL_LENGTH, description: "Model id when deliberately selecting a model-mediated provider" })),
 	provider: Type.Optional(SearchProviderSchema),
 	answerMode: Type.Optional(StringEnum(["auto", "evidence"] as const, { description: "Return a provider answer when available or evidence only" }) as TUnsafe<"auto" | "evidence">),
+	searchContextSize: Type.Optional(SearchContextSizeSchema),
+	returnTokenBudget: Type.Optional(ReturnTokenBudgetSchema),
+	externalWebAccess: Type.Optional(Type.Boolean({ description: "Allow live internet access when supported" })),
+	userLocation: Type.Optional(SearchUserLocationSchema),
+	searchContentTypes: Type.Optional(Type.Array(StringEnum(["text", "image"] as const) as TUnsafe<"text" | "image">, { minItems: 1, maxItems: MAX_SEARCH_CONTENT_TYPES })),
+	imageSettings: Type.Optional(SearchImageSettingsSchema),
 	includeContent: Type.Optional(Type.Boolean({ default: false, description: "Fetch selected result pages for source context" })),
 	contentResults: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CONTENT_RESULTS, default: DEFAULT_CONTENT_RESULTS, description: `Number of result pages to fetch when includeContent is enabled (1-${MAX_CONTENT_RESULTS})` })),
 	contentMaxLength: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CONTENT_MAX_LENGTH, default: DEFAULT_CONTENT_MAX_LENGTH, description: `Maximum extracted characters per fetched source (1-${MAX_CONTENT_MAX_LENGTH})` })),
@@ -325,6 +352,8 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 					url: citation.url.slice(0, 8_192),
 					...(citation.title === undefined ? {} : { title: citation.title.slice(0, MAX_SEARCH_TITLE_CHARS) }),
 					...(citation.sourceId === undefined ? {} : { sourceId: citation.sourceId.slice(0, 500) }),
+					...(citation.startIndex === undefined ? {} : { startIndex: citation.startIndex }),
+					...(citation.endIndex === undefined ? {} : { endIndex: citation.endIndex }),
 				})),
 			},
 		}),
@@ -415,6 +444,12 @@ function requestFromParams(params: WebSearchParams): SearchRequest {
 		...(params.executionModel === undefined ? {} : { executionModel: params.executionModel }),
 		...(params.provider === undefined ? {} : { providerHint: params.provider }),
 		...(params.answerMode === undefined ? {} : { answerMode: params.answerMode }),
+		...(params.searchContextSize === undefined ? {} : { searchContextSize: params.searchContextSize }),
+		...(params.returnTokenBudget === undefined ? {} : { returnTokenBudget: params.returnTokenBudget }),
+		...(params.externalWebAccess === undefined ? {} : { externalWebAccess: params.externalWebAccess }),
+		...(params.userLocation === undefined ? {} : { userLocation: params.userLocation }),
+		...(params.searchContentTypes === undefined ? {} : { searchContentTypes: params.searchContentTypes }),
+		...(params.imageSettings === undefined ? {} : { imageSettings: params.imageSettings }),
 		...(params.includeContent === undefined ? {} : { includeContent: params.includeContent }),
 		...(params.contentResults === undefined ? {} : { contentResults: params.contentResults }),
 		...(params.contentMaxLength === undefined ? {} : { contentMaxLength: params.contentMaxLength }),
@@ -439,7 +474,7 @@ export function createWebSearchTool(
 			const deadline = Date.now() + totalTimeoutMs;
 			const deadlineController = new AbortController();
 			const onAbort = () => deadlineController.abort(callerSignal.reason);
-			const timeoutId = setTimeout(() => deadlineController.abort(), totalTimeoutMs);
+			const timeoutId = setTimeout(() => deadlineController.abort(new DOMException("Search deadline exceeded", "TimeoutError")), totalTimeoutMs);
 			callerSignal.addEventListener("abort", onAbort, { once: true });
 			try {
 				const request = requestFromParams(params);

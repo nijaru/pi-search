@@ -7,9 +7,9 @@ export interface ModelExecution {
 }
 
 interface ModelSelectionOptions {
-	readonly searchProvider: "gemini" | "xai" | "xai-x";
-	readonly modelProvider: "google" | "xai";
-	readonly api: "google-generative-ai" | "openai-responses";
+	readonly searchProvider: "gemini" | "xai" | "xai-x" | "openai-codex";
+	readonly modelProvider: "google" | "xai" | "openai-codex";
+	readonly api: "google-generative-ai" | "openai-responses" | "openai-codex-responses";
 	readonly request: SearchRequest;
 	readonly context: ProviderContext;
 }

@@ -3,7 +3,7 @@ import { modelBaseUrlForProvider } from "./live-smoke";
 
 describe("live smoke model contexts", () => {
 	it("uses the ChatGPT backend for Codex rather than the OpenAI API", () => {
-		expect(modelBaseUrlForProvider("openai-codex")).toBe("https://chatgpt.com/backend-api");
+		expect(modelBaseUrlForProvider("openai-codex")).toBe("https://chatgpt.com/backend-api/codex");
 		expect(modelBaseUrlForProvider("openai-codex")).not.toContain("api.openai.com");
 	});
 

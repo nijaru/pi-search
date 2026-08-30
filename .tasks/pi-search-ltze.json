@@ -1,0 +1,28 @@
+{
+  "project": "pi-search",
+  "ref": "ltze",
+  "title": "Implement architecture review fixes for OpenAI/Codex search",
+  "description": "Fix all findings from the architecture review: separate/align Codex search protocol, registry model selection, research phase budgets, timeout classification, strict response parsing, citation alignment, current OpenAI web-search controls, citation positions, and remove or implement dead find contract.",
+  "status": "done",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-30T08:11:21.899709Z",
+      "msg": "Implemented separate Codex alpha/search adapter with official request/response mapping, removed Codex branch from OpenAI Responses adapter, added current native controls and citation positions, fixed timeout classification and research fetch continuation/deduplication, updated docs and offline tests. bun run check passes (208 tests). Credentialed live smoke remains unrun."
+    },
+    {
+      "ts": "2026-08-30T08:12:02.760036Z",
+      "msg": "Final verification after regression additions: bun run check passes with 209 tests; git diff --check passes. Live credentialed smoke intentionally skipped."
+    }
+  ],
+  "created_at": "2026-08-30T07:53:15.659232Z",
+  "updated_at": "2026-08-30T08:12:02.760036Z",
+  "completed_at": "2026-08-30T08:11:59.306568Z",
+  "external": {}
+}

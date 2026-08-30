@@ -264,6 +264,13 @@ describe("search boundary", () => {
 		await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
 	});
 
+	it("classifies the tool deadline as timeout rather than cancellation", async () => {
+		const tool = createWebSearchTool(makeProvider(async (_request, signal) => await new Promise<SearchResponse>((_resolve, reject) => {
+			signal.addEventListener("abort", () => reject(new Error("deadline")), { once: true });
+		})), { timeoutMs: 10 });
+		await expect(tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)).rejects.toMatchObject({ code: "WEB_SEARCH_TIMEOUT" });
+	});
+
 	it("registers web_search and returns structured evidence", async () => {
 		const provider = makeProvider(async (request) => successResponse(request.query));
 		const registered: Array<{ name: string }> = [];

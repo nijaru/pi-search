@@ -25,8 +25,9 @@ to write their own synthesis.
 Resolution happens before execution and is based on capability and availability,
 not only on the active model:
 
-1. an active OpenAI Responses or Codex Responses model uses its native backend;
-2. for another active model, an authenticated OpenAI/Codex Responses model in
+1. an active OpenAI Responses model uses hosted Responses web search; an
+   active Codex Responses model uses the standalone Codex `alpha/search` backend;
+2. for another active model, an authenticated OpenAI/Codex search model in
    Pi's model registry is eligible. This preserves the useful built-in search
    behavior without requiring the user to change models;
 3. an active Gemini or xAI Responses model uses its native grounding;
@@ -58,8 +59,11 @@ provider hints also remain final. The fallback is visible as a warning
 with the failed provider and error class. There is no retry loop, fan-out,
 provider comparison, or fallback after a successful response.
 
-The default fallback is therefore bounded to two provider calls. It is not a
-promise that a metered call is free; direct providers are only eligible when
+The default fallback is therefore bounded to two provider calls. In
+`web_research`, a recoverable search failure or exhausted search budget does not
+discard already-collected evidence; independent fetch budget may still enrich
+those results unless the overall deadline or caller cancellation fired. It is
+not a promise that a metered call is free; direct providers are only eligible when
 their credentials and billing policy already admit them. This policy favors a
 working result without reproducing the old extension's unbounded auto chain.
 
@@ -83,8 +87,9 @@ request IDs, usage, rate limits, and warnings. Shared cleanup applies URL
 identity, deduplication, hard domain filtering, and field bounds after adapter
 normalization. Model-mediated adapters must not read Pi auth state globally.
 
-The OpenAI/Codex adapter extracts the Responses message answer and URL
-annotations instead of discarding them. Gemini derives answer citations from
+The OpenAI adapter extracts the Responses message answer and URL annotations;
+Codex extracts the standalone `alpha/search` output and structured results.
+Both preserve inspectable source identity instead of discarding it. Gemini derives answer citations from
 `groundingSupports`; xAI distinguishes all encountered citations from inline
 answer annotations. Direct providers remain
 evidence-first unless they expose a stable answer contract.
@@ -98,7 +103,7 @@ Offline tests must cover:
 - strict explicit provider selection;
 - one bounded fallback with visible diagnostics and no fallback for invalid,
   unsupported, malformed, or canceled calls;
-- answer extraction and citation/source alignment;
+- answer extraction, citation positions, and citation/source alignment;
 - optional source enrichment using a fake safe fetcher and output bounds; and
 - complete Pi model-registry → router → adapter → tool-output execution.
 

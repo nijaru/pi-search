@@ -2,16 +2,16 @@ import { describe, expect, it } from "bun:test";
 import type { ProviderContext, SearchRequest } from "./contracts";
 import { buildOpenAIRequest, createOpenAIProvider, normalizeOpenAIResponse, type OpenAIFetch } from "./openai";
 
-function model(provider: "openai" | "openai-codex" = "openai", api = provider === "openai" ? "openai-responses" : "openai-codex-responses") {
+function model(provider: "openai" = "openai", api = "openai-responses") {
 	return {
-		id: provider === "openai" ? "gpt-5.4" : "gpt-5.3-codex",
+		id: "gpt-5.4",
 		provider,
 		api,
-		baseUrl: provider === "openai" ? "https://api.openai.com/v1" : "https://chatgpt.com/backend-api",
+		baseUrl: "https://api.openai.com/v1",
 	};
 }
 
-function context(provider: "openai" | "openai-codex" = "openai", apiKey = "test-key"): ProviderContext {
+function context(provider: "openai" = "openai", apiKey = "test-key"): ProviderContext {
 	return {
 		model: model(provider),
 		modelRegistry: {
@@ -42,7 +42,7 @@ const payload = {
 					type: "output_text",
 					text: "TypeScript's latest release is documented here.",
 					annotations: [
-						{ type: "url_citation", url: "https://typescriptlang.org/docs?utm_source=openai", title: "TypeScript docs" },
+						{ type: "url_citation", url: "https://typescriptlang.org/docs?utm_source=openai", title: "TypeScript docs", start_index: 0, end_index: 42 },
 					],
 				},
 			],
@@ -66,7 +66,7 @@ describe("OpenAIProvider", () => {
 		expect(result.answer).toMatchObject({
 			text: "TypeScript's latest release is documented here.",
 			contentTrust: "untrusted",
-			citations: [{ url: "https://typescriptlang.org/docs", title: "TypeScript docs" }],
+			citations: [{ url: "https://typescriptlang.org/docs", title: "TypeScript docs", startIndex: 0, endIndex: 42 }],
 		});
 		expect(result.results).toEqual([
 			{
@@ -255,62 +255,6 @@ describe("OpenAIProvider", () => {
 		expect(body?.model).toBe(selected.id);
 	});
 
-	it("selects an authenticated same-provider search model", async () => {
-		let authenticatedModel = "";
-		let body: Record<string, unknown> | undefined;
-		const token = `header.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-search" } }))}.signature`;
-		const active = { ...model("openai-codex"), id: "gpt-5.6-sol" };
-		const searchModel = { ...model("openai-codex"), id: "gpt-5.5" };
-		const provider = createOpenAIProvider({
-			provider: "openai-codex",
-			endpoint: "https://example.test/backend-api",
-			fetchImpl: (async (_input, init) => {
-				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-				return response(payload);
-			}) as OpenAIFetch,
-		});
-		await provider.search({ query: "q" }, new AbortController().signal, {
-			model: active,
-			modelRegistry: {
-				getModels: () => [
-					{ ...searchModel, id: "gpt-5.6-pro" },
-					searchModel,
-				],
-				getApiKeyAndHeaders: async (requested) => {
-					authenticatedModel = requested.id;
-					return { ok: true, apiKey: token };
-				},
-			},
-		});
-		expect(authenticatedModel).toBe("gpt-5.5");
-		expect(body?.model).toBe("gpt-5.5");
-	});
-
-	it("parses the Codex SSE protocol and adds its account headers", async () => {
-		const token = `header.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" } }))}.signature`;
-		const events = [
-			`data: ${JSON.stringify({ type: "response.output_item.done", item: payload.output[0] })}`,
-			`data: ${JSON.stringify({ type: "response.completed", response: { id: "codex-resp", status: "completed", output: payload.output } })}`,
-		].join("\n\n");
-		const provider = createOpenAIProvider({
-			provider: "openai-codex",
-			fetchImpl: (async (_input, init) => {
-				const requestHeaders = new Headers(init?.headers);
-				expect(requestHeaders.get("authorization")).toBe(`Bearer ${token}`);
-				expect(requestHeaders.get("chatgpt-account-id")).toBe("acct-1");
-				expect(requestHeaders.get("originator")).toBe("pi");
-				expect(requestHeaders.get("openai-beta")).toBe("responses=experimental");
-				const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-				expect(body.max_output_tokens).toBeUndefined();
-				return response(events, 200, { "content-type": "text/event-stream" });
-			}) as OpenAIFetch,
-		});
-
-		const result = await provider.search({ query: "q" }, new AbortController().signal, context("openai-codex", token));
-		expect(result.provider).toBe("openai-codex");
-		expect(result.requestId).toBe("codex-resp");
-	});
-
 	it("rejects failed native search calls and non-completed responses", async () => {
 		const provider = createOpenAIProvider({
 			provider: "openai",
@@ -328,6 +272,11 @@ describe("OpenAIProvider", () => {
 		await expect(incompleteProvider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "http" });
 	});
 
+	it("rejects a JSON array instead of a Responses envelope", async () => {
+		const provider = createOpenAIProvider({ provider: "openai", fetchImpl: (async () => response([])) as OpenAIFetch });
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "malformed" });
+	});
+
 	it("rejects completed responses with no inspectable sources", async () => {
 		const provider = createOpenAIProvider({
 			provider: "openai",
@@ -340,7 +289,7 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
-	it("accepts header-only OpenAI auth while still requiring a Codex token", async () => {
+	it("accepts header-only OpenAI auth", async () => {
 		let calls = 0;
 		const provider = createOpenAIProvider({
 			provider: "openai",
@@ -384,6 +333,28 @@ describe("OpenAIProvider", () => {
 		});
 		await provider.search({ query: "q", domains: { include: ["allowed.example"], exclude: ["blocked.example"] } }, new AbortController().signal, context());
 		expect(body?.tools).toEqual([{ type: "web_search", filters: { allowed_domains: ["allowed.example"], blocked_domains: ["blocked.example"] } }]);
+	});
+
+	it("maps native context, token, location, and content controls into the tool", () => {
+		const plan = buildOpenAIRequest({
+			query: "q",
+			searchContextSize: "high",
+			returnTokenBudget: "unlimited",
+			externalWebAccess: false,
+			userLocation: { type: "approximate", country: "us", city: "Austin" },
+			searchContentTypes: ["text", "image"],
+			imageSettings: { maxResults: 3, caption: true },
+		}, "openai");
+		expect(plan.body.tools).toEqual([{
+			type: "web_search",
+			search_context_size: "high",
+			return_token_budget: "unlimited",
+			external_web_access: false,
+			user_location: { type: "approximate", country: "US", city: "Austin" },
+			search_content_types: ["text", "image"],
+			image_settings: { maxResults: 3, caption: true },
+		}]);
+		expect(plan.appliedOptions).toEqual(expect.arrayContaining(["searchContextSize", "returnTokenBudget", "externalWebAccess", "userLocation", "searchContentTypes", "imageSettings"]));
 	});
 
 	it("rejects unsupported hard date and social constraints", () => {

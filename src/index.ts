@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
+import { createCodexProvider } from "./codex";
 import { createExaProvider } from "./exa";
 import { createGeminiProvider } from "./gemini";
 import { registerWebFetch } from "./fetch-tool";
@@ -27,7 +28,7 @@ export default function (pi: ExtensionAPI): void {
 	const braveCapacity = new BraveQuotaTracker({ minimumIntervalMs: braveFreeOnly ? 1_000 : 0 });
 	const brave = createBraveProvider({ apiKey: braveKey, capacityTracker: braveCapacity });
 	const openai = createOpenAIProvider({ provider: "openai" });
-	const codex = createOpenAIProvider({ provider: "openai-codex" });
+	const codex = createCodexProvider();
 	const gemini = createGeminiProvider();
 	const xai = createXAIProvider({ tool: "web_search" });
 	const xaiX = createXAIProvider({ tool: "x_search" });

@@ -12,6 +12,8 @@ export const MAX_EXECUTION_MODEL_LENGTH = 500;
 export const MAX_SEARCH_HANDLE_COUNT = 20;
 export const MAX_SEARCH_HANDLE_LENGTH = 15;
 export const MAX_SEARCH_DATE_LENGTH = 64;
+export const MAX_SEARCH_LOCATION_FIELD_LENGTH = 100;
+export const MAX_SEARCH_CONTENT_TYPES = 2;
 /** Native model-mediated search can spend tens of seconds grounding a query. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 60_000;
 export const DEFAULT_CONTENT_RESULTS = 2;
@@ -116,6 +118,55 @@ function normalizeHandles(value: readonly string[] | undefined, field: string): 
 	return [...new Set(handles)];
 }
 
+function normalizeLocation(value: SearchRequest["userLocation"]): SearchRequest["userLocation"] | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search userLocation must be an object");
+	if (value.type !== "approximate") throw invalidRequest("Search userLocation.type must be approximate");
+	const field = (candidate: unknown, name: string): string | undefined => {
+		if (candidate === undefined) return undefined;
+		if (typeof candidate !== "string" || candidate.trim().length === 0 || candidate.length > MAX_SEARCH_LOCATION_FIELD_LENGTH) {
+			throw invalidRequest(`Search userLocation.${name} must be a non-empty string of at most ${MAX_SEARCH_LOCATION_FIELD_LENGTH} characters`);
+		}
+		return candidate.trim();
+	};
+	const country = field(value.country, "country");
+	if (country !== undefined && !/^[A-Za-z]{2}$/.test(country)) throw invalidRequest("Search userLocation.country must be a two-letter ISO country code");
+	const region = field(value.region, "region");
+	const city = field(value.city, "city");
+	const timezone = field(value.timezone, "timezone");
+	if (country === undefined && region === undefined && city === undefined && timezone === undefined) throw invalidRequest("Search userLocation must include a location field");
+	return {
+		type: "approximate",
+		...(country === undefined ? {} : { country: country.toUpperCase() }),
+		...(region === undefined ? {} : { region }),
+		...(city === undefined ? {} : { city }),
+		...(timezone === undefined ? {} : { timezone }),
+	};
+}
+
+function normalizeContentTypes(value: SearchRequest["searchContentTypes"]): SearchRequest["searchContentTypes"] | undefined {
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value) || value.length < 1 || value.length > MAX_SEARCH_CONTENT_TYPES) throw invalidRequest(`Search searchContentTypes must contain 1-${MAX_SEARCH_CONTENT_TYPES} items`);
+	const types = value.map((item, index) => {
+		if (item !== "text" && item !== "image") throw invalidRequest(`Search searchContentTypes[${index}] must be text or image`);
+		return item;
+	});
+	return [...new Set(types)];
+}
+
+function normalizeImageSettings(value: SearchRequest["imageSettings"]): SearchRequest["imageSettings"] | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search imageSettings must be an object");
+	const maxResults = value.maxResults;
+	if (maxResults !== undefined && (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > MAX_RESULTS)) throw invalidRequest(`Search imageSettings.maxResults must be an integer between 1 and ${MAX_RESULTS}`);
+	if (value.caption !== undefined && typeof value.caption !== "boolean") throw invalidRequest("Search imageSettings.caption must be a boolean");
+	if (maxResults === undefined && value.caption === undefined) return undefined;
+	return {
+		...(maxResults === undefined ? {} : { maxResults }),
+		...(value.caption === undefined ? {} : { caption: value.caption }),
+	};
+}
+
 function normalizeSocial(value: SearchRequest["social"]): SearchRequest["social"] | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search social must be an object");
@@ -164,6 +215,15 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	}
 	const dateRange = normalizeDateRange(request.dateRange);
 	const social = normalizeSocial(request.social);
+	const userLocation = normalizeLocation(request.userLocation);
+	const searchContentTypes = normalizeContentTypes(request.searchContentTypes);
+	const imageSettings = normalizeImageSettings(request.imageSettings);
+	const searchContextSize = request.searchContextSize ?? undefined;
+	if (searchContextSize !== undefined && !["low", "medium", "high"].includes(searchContextSize)) throw invalidRequest("Search searchContextSize must be low, medium, or high");
+	const returnTokenBudget = request.returnTokenBudget ?? undefined;
+	if (returnTokenBudget !== undefined && returnTokenBudget !== "default" && returnTokenBudget !== "unlimited") throw invalidRequest("Search returnTokenBudget must be default or unlimited");
+	const externalWebAccess = request.externalWebAccess ?? undefined;
+	if (externalWebAccess !== undefined && typeof externalWebAccess !== "boolean") throw invalidRequest("Search externalWebAccess must be a boolean");
 	const answerMode = request.answerMode ?? "auto";
 	if (answerMode !== "auto" && answerMode !== "evidence") {
 		throw invalidRequest("Search answerMode must be auto or evidence");
@@ -202,6 +262,12 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		...(executionModel === undefined ? {} : { executionModel }),
 		...(dateRange === undefined ? {} : { dateRange }),
 		...(social === undefined ? {} : { social }),
+		...(userLocation === undefined ? {} : { userLocation }),
+		...(searchContentTypes === undefined ? {} : { searchContentTypes }),
+		...(imageSettings === undefined ? {} : { imageSettings }),
+		...(searchContextSize === undefined ? {} : { searchContextSize }),
+		...(returnTokenBudget === undefined ? {} : { returnTokenBudget }),
+		...(externalWebAccess === undefined ? {} : { externalWebAccess }),
 		answerMode,
 		includeContent,
 		contentResults,
@@ -248,14 +314,15 @@ export async function executeSearch(
 		rejectCanceled = reject;
 	});
 	const onAbort = () => {
+		const deadlineAbort = options.signal?.reason instanceof DOMException && options.signal.reason.name === "TimeoutError";
 		controller.abort(options.signal?.reason);
 		rejectCanceled?.(
 			toSearchToolError(
 				createProviderError({
 					provider: provider.id,
-					kind: "canceled",
-					message: "Search canceled",
-					retryable: false,
+					kind: deadlineAbort ? "timeout" : "canceled",
+					message: deadlineAbort ? "Search deadline exceeded" : "Search canceled",
+					retryable: deadlineAbort,
 				}),
 				provider.id,
 			),

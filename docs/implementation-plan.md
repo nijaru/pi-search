@@ -12,8 +12,8 @@ This is the tracked source of truth for implementation order.
 
 ## 1. Cost-controlled `web_search` — complete
 
-- Native OpenAI/Codex Responses search is the first route for compatible active
-  models and for authenticated same-provider models available in Pi's registry
+- Native OpenAI Responses search and standalone Codex `alpha/search` are the
+  first routes for compatible active models and for authenticated same-provider models available in Pi's registry
   when another model is active.
 - Exa is the automatic non-native path when `EXA_API_KEY` is configured;
   Brave remains a paced last-resort keyword path.
@@ -39,7 +39,7 @@ This is the tracked source of truth for implementation order.
 
 Shipped routing now covers:
 
-- OpenAI Responses and Codex Responses native search;
+- OpenAI Responses web search and Codex standalone `alpha/search`;
 - Gemini Google Search grounding, including explicit registry model selection;
 - xAI web grounding and explicit X grounding, including bounded X handle/date/
   media constraints and registry model selection;
@@ -62,15 +62,15 @@ selected provider has no reliable per-call estimate.
 
 ## 5. OpenAI stability gate — complete
 
-Before adding the other adapters, the OpenAI/Codex path was hardened with:
+The OpenAI and Codex paths are hardened with:
 
-- strict Responses API compatibility checks;
-- LF and CRLF SSE parsing;
-- required terminal completion events;
-- rejection of truncated/incomplete streams;
-- request ID and retry-after preservation; and
+- strict OpenAI Responses compatibility checks;
+- official Codex `alpha/search` request/response mapping;
+- LF and CRLF SSE parsing for OpenAI;
+- required terminal completion events and rejection of truncated streams;
+- request ID, citation-range, usage, and retry-after preservation; and
 - regression tests for auth, cancellation, malformed responses, HTTP errors,
-  and unsupported constraints.
+  hard constraints, and provider-specific controls.
 
 ## 6. Additional providers — complete for the current release
 
@@ -83,16 +83,17 @@ Before adding the other adapters, the OpenAI/Codex path was hardened with:
   routing.
 - Explicit provider schemas and routing tests for local/non-native workflows.
 
-## 7. Post-install maturity gates — next work
+## 7. Post-install maturity gates — offline gate complete
 
-The tools now emit bounded readable model content, typed cited native answers,
+The tools emit bounded readable model content, typed cited native answers,
 optional bounded source enrichment, explicit model selection for model-mediated
-search, and compact default Pi renderers; expanded views retain the structured
-details. The remaining gates below are about live provider correctness and
-complete Pi execution, not adding more output formats.
+search, and compact default Pi renderers; expanded views retain structured
+details. The offline architecture gate now covers OpenAI Responses and Codex
+`alpha/search` request/response behavior, hard controls, citation alignment,
+timeout classification, and independent research fetch budgets.
 
-The package is installed and usable, but these are the correct next gates
-before calling the search surface production-mature:
+The remaining gates are credentialed/live validation and representative fetch
+quality, not additional runtime surface:
 
 1. **OpenAI/Codex production gate.** Audit current Responses behavior, source
    citation fidelity, model/auth selection, hard constraints, cancellation,
@@ -111,11 +112,12 @@ before calling the search surface production-mature:
    not a separate endpoint or local billing guarantee. Do not treat the local
    1 RPS limiter as proof of free capacity.
 5. **Provider-specific option gate.** Date ranges and bounded social/X
-   handles/media controls are now typed and enforced only by providers that
-   document them (Exa/X and xAI X). Unsupported hard constraints are rejected
-   at both routing and adapter boundaries. Source-type filters and richer
-   provider-specific controls remain deferred; normal calls remain
-   single-provider and comparison/fan-out is never hidden behavior.
+   handles/media controls are typed and enforced only by providers that
+   document them (Exa/X and xAI X). OpenAI and Codex native context size,
+   location, live-access, and source-type/image controls are mapped only on
+   their compatible adapters. Unsupported hard constraints are rejected at
+   both routing and adapter boundaries; normal calls remain single-provider
+   and comparison/fan-out is never hidden behavior.
 
 ### Completed integration — local document conversion
 

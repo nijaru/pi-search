@@ -262,6 +262,7 @@ export async function executeResearch(
 	const results: SearchResult[] = [];
 	const fetched: FetchedContent[] = [];
 	const warnings: SearchWarning[] = [];
+	const seenResultUrls = new Set<string>();
 	const seenUrls = new Set<string>();
 	const currentUsage = (): ProviderUsage => ({
 		...(costUsd > 0 ? { costUsd } : {}),
@@ -317,7 +318,12 @@ export async function executeResearch(
 					timeoutMs: options.searchTimeoutMs ?? remaining(deadline),
 					context: providerContextFromPi(context),
 				});
-				results.push(...response.results);
+				for (const result of response.results) {
+					const identity = searchUrlIdentity(result.url);
+					if (identity === undefined || seenResultUrls.has(identity)) continue;
+					seenResultUrls.add(identity);
+					results.push(result);
+				}
 				warnings.push(...response.warnings);
 				if (response.executionModel !== undefined) executionModel = response.executionModel;
 				const responseUsage = response.usage;
@@ -363,10 +369,12 @@ export async function executeResearch(
 		}
 
 		const fetchLimit = Math.min(normalized.fetchResults ?? 0, normalized.budget.maxFetches);
-		if (stopReason === "completed" && fetchLimit > 0) {
+		// Search and fetch have independent budgets. Preserve useful results from
+		// completed searches even when later search work hit its budget or failed.
+		if (stopReason !== "deadline" && stopReason !== "canceled" && fetchLimit > 0) {
 			for (const result of results) {
 				if (fetchAttempts >= fetchLimit || stepsCompleted >= normalized.budget.maxSteps || fetchesCompleted >= fetchLimit) {
-					if (fetchAttempts < fetchLimit || stepsCompleted >= normalized.budget.maxSteps) stopReason = "budget";
+					if ((stopReason === "completed" || stopReason === "budget") && (fetchAttempts < fetchLimit || stepsCompleted >= normalized.budget.maxSteps)) stopReason = "budget";
 					break;
 				}
 				const fetchIdentity = searchUrlIdentity(result.url);

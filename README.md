@@ -14,10 +14,10 @@ Pi tools:
 
 ### Search routing
 
-- Active OpenAI Responses and OpenAI Codex Responses models use native search
-  first. With another active model, an authenticated OpenAI/Codex Responses
-  model in Pi's registry can provide the built-in search path without a model
-  switch.
+- Active OpenAI Responses models use the hosted Responses `web_search` tool;
+  active Codex models use Codex's standalone `alpha/search` endpoint. With
+  another active model, an authenticated OpenAI/Codex search model in Pi's
+  registry can provide search without a model switch.
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
@@ -34,7 +34,8 @@ Pi tools:
 
 All providers normalize into the same evidence-first result shape. Provider
 answers are typed, cited, bounded, and marked untrusted rather than treated as
-authoritative summaries.
+authoritative summaries. OpenAI/Codex search also exposes native context-size,
+location, live-access, and content-type controls when requested.
 
 ## Configuration
 
@@ -76,7 +77,7 @@ then Brave when the corresponding credentials and hard constraints permit it.
 Set `includeContent: true` on `web_search` only when bounded excerpts from
 selected source pages are needed; this reuses the safe local fetch path. For
 `web_research`, use `executionModel` with an explicit model-mediated `provider`
-when a multi-query run should use a specific Gemini, xAI, or OpenAI model.
+when a multi-query run should use a specific Gemini, xAI, OpenAI, or Codex model.
 
 ### Local OpenAI-compatible endpoints
 

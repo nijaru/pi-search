@@ -20,7 +20,6 @@ import { validateSearchRequest } from "./search";
 import { normalizeSearchUrl } from "./search-cleanup";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-export const CODEX_RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 export const DEFAULT_OPENAI_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_SOURCE_URL_LENGTH = 8_192;
 const MAX_SOURCE_TITLE_LENGTH = 500;
@@ -30,12 +29,12 @@ const MAX_ANSWER_LENGTH = 8_000;
 const MAX_ERROR_BODY_BYTES = 8 * 1024;
 const MAX_ERROR_DIAGNOSTIC_CHARS = 1_000;
 
-export type OpenAIProviderId = "openai" | "openai-codex";
+export type OpenAIProviderId = "openai";
 export type OpenAIFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export interface OpenAIAdapterOptions {
-	/** Which Pi provider this instance serves. */
-	readonly provider: OpenAIProviderId;
+	/** Explicit provider tag retained for the OpenAI adapter boundary. */
+	readonly provider: "openai";
 	/** Optional endpoint override for tests or an explicitly configured proxy. */
 	readonly endpoint?: string;
 	readonly fetchImpl?: OpenAIFetch;
@@ -80,6 +79,12 @@ const capabilities: ProviderCapabilities = {
 	excerpts: true,
 	domainFilter: true,
 	nativeGrounding: true,
+	searchContextSize: true,
+	returnTokenBudget: true,
+	externalWebAccess: true,
+	userLocation: true,
+	searchContentTypes: true,
+	imageSettings: true,
 };
 
 const profile: ProviderProfile = {
@@ -87,22 +92,13 @@ const profile: ProviderProfile = {
 	costModel: "unknown",
 };
 
-function malformed(provider: OpenAIProviderId, message: string, cause?: unknown): never {
+function malformed(provider: "openai", message: string, cause?: unknown): never {
 	throw createProviderError({
 		provider,
 		kind: "malformed",
 		message: `OpenAI web search returned a malformed response (${message})`,
 		retryable: false,
 		cause,
-	});
-}
-
-function unsupported(provider: OpenAIProviderId, message: string): never {
-	throw createProviderError({
-		provider,
-		kind: "unsupported",
-		message,
-		retryable: false,
 	});
 }
 
@@ -145,7 +141,7 @@ async function readErrorDiagnostic(response: Response, secrets: readonly string[
 	}
 }
 
-function objectValue(value: unknown, label: string, provider: OpenAIProviderId = "openai"): Record<string, unknown> {
+function objectValue(value: unknown, label: string, provider: "openai" = "openai"): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		return malformed(provider, `${label} is not an object`);
 	}
@@ -229,10 +225,14 @@ function annotationCandidate(value: unknown): SourceCandidate | undefined {
 	const parsed = parseHttpUrl(annotation.url);
 	if (parsed === undefined) return undefined;
 	const title = optionalString(annotation.title, MAX_SOURCE_TITLE_LENGTH);
+	const startIndex = optionalNonNegativeNumber(annotation.start_index);
+	const endIndex = optionalNonNegativeNumber(annotation.end_index);
 	return {
 		url: parsed.url,
 		...(parsed.sourceUrl === undefined ? {} : { sourceUrl: parsed.sourceUrl }),
 		...(title === undefined ? {} : { title }),
+		...(startIndex === undefined ? {} : { startIndex: Math.floor(startIndex) }),
+		...(endIndex === undefined ? {} : { endIndex: Math.floor(endIndex) }),
 	};
 }
 
@@ -244,7 +244,7 @@ function sourceGroups(item: Record<string, unknown>): unknown[] {
 	return [actionSources, item.sources, item.results];
 }
 
-function outputItems(payload: unknown, provider: OpenAIProviderId = "openai"): readonly unknown[] {
+function outputItems(payload: unknown, provider: "openai" = "openai"): readonly unknown[] {
 	const root = objectValue(payload, "response", provider);
 	if (!Array.isArray(root.output)) return malformed(provider, "output is not an array");
 	return root.output;
@@ -284,18 +284,18 @@ function resultFromCandidate(candidate: SourceCandidate, query: string, provider
 	};
 }
 
-/** Normalize an OpenAI/Codex Responses payload into evidence-first results. */
+/** Normalize an OpenAI Responses payload into evidence-first results. */
 export function normalizeOpenAIResponse(
 	payload: unknown,
 	request: SearchRequest,
-	provider: OpenAIProviderId = "openai",
+	provider: "openai" = "openai",
 ): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", provider) as OpenAIResponsePayload & Record<string, unknown>;
 	const items = outputItems(root, provider);
 	const candidates = new Map<string, SourceCandidate>();
 	const answerTextParts: string[] = [];
-	const answerCitations = new Map<string, { url: string; title?: string; sourceId?: string }>();
+	const answerCitations = new Map<string, { url: string; title?: string; sourceId?: string; startIndex?: number; endIndex?: number }>();
 
 	for (const item of items) {
 		if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
@@ -311,7 +311,16 @@ export function normalizeOpenAIResponse(
 					const candidate = annotationCandidate(annotation);
 					if (candidate !== undefined) {
 						mergeCandidate(candidates, candidate);
-						answerCitations.set(candidate.url, { url: candidate.url, ...(candidate.title === undefined ? {} : { title: candidate.title }), ...(candidate.sourceId === undefined ? {} : { sourceId: candidate.sourceId }) });
+						const annotationRecord = annotation as Record<string, unknown>;
+						const startIndex = optionalNonNegativeNumber(annotationRecord.start_index);
+						const endIndex = optionalNonNegativeNumber(annotationRecord.end_index);
+						answerCitations.set(candidate.url, {
+							url: candidate.url,
+							...(candidate.title === undefined ? {} : { title: candidate.title }),
+							...(candidate.sourceId === undefined ? {} : { sourceId: candidate.sourceId }),
+							...(startIndex === undefined ? {} : { startIndex: Math.floor(startIndex) }),
+							...(endIndex === undefined ? {} : { endIndex: Math.floor(endIndex) }),
+						});
 					}
 				}
 			}
@@ -336,7 +345,10 @@ export function normalizeOpenAIResponse(
 		}
 	}
 
-	const ordered = [...candidates.values()].slice(0, normalized.maxResults);
+	const citedUrls = new Set(answerCitations.keys());
+	const ordered = [...candidates.values()]
+		.sort((left, right) => Number(citedUrls.has(right.url)) - Number(citedUrls.has(left.url)))
+		.slice(0, normalized.maxResults);
 	if (ordered.length === 0) {
 		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search returned no inspectable HTTP sources", retryable: false });
 	}
@@ -371,14 +383,13 @@ function modelSearchRank(model: ProviderModel): [number, string] {
 }
 
 function searchModelCandidates(
-	provider: OpenAIProviderId,
 	active: ProviderModel | undefined,
 	registry: ProviderContext["modelRegistry"],
 	executionModel: string | undefined,
 ): ProviderModel[] {
 	const seen = new Set<string>();
 	const candidates = [...(active === undefined ? [] : [active]), ...(registry?.getModels?.() ?? [])].filter((candidate) => {
-		if (candidate.provider !== provider || candidate.api !== (provider === "openai" ? "openai-responses" : "openai-codex-responses")) return false;
+		if (candidate.provider !== "openai" || candidate.api !== "openai-responses") return false;
 		const key = `${candidate.provider}:${candidate.api}:${candidate.id}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
@@ -392,11 +403,12 @@ function searchModelCandidates(
 	return candidates;
 }
 
-async function selectSearchExecution(provider: OpenAIProviderId, active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<SearchExecution> {
+async function selectSearchExecution(active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<SearchExecution> {
+	const provider = "openai" as const;
 	if (registry === undefined) {
 		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
 	}
-	const candidates = searchModelCandidates(provider, active, registry, request.executionModel);
+	const candidates = searchModelCandidates(active, registry, request.executionModel);
 	const selectedCandidates = request.executionModel === undefined
 		? candidates
 		: candidates.filter((candidate) => candidate.id === request.executionModel);
@@ -483,10 +495,22 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 
 	const filters = domainFilters(normalized);
 	if (filters !== undefined) appliedOptions.push("domains");
+	if (normalized.searchContextSize !== undefined) appliedOptions.push("searchContextSize");
+	if (normalized.returnTokenBudget !== undefined) appliedOptions.push("returnTokenBudget");
+	if (normalized.externalWebAccess !== undefined) appliedOptions.push("externalWebAccess");
+	if (normalized.userLocation !== undefined) appliedOptions.push("userLocation");
+	if (normalized.searchContentTypes !== undefined) appliedOptions.push("searchContentTypes");
+	if (normalized.imageSettings !== undefined) appliedOptions.push("imageSettings");
 
 	const tool = {
 		type: "web_search",
 		...(filters === undefined ? {} : { filters }),
+		...(normalized.searchContextSize === undefined ? {} : { search_context_size: normalized.searchContextSize }),
+		...(normalized.externalWebAccess === undefined ? {} : { external_web_access: normalized.externalWebAccess }),
+		...(normalized.userLocation === undefined ? {} : { user_location: normalized.userLocation }),
+		...(normalized.searchContentTypes === undefined ? {} : { search_content_types: [...normalized.searchContentTypes] }),
+		...(normalized.imageSettings === undefined ? {} : { image_settings: normalized.imageSettings }),
+		...(normalized.returnTokenBudget === undefined || normalized.returnTokenBudget === "default" ? {} : { return_token_budget: normalized.returnTokenBudget }),
 	};
 	return {
 		body: {
@@ -505,48 +529,24 @@ export function buildOpenAIRequest(request: SearchRequest, provider: OpenAIProvi
 	};
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | undefined {
-	const parts = token.split(".");
-	if (parts.length !== 3 || parts[1] === undefined) return undefined;
-	try {
-		const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
-		const decoded = typeof atob === "function" ? atob(normalized) : Buffer.from(normalized, "base64").toString("utf8");
-		const value = JSON.parse(decoded) as unknown;
-		return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function codexAccountId(token: string): string | undefined {
-	const payload = decodeJwtPayload(token);
-	const auth = payload?.["https://api.openai.com/auth"];
-	if (typeof auth !== "object" || auth === null || Array.isArray(auth)) return undefined;
-	return optionalString((auth as Record<string, unknown>).chatgpt_account_id);
-}
-
-function endpointFor(model: ProviderModel, provider: OpenAIProviderId, override?: string): string {
-	const candidate = override ?? (model.baseUrl.trim().length > 0 ? model.baseUrl : undefined) ?? (provider === "openai" ? OPENAI_RESPONSES_ENDPOINT : CODEX_RESPONSES_ENDPOINT);
+function endpointFor(model: ProviderModel, override?: string): string {
+	const candidate = override ?? (model.baseUrl.trim().length > 0 ? model.baseUrl : undefined) ?? OPENAI_RESPONSES_ENDPOINT;
 	let url: URL;
 	try {
 		url = new URL(candidate);
 	} catch (error) {
-		throw createProviderError({ provider, kind: "badRequest", message: "OpenAI Responses endpoint is not a valid URL", retryable: false, cause: error });
+		throw createProviderError({ provider: "openai", kind: "badRequest", message: "OpenAI Responses endpoint is not a valid URL", retryable: false, cause: error });
 	}
 	if (url.protocol !== "https:" && url.protocol !== "http:") {
-		throw createProviderError({ provider, kind: "badRequest", message: "OpenAI Responses endpoint must use HTTP or HTTPS", retryable: false });
+		throw createProviderError({ provider: "openai", kind: "badRequest", message: "OpenAI Responses endpoint must use HTTP or HTTPS", retryable: false });
 	}
 	const path = url.pathname.replace(/\/+$/, "");
 	if (path.endsWith("/responses")) return url.toString();
-	if (provider === "openai-codex") {
-		url.pathname = path.endsWith("/codex") ? `${path}/responses` : `${path}/codex/responses`;
-	} else {
-		url.pathname = `${path}/responses`;
-	}
+	url.pathname = `${path}/responses`;
 	return url.toString();
 }
 
-async function readBody(response: Response, signal: AbortSignal, maxBytes: number, provider: OpenAIProviderId): Promise<string> {
+async function readBody(response: Response, signal: AbortSignal, maxBytes: number, provider: "openai"): Promise<string> {
 	if (response.body === null) return "";
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
@@ -643,7 +643,7 @@ function parseResponseBody(body: string, provider: OpenAIProviderId): Record<str
 	if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
 		try {
 			const parsed = JSON.parse(trimmed) as unknown;
-			if (Array.isArray(parsed)) return { output: parsed, status: "completed" };
+			if (Array.isArray(parsed)) return malformed(provider, "JSON response must be an object envelope");
 			const response = objectValue(parsed, "response", provider);
 			if (optionalString(response.status) === undefined) return malformed(provider, "JSON response has no terminal status");
 			return response;
@@ -735,16 +735,14 @@ export class OpenAIProvider implements Provider {
 
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
-		const model = context.model;
-		if (model !== undefined && model.provider === this.id) {
-			if (this.id === "openai-codex" && model.api !== "openai-codex-responses") return unsupported(this.id, `Active ${this.id} model does not use the Codex Responses API`);
-			if (this.id === "openai" && model.api !== "openai-responses") return unsupported(this.id, `Active OpenAI model does not use the OpenAI Responses API`);
-		}
+		// Selection below filters the active model by API. Do not reject an active
+		// completion model before the registry can provide a compatible Responses
+		// model for an explicit or automatic cross-model search.
 		const plan = buildOpenAIRequest(normalized, this.id);
 		if (signal.aborted) {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}
-		const execution = await selectSearchExecution(this.id, model, context.modelRegistry, normalized);
+		const execution = await selectSearchExecution(context.model, context.modelRegistry, normalized);
 		if (signal.aborted) {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}
@@ -752,7 +750,7 @@ export class OpenAIProvider implements Provider {
 		const body = {
 			...plan.body,
 			model: execution.model.id,
-			...(this.id === "openai" ? { max_output_tokens: 2_048 } : {}),
+			max_output_tokens: 2_048,
 		};
 		const headers = new Headers();
 		applyProviderHeaders(headers, execution.model.headers);
@@ -770,22 +768,10 @@ export class OpenAIProvider implements Provider {
 		].filter((value): value is string => typeof value === "string");
 		headers.set("accept", "text/event-stream");
 		headers.set("content-type", "application/json");
-		if (this.id === "openai-codex") {
-			if (execution.auth.apiKey === undefined || execution.auth.apiKey.trim().length === 0) {
-				throw createProviderError({ provider: this.id, kind: "auth", message: "Codex authentication returned no token", retryable: false });
-			}
-			const accountId = codexAccountId(execution.auth.apiKey);
-			if (accountId === undefined) {
-				throw createProviderError({ provider: this.id, kind: "auth", message: "Codex authentication has no ChatGPT account id", retryable: false });
-			}
-			headers.set("chatgpt-account-id", accountId);
-			headers.set("originator", "pi");
-			headers.set("OpenAI-Beta", "responses=experimental");
-		}
 
 		let response: Response;
 		try {
-			response = await this.fetchImpl(endpointFor(execution.model, this.id, this.endpoint), {
+			response = await this.fetchImpl(endpointFor(execution.model, this.endpoint), {
 				method: "POST",
 				headers,
 				body: JSON.stringify(body),

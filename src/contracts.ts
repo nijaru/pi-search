@@ -158,6 +158,18 @@ export interface ProviderCapabilities {
 	readonly mediaUnderstanding?: boolean;
 	/** Uses a model's native grounding/search tool. */
 	readonly nativeGrounding?: boolean;
+	/** Supports provider-native search context sizing. */
+	readonly searchContextSize?: boolean;
+	/** Supports provider-native returned-token budgets. */
+	readonly returnTokenBudget?: boolean;
+	/** Supports live/cache-only search selection. */
+	readonly externalWebAccess?: boolean;
+	/** Supports approximate user location. */
+	readonly userLocation?: boolean;
+	/** Supports provider-native content-type selection. */
+	readonly searchContentTypes?: boolean;
+	/** Supports image result settings. */
+	readonly imageSettings?: boolean;
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────
@@ -201,6 +213,23 @@ export interface SocialSearchOptions {
 	readonly understandVideos?: boolean;
 }
 
+export type SearchContextSize = "low" | "medium" | "high";
+export type SearchReturnTokenBudget = "default" | "unlimited";
+export type SearchContentType = "text" | "image";
+
+export interface SearchUserLocation {
+	readonly type: "approximate";
+	readonly country?: string;
+	readonly region?: string;
+	readonly city?: string;
+	readonly timezone?: string;
+}
+
+export interface SearchImageSettings {
+	readonly maxResults?: number;
+	readonly caption?: boolean;
+}
+
 /**
  * Provider-neutral search request. Every field is optional except `query`
  * so that a caller can start with a bare string and refine as needed.
@@ -228,6 +257,18 @@ export interface SearchRequest {
 	readonly executionModel?: string;
 	/** Include a provider-grounded answer when the backend supplies one. */
 	readonly answerMode?: SearchAnswerMode;
+	/** Provider-native amount of search context supplied to the model. */
+	readonly searchContextSize?: SearchContextSize;
+	/** Provider-native returned-token budget for long research runs. */
+	readonly returnTokenBudget?: SearchReturnTokenBudget;
+	/** Whether provider search may use live internet access. */
+	readonly externalWebAccess?: boolean;
+	/** Approximate location used to localize provider search results. */
+	readonly userLocation?: SearchUserLocation;
+	/** Provider-native content types to retrieve. */
+	readonly searchContentTypes?: readonly SearchContentType[];
+	/** Image-result controls when image search is enabled. */
+	readonly imageSettings?: SearchImageSettings;
 	/** Fetch a small number of selected result URLs through the safe local fetcher. */
 	readonly includeContent?: boolean;
 	/** Maximum selected source pages to fetch when includeContent is enabled. */
@@ -243,13 +284,28 @@ export interface SearchRequest {
 }
 
 /** Options whose handling must be visible in the normalized response. */
-export type SearchOption = "mode" | "maxResults" | "domains" | "dateRange" | "social" | "executionModel";
+export type SearchOption =
+	| "mode"
+	| "maxResults"
+	| "domains"
+	| "dateRange"
+	| "social"
+	| "executionModel"
+	| "searchContextSize"
+	| "returnTokenBudget"
+	| "externalWebAccess"
+	| "userLocation"
+	| "searchContentTypes"
+	| "imageSettings";
 
 export interface SearchCitation {
 	/** URL of a normalized search result cited by the answer. */
 	readonly url: Url;
 	readonly title?: string;
 	readonly sourceId?: string;
+	/** Character range in the provider answer, when supplied by the provider. */
+	readonly startIndex?: number;
+	readonly endIndex?: number;
 }
 
 /** Provider-generated grounded text. It is evidence, never trusted instructions. */
@@ -481,23 +537,6 @@ export interface FetchedContent {
 	readonly warnings: readonly FetchWarning[];
 	/** True if the readable-content extractor fell back to raw HTML. */
 	readonly fellBackToRaw?: boolean;
-}
-
-// ─── Find (in-content) ─────────────────────────────────────────────────────
-
-/**
- * A located passage within already-fetched content. `web_find` uses this to
- * let the agent locate exact text without re-fetching (D4).
- */
-export interface FindResult {
-	/** The search term or pattern that was located. */
-	readonly query: string;
-	/** Zero-based character offset of the match within the fetched content. */
-	readonly offset: number;
-	/** Length of the matched span in characters. */
-	readonly length: number;
-	/** Surrounding context window around the match. */
-	readonly excerpt: string;
 }
 
 // ─── Provider interface ────────────────────────────────────────────────────
