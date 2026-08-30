@@ -1,0 +1,24 @@
+{
+  "project": "pi-search",
+  "ref": "skhs",
+  "title": "Review pi-search architecture against current OpenAI/Codex search",
+  "description": "Audit extension architecture, current OpenAI Responses web search, and official Codex search implementation; report concrete defects and prioritized SOTA improvements.",
+  "status": "done",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-08-30T07:31:24.34883Z",
+      "msg": "Review findings: architecture is strong on provider-neutral contracts, explicit auth, strict routing, bounded SSRF-safe fetch, and evidence fencing. Concrete defects: src/openai.ts active wrong-api guard blocks registry-selected compatible model; src/research-tool.ts only fetches when stopReason=completed, so provider-call/cost budgets and partial provider failures suppress valid local fetches; src/search-tool.ts conflates internal deadline abort with caller cancellation; src/openai.ts accepts bare JSON arrays as completed Responses. Current official Codex source uses POST alpha/search with SearchRequest/commands/settings and non-stream JSON, so current openai-codex adapter needs live validation or separate adapter. Current OpenAI docs expose search_context_size, return_token_budget, external_web_access, user_location, search_content_types/image settings, which are absent."
+    }
+  ],
+  "created_at": "2026-08-30T07:27:44.792887Z",
+  "updated_at": "2026-08-30T07:31:26.640097Z",
+  "completed_at": "2026-08-30T07:31:26.640097Z",
+  "external": {}
+}
