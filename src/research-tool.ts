@@ -106,6 +106,10 @@ function warning(message: string): SearchWarning {
 	return { code: "partial-results", message };
 }
 
+function hasOutputBoundWarning(warnings: readonly SearchWarning[]): boolean {
+	return warnings.some((item) => item.code === "partial-results" && item.message.startsWith("Research output was bounded"));
+}
+
 function compactText(value: string, maxLength: number): string {
 	return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -199,7 +203,9 @@ function boundedResponse(response: ResearchResponse, requestedMaxOutputChars: nu
 		current = { ...current, fetched: [], results: [], question: current.question.slice(0, 500) };
 	}
 	if (!truncated) return current;
-	current = { ...current, warnings: [...current.warnings.slice(0, 7), warning(`Research output was bounded to ${maxOutputChars} characters`)] };
+	if (!hasOutputBoundWarning(current.warnings)) {
+		current = { ...current, warnings: [...current.warnings.slice(0, 7), warning(`Research output was bounded to ${maxOutputChars} characters`)] };
+	}
 	while (byteLength() > maxOutputChars && current.warnings.length > 1) {
 		current = { ...current, warnings: current.warnings.slice(1) };
 	}
@@ -254,6 +260,7 @@ export async function executeResearch(
 	let billedUnit: string | undefined;
 	let billedUnitsConsistent = true;
 	let searchQueries = 0;
+	let hadRecoverableSearchFailure = false;
 	let hasInputTokens = false;
 	let hasOutputTokens = false;
 	let hasTotalTokens = false;
@@ -360,13 +367,20 @@ export async function executeResearch(
 			} catch (error) {
 				if (deadlineController.signal.aborted || signal?.aborted) {
 					stopReason = signal?.aborted ? "canceled" : "deadline";
-				} else {
-					stopReason = "provider-error";
+					warnings.push(warning(`Research search failed for query ${JSON.stringify(query)}: ${error instanceof Error ? error.message : String(error)}`));
+					break;
 				}
-				warnings.push(warning(`Research search failed after ${providerCalls} provider call(s): ${error instanceof Error ? error.message : String(error)}`));
+				const malformedResponse = error instanceof SearchToolError && error.kind === "malformed";
+				warnings.push(warning(`Research search failed for query ${JSON.stringify(query)}: ${error instanceof Error ? error.message : String(error)}`));
+				if (malformedResponse) {
+					hadRecoverableSearchFailure = true;
+					continue;
+				}
+				stopReason = "provider-error";
 				break;
 			}
 		}
+		if (stopReason === "completed" && hadRecoverableSearchFailure) stopReason = "partial";
 
 		const fetchLimit = Math.min(normalized.fetchResults ?? 0, normalized.budget.maxFetches);
 		// Search and fetch have independent budgets. Preserve useful results from
@@ -395,10 +409,10 @@ export async function executeResearch(
 					fetched.push(page);
 					fetchesCompleted += 1;
 					const boundedCandidate = boundedResponse(currentResponse(), normalized.budget.maxOutputChars);
-					if (boundedCandidate.fetched.length < fetched.length) {
+					if (boundedCandidate.fetched.length < fetched.length || boundedCandidate.results.length < results.length) {
 						fetched.pop();
 						fetchesCompleted -= 1;
-						warnings.push(warning("Research fetching stopped when the model-visible output budget was reached"));
+						warnings.push(warning("Research output was bounded while selecting fetched sources"));
 						break;
 					}
 				} catch (error) {

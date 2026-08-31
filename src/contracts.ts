@@ -419,7 +419,7 @@ export interface ResearchRequest {
 	readonly fetchResults?: number;
 }
 
-export type ResearchStopReason = "completed" | "budget" | "deadline" | "canceled" | "provider-error";
+export type ResearchStopReason = "completed" | "partial" | "budget" | "deadline" | "canceled" | "provider-error";
 
 export interface ResearchResponse {
 	readonly question: string;

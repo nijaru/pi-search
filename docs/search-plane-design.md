@@ -57,17 +57,21 @@ unavailable before a billable result can be produced (authentication, rate
 limit, or unavailable), and only for automatic routing. Network, timeout, and
 post-dispatch HTTP failures have unknown effects and remain final. Bad
 requests, unsupported constraints, malformed data, cancellation, and explicit
-provider hints also remain final. The fallback is visible as a warning
-with the failed provider and error class. There is no retry loop, fan-out,
-provider comparison, or fallback after a successful response.
+provider hints also remain final for a single `web_search` call. The fallback is
+visible as a warning with the failed provider and error class. There is no retry
+loop, fan-out, provider comparison, or fallback after a successful response.
 
 The default fallback is therefore bounded to two provider calls. In
-`web_research`, a recoverable search failure or exhausted search budget does not
-discard already-collected evidence; independent fetch budget may still enrich
-those results unless the overall deadline or caller cancellation fired. It is
-not a promise that a metered call is free; direct providers are only eligible when
-their credentials and billing policy already admit them. This policy favors a
-working result without reproducing the old extension's unbounded auto chain.
+`web_research`, a malformed response for one explicit query is recoverable:
+the orchestrator records a query-specific warning and continues independent
+queries, returning `partial` when at least one query failed. Authentication,
+rate-limit, timeout, network, and other provider failures remain final for the
+research invocation, while already-collected evidence may still be fetched
+unless the overall deadline or caller cancellation fired. An exhausted search
+budget does not discard already-collected evidence. It is not a promise that a
+metered call is free; direct providers are only eligible when their credentials
+and billing policy already admit them. This policy favors a working result
+without reproducing the old extension's unbounded auto chain.
 
 ## Source depth
 

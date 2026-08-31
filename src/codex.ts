@@ -182,8 +182,26 @@ function sourceFromRecord(value: unknown, query: string): SearchResult | undefin
 	};
 }
 
+function trimExtractedUrl(value: string): string {
+	let candidate = value;
+	while (candidate.length > 0) {
+		const trailing = candidate.match(/[)\]}>.,;:!?\u0027"`]+\/$/);
+		if (trailing !== null) {
+			candidate = candidate.slice(0, -trailing[0].length);
+			continue;
+		}
+		const stripped = candidate.replace(/[)\]}>.,;:!?\u0027"`]+$/, "");
+		if (stripped === candidate) break;
+		candidate = stripped;
+	}
+	return candidate;
+}
+
 function urlsFromText(text: string): readonly string[] {
-	return [...text.matchAll(/https?:\/\/[^\s)<>\]]+/g)].map((match) => match[0]!).slice(0, 20);
+	return [...text.matchAll(/https?:\/\/[^\s<>\]]+/gi)]
+		.map((match) => trimExtractedUrl(match[0]!))
+		.filter((url) => url.length > 0)
+		.slice(0, 20);
 }
 
 function normalizeCodexResponse(payload: unknown, request: SearchRequest): SearchResponse {

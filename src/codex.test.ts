@@ -55,6 +55,14 @@ describe("CodexProvider", () => {
 		expect(result).toMatchObject({ provider: "openai-codex", requestId: "req-codex", executionModel: "gpt-test", results: [{ url: "https://example.com/news", sourceId: "turn0search0" }], answer: { citations: [{ url: "https://example.com/news", sourceId: "turn0search0" }] } });
 	});
 
+	it("strips answer-text URL delimiters without damaging a trailing path slash", async () => {
+		const provider = new CodexProvider({
+			fetchImpl: async () => response({ output: "See `https://example.com/docs`, https://example.org/path/.", results: [] }),
+		});
+		const result = await provider.search({ query: "q", maxResults: 4 }, new AbortController().signal, context());
+		expect(result.results.map((item) => item.url)).toEqual(["https://example.com/docs", "https://example.org/path/"]);
+	});
+
 	it("rejects unsupported hard constraints before network access", async () => {
 		let calls = 0;
 		const provider = new CodexProvider({ fetchImpl: async () => { calls += 1; return response({}); } });

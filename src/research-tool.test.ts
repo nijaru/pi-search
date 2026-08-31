@@ -73,6 +73,23 @@ describe("web_research", () => {
 		expect(result.warnings[0]?.message).toContain("rate limit");
 	});
 
+	it("continues independent queries after a malformed provider response", async () => {
+		let calls = 0;
+		const selected: Provider = {
+			...provider(),
+			search: async (request) => {
+				calls += 1;
+				if (calls === 2) throw new SearchToolError("WEB_SEARCH_MALFORMED_RESPONSE", "no inspectable sources", { kind: "malformed", provider: "openai" });
+				return { query: request.query, results: [{ url: `https://example.com/${calls}`, provider: "openai", searchQuery: request.query }], provider: "openai", appliedOptions: [], warnings: [] };
+			},
+		};
+		const result = await executeResearch({ question: "main", queries: ["one", "two", "three"], budget: { ...budget, maxProviderCalls: 3 } }, () => selected, context());
+		expect(result.stopReason).toBe("partial");
+		expect(result.providerCalls).toBe(3);
+		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "three"]);
+		expect(result.warnings[0]?.message).toContain('query "two"');
+	});
+
 	it("fetches retained results after a later search provider failure", async () => {
 		let calls = 0;
 		const selected: Provider = {
@@ -120,6 +137,21 @@ describe("web_research", () => {
 		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["http://127.0.0.1/blocked", "http://127.0.0.1/blocked-2"]), context());
 		expect(result.fetchAttempts).toBe(1);
 		expect(result.fetchesCompleted).toBe(0);
+	});
+
+	it("emits one warning when fetched content exceeds the research output budget", async () => {
+		const transport = (async () => ({
+			status: 200,
+			statusText: "OK",
+			headers: new Headers({ "content-type": "text/plain" }),
+			body: {
+				async *[Symbol.asyncIterator]() { yield new TextEncoder().encode("large evidence ".repeat(200)); },
+				cancel() {},
+				destroy() {},
+			},
+		})) as never;
+		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, maxOutputChars: 1_000 } }, () => provider(false), context(), { transport });
+		expect(result.warnings.filter((item) => item.message.startsWith("Research output was bounded")).length).toBe(1);
 	});
 
 	it("renders readable evidence instead of raw JSON", () => {
