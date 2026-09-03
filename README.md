@@ -116,7 +116,7 @@ Readability/Turndown extraction, and untrusted-content fencing. It also supports
   AnyDoc detects scanned/image-only and encrypted PDFs and fails explicitly;
   OCR is not implicit.
 - An explicit `maxPages` request uses bounded local `pdftotext`, because
-  AnyDoc 0.1.6 does not expose page-range selection.
+  AnyDoc does not expose page-range selection.
 - YouTube captions through bounded local `yt-dlp` with no playlist, cookie, or
   media download behavior.
 

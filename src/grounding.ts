@@ -144,15 +144,14 @@ export async function executeGroundedSearch(options: GroundedSearchOptions): Pro
 		maxResponseBytes: options.maxResponseBytes,
 	});
 	const response = await options.normalize(result.payload, normalized, { signal: options.signal });
+	const usage = usageWithRateLimits(response.usage, result.rateLimits);
 	return {
 		...response,
 		...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: execution.model.id } }),
 		...(response.requestId === undefined && result.requestId === undefined
 			? {}
 			: { requestId: response.requestId ?? result.requestId }),
-		...(usageWithRateLimits(response.usage, result.rateLimits) === undefined
-			? {}
-			: { usage: usageWithRateLimits(response.usage, result.rateLimits) }),
+		...(usage === undefined ? {} : { usage }),
 		executionModel: execution.model.id,
 		appliedOptions: options.plan.appliedOptions,
 		warnings: [...options.plan.warnings, ...response.warnings],

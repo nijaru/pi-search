@@ -4,7 +4,7 @@ import { parentPort } from "node:worker_threads";
 if (!parentPort) throw new Error("AnyDoc worker requires a parent port");
 
 const anydoc = createRequire(import.meta.url)("@firecrawl/anydoc");
-const errorCodes = new Set(["unsupported", "malformed", "encrypted", "resourceLimit", "missingPart", "io"]);
+const errorCodes = new Set(["unsupported", "needsOcr", "malformed", "encrypted", "resourceLimit", "missingPart", "io"]);
 
 parentPort.on("message", async (message) => {
 	try {

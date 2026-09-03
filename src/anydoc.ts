@@ -3,7 +3,7 @@ import { SafeFetchError } from "./fetch-errors";
 
 export const ANYDOC_FORMATS = ["doc", "docx", "odt", "ppt", "pptx", "rtf", "epub", "pdf", "xlsx", "ods", "odp", "csv"] as const;
 export type AnyDocFormat = (typeof ANYDOC_FORMATS)[number];
-export type AnyDocErrorCode = "unsupported" | "malformed" | "encrypted" | "resourceLimit" | "missingPart" | "io";
+export type AnyDocErrorCode = "unsupported" | "needsOcr" | "malformed" | "encrypted" | "resourceLimit" | "missingPart" | "io";
 
 export interface AnyDocResult {
 	readonly content: string;
@@ -157,5 +157,5 @@ function isAnyDocFormat(value: unknown): value is AnyDocFormat {
 }
 
 function isAnyDocErrorCode(value: unknown): value is AnyDocErrorCode {
-	return value === "unsupported" || value === "malformed" || value === "encrypted" || value === "resourceLimit" || value === "missingPart" || value === "io";
+	return value === "unsupported" || value === "needsOcr" || value === "malformed" || value === "encrypted" || value === "resourceLimit" || value === "missingPart" || value === "io";
 }

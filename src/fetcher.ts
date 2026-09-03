@@ -122,7 +122,7 @@ export async function fetchContent(
 			});
 		}
 		const documentCandidate = !pdfExpected && (isAnyDocCandidate(bytes, mimeType, normalized.url) || isAnyDocCandidate(bytes, mimeType, finalUrl));
-		// AnyDoc 0.1.6 has no page-range option; preserve explicit maxPages through the bounded PDF path.
+		// AnyDoc has no page-range option; preserve explicit maxPages through the bounded PDF path.
 		const extracted = pdfExpected
 			? normalized.maxPages === undefined
 				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
@@ -249,6 +249,9 @@ async function extractAnyDocContent(
 		if (error instanceof AnyDocConversionError) {
 			const message = `AnyDoc ${error.code}: ${error.message}`;
 			if (error.code === "unsupported") throw new SafeFetchError({ kind: "unsupportedContentType", message, cause: error });
+			// needsOcr names scanned/image-only pages; OCR stays out of scope by
+			// design, so it surfaces as an explicit unsupported-content failure.
+			if (error.code === "needsOcr") throw new SafeFetchError({ kind: "unsupportedContentType", message, cause: error });
 			throw new SafeFetchError({ kind: "extraction", message, cause: error });
 		}
 		throw new SafeFetchError({ kind: "extraction", message: "Local document conversion failed", cause: error });

@@ -135,6 +135,8 @@ function explicitProvider(
 	if (provider === undefined) return unavailable("No provider was selected");
 	if (request.executionModel !== undefined && provider === "native") return unavailable("executionModel requires an explicit model-mediated provider, not the native alias", provider);
 	if (provider === "native") {
+		// Web-first native ids in registry order; xAI resolves last because the
+		// active model must choose between its web and X grounding tools.
 		for (const id of ["openai", "openai-codex", "gemini", "anthropic", "meta"] as const) {
 			const candidate = options[NATIVE_REGISTRY[id]!.option];
 			if (candidate !== undefined && nativeModelCompatible(id, context.model) && canServe(candidate, request)) return selection(candidate, false);

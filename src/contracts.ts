@@ -412,7 +412,7 @@ export interface ResearchRequest {
 	readonly queries?: readonly string[];
 	readonly budget: ResearchBudget;
 	/** Select one provider strictly for the whole invocation. */
-	readonly provider?: "native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x" | "anthropic" | "meta";
+	readonly provider?: "native" | SearchProviderHintId;
 	/** Explicit model id for a model-mediated provider. */
 	readonly executionModel?: string;
 	/** Number of result URLs to fetch after search, bounded by budget.maxFetches. */
@@ -566,7 +566,25 @@ export type ProviderId =
 	| "x"
 	| "xai"
 	| "xai-x"
+	| "anthropic"
+	| "meta"
 	| (string & {});
+
+/** Concrete providers accepted as an explicit `provider` hint (no `native` alias). */
+export const SEARCH_PROVIDER_HINT_IDS = [
+	"openai",
+	"openai-codex",
+	"gemini",
+	"brave",
+	"exa",
+	"parallel",
+	"x",
+	"xai",
+	"xai-x",
+	"anthropic",
+	"meta",
+] as const;
+export type SearchProviderHintId = (typeof SEARCH_PROVIDER_HINT_IDS)[number];
 
 /**
  * A normalized error from a provider call. Carries enough to route retries
@@ -632,11 +650,4 @@ export interface Provider {
 	 * `web_fetch` uses a dedicated HTTP fetcher instead.
 	 */
 	readonly fetch?: (request: FetchRequest, signal: AbortSignal) => Promise<FetchedContent>;
-}
-
-/**
- * Narrow helper: does this provider claim a given capability?
- */
-export function hasCapability(provider: Provider, cap: keyof ProviderCapabilities): boolean {
-	return Boolean(provider.capabilities[cap]);
 }

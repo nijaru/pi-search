@@ -136,7 +136,7 @@ this same fetcher; it never uses an implicit remote extraction service.
   local `@firecrawl/anydoc`/`pdf-inspector` conversion for structured Markdown.
   AnyDoc detects scanned/image-only and encrypted PDFs but does not perform OCR.
   An explicit `maxPages` request uses bounded local `pdftotext` because AnyDoc
-  0.1.6 has no page-range option; there is no persistent download.
+  has no page-range option; there is no persistent download.
 - YouTube URLs are canonicalized to HTTPS video URLs and passed to bounded
   local `yt-dlp` captions-only extraction with `--ignore-config` and
   `--no-playlist`. No media download, frames, or visual analysis.

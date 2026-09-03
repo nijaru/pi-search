@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { DocumentConverter } from "./anydoc";
+import { AnyDocConversionError, type DocumentConverter } from "./anydoc";
 import type { FetchRequest } from "./contracts";
 import { SafeFetchError } from "./fetch-errors";
 import { fetchContent } from "./fetcher";
@@ -91,6 +91,27 @@ describe("local anydoc document conversion", () => {
 				transport: transportFor(bytes, "application/octet-stream"),
 			}),
 		).rejects.toThrow("AnyDoc unsupported");
+	});
+
+	it("surfaces AnyDoc needsOcr as an explicit unsupported-content failure", async () => {
+		const converter: DocumentConverter = async () => {
+			throw new AnyDocConversionError("needsOcr", "PDF pages 1-3 are scanned and need OCR");
+		};
+		const bytes = new TextEncoder().encode("%PDF-1.4 scanned");
+		await expect(
+			fetchContent({ url: "https://example.test/scan.pdf" }, undefined, {
+				lookup: publicLookup,
+				transport: transportFor(bytes, "application/pdf"),
+				documentConverter: converter,
+			}),
+		).rejects.toMatchObject({ kind: "unsupportedContentType" });
+		await expect(
+			fetchContent({ url: "https://example.test/scan.pdf" }, undefined, {
+				lookup: publicLookup,
+				transport: transportFor(bytes, "application/pdf"),
+				documentConverter: converter,
+			}),
+		).rejects.toThrow("AnyDoc needsOcr");
 	});
 
 	it("maps malformed PDF conversion through the AnyDoc error boundary", async () => {

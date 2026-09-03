@@ -126,35 +126,27 @@ function providerDiagnosticMessage(error: ProviderError): string {
 	return `${error.message} [${JSON.stringify(details)}]`;
 }
 
+const TOOL_ERROR_CODE_BY_KIND: Readonly<Record<ProviderError["kind"], SearchToolErrorCode>> = {
+	network: "WEB_SEARCH_NETWORK",
+	auth: "WEB_SEARCH_AUTH",
+	rateLimit: "WEB_SEARCH_RATE_LIMIT",
+	badRequest: "WEB_SEARCH_BAD_REQUEST",
+	malformed: "WEB_SEARCH_MALFORMED_RESPONSE",
+	timeout: "WEB_SEARCH_TIMEOUT",
+	canceled: "WEB_SEARCH_CANCELED",
+	unsupported: "WEB_SEARCH_UNSUPPORTED",
+	http: "WEB_SEARCH_HTTP",
+	unavailable: "WEB_SEARCH_PROVIDER_UNAVAILABLE",
+	unknown: "WEB_SEARCH_UNKNOWN",
+};
+
 /** Convert an adapter failure into the stable shape exposed by web_search. */
 export function toSearchToolError(error: unknown, provider: ProviderId): SearchToolError {
 	if (error instanceof SearchToolError) {
 		return error;
 	}
 	if (isProviderError(error)) {
-		const code: SearchToolErrorCode =
-			error.kind === "auth"
-				? "WEB_SEARCH_AUTH"
-				: error.kind === "rateLimit"
-					? "WEB_SEARCH_RATE_LIMIT"
-					: error.kind === "badRequest"
-						? "WEB_SEARCH_BAD_REQUEST"
-						: error.kind === "malformed"
-							? "WEB_SEARCH_MALFORMED_RESPONSE"
-							: error.kind === "timeout"
-								? "WEB_SEARCH_TIMEOUT"
-								: error.kind === "canceled"
-									? "WEB_SEARCH_CANCELED"
-									: error.kind === "network"
-										? "WEB_SEARCH_NETWORK"
-											: error.kind === "unsupported"
-												? "WEB_SEARCH_UNSUPPORTED"
-													: error.kind === "http"
-														? "WEB_SEARCH_HTTP"
-														: error.kind === "unavailable"
-															? "WEB_SEARCH_PROVIDER_UNAVAILABLE"
-															: "WEB_SEARCH_UNKNOWN";
-		return new SearchToolError(code, providerDiagnosticMessage(error), {
+		return new SearchToolError(TOOL_ERROR_CODE_BY_KIND[error.kind], providerDiagnosticMessage(error), {
 			provider: error.provider,
 			kind: error.kind,
 			retryable: error.retryable,

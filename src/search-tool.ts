@@ -7,10 +7,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static, type TUnsafe } from "typebox";
-import type { FetchedContent, Provider, ProviderContext, ProviderModel, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
+import { SEARCH_PROVIDER_HINT_IDS, type FetchedContent, type Provider, type ProviderContext, type ProviderModel, type SearchProviderHintId, type SearchProviderSelection, type SearchRequest, type SearchResponse } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
 import { SearchToolError, toSearchToolError } from "./errors";
+import { compactText } from "./render-text";
 import { normalizeSearchUrl, searchUrlIdentity } from "./search-cleanup";
 import { isDisplayUrlShortened, renderSafeUrl } from "./url-rendering";
 import {
@@ -23,7 +24,6 @@ import {
 	MAX_RESULTS,
 	MAX_SEARCH_DATE_LENGTH,
 	MAX_SEARCH_DOMAIN_COUNT,
-	MAX_SEARCH_DOMAIN_LENGTH,
 	MAX_SEARCH_HANDLE_COUNT,
 	MAX_SEARCH_HANDLE_LENGTH,
 	MAX_EXECUTION_MODEL_LENGTH,
@@ -32,9 +32,10 @@ import {
 	MAX_SEARCH_LOCATION_FIELD_LENGTH,
 	MAX_SEARCH_CONTENT_TYPES,
 } from "./search";
+import { MAX_SEARCH_DOMAIN_LENGTH } from "./search-cleanup";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const, { description: "Search mode; auto selects the provider path" }) as TUnsafe<"auto" | "keyword" | "fresh">;
-const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x", "anthropic", "meta"] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x" | "anthropic" | "meta">;
+const SearchProviderSchema = StringEnum(["native", ...SEARCH_PROVIDER_HINT_IDS] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
 const SearchDateRangeSchema = Type.Object(
 	{
 		from: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DATE_LENGTH, description: "Inclusive start date, YYYY-MM-DD" })),
@@ -192,11 +193,8 @@ function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] |
 	};
 }
 
-function compactText(value: string, maxLength = 4_000): string {
-	return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
-}
-
-function compactUsage(usage: SearchResponse["usage"]): string | undefined {
+/** Render one line of provider usage for model-visible output; shared by search and research renderers. */
+export function compactUsage(usage: SearchResponse["usage"]): string | undefined {
 	if (usage === undefined) return undefined;
 	const parts: string[] = [];
 	if (usage.costUsd !== undefined) parts.push(`cost $${usage.costUsd.toFixed(6)}`.replace(/0+$/, "").replace(/\.$/, ""));

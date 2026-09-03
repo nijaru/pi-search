@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-	SearchMode,
-	hasCapability,
 	validateResearchBudget,
 	type Provider,
 	type ProviderContext,
@@ -37,13 +35,7 @@ function makeProvider(over: Partial<Provider> = {}): Provider {
 	};
 }
 
-describe("contracts", () => {
-	it("SearchMode exposes the expected routing axes", () => {
-		expect(SearchMode.keyword).toBe("keyword");
-		expect(SearchMode.fresh).toBe("fresh");
-		expect(SearchMode.auto).toBe("auto");
-	});
-
+	describe("contracts", () => {
 	it("SearchRequest requires a query and leaves everything else optional", () => {
 		const req: SearchRequest = { query: "react vs vue" };
 		expect(req.query).toBe("react vs vue");
@@ -62,12 +54,6 @@ describe("contracts", () => {
 	it("SearchResponse contains evidence metadata", async () => {
 		const res = await makeProvider().search({ query: "q" }, new AbortController().signal, {});
 		expect(res).toMatchObject({ appliedOptions: [], warnings: [], provider: "brave" });
-	});
-
-	it("hasCapability reflects declared capabilities", () => {
-		const p = makeProvider();
-		expect(hasCapability(p, "keyword")).toBe(true);
-		expect(hasCapability(p, "freshness")).toBe(false);
 	});
 
 	it("ProviderId allows forward-compatible string ids", () => {

@@ -29,7 +29,7 @@ This is the tracked source of truth for implementation order.
   cancellation, and untrusted-content fencing.
 - PDF URLs use pinned local `@firecrawl/anydoc`/`pdf-inspector` conversion
   for structured Markdown. Explicit `maxPages` requests retain bounded local
-  `pdftotext` because AnyDoc 0.1.6 has no page-range option; OCR is not
+  `pdftotext` because AnyDoc has no page-range option; OCR is not
   implicit.
 - YouTube URLs use bounded local captions-only `yt-dlp`.
 - DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF
@@ -124,7 +124,7 @@ quality, not additional runtime surface:
 
 Task: `pi-search-obe3` (implemented in the existing `web_fetch` boundary).
 
-Pinned `@firecrawl/anydoc@0.1.6` runs in a worker and converts DOC/DOCX,
+Pinned `@firecrawl/anydoc@0.2.4` runs in a worker and converts DOC/DOCX,
 PPT/PPTX, XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF to GitHub-Flavored
 Markdown. Format detection uses document signatures, served content types, and
 safe URL extensions. Explicit `maxPages` requests use bounded `pdftotext`

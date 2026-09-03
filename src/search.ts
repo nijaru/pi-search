@@ -1,11 +1,10 @@
 import type { Provider, ProviderContext, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
-import { cleanupSearchResponse } from "./search-cleanup";
+import { cleanupSearchResponse, MAX_SEARCH_DOMAIN_LENGTH } from "./search-cleanup";
 
 export const DEFAULT_MAX_RESULTS = 10;
 export const MAX_RESULTS = 20;
 export const MAX_QUERY_LENGTH = 2_000;
-export const MAX_SEARCH_DOMAIN_LENGTH = 253;
 export const MAX_SEARCH_DOMAIN_COUNT = 20;
 export const MAX_SEARCH_DOMAIN_BYTES = 4_096;
 export const MAX_EXECUTION_MODEL_LENGTH = 500;
