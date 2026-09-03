@@ -148,11 +148,15 @@ function candidateFromUrl(url: unknown, title: unknown): AnthropicCandidate | un
 
 function throwResultError(code: unknown): never {
 	const errorCode = optionalString(code, 100) ?? "unknown";
+	// Errored searches are not billed, so retry/fallback is safe. The router
+	// treats `unavailable` like auth/rate-limit failures and may consume its
+	// single bounded automatic fallback.
+	const retryable = errorCode === "too_many_requests" || errorCode === "unavailable";
 	throw createProviderError({
 		provider: "anthropic",
-		kind: errorCode === "too_many_requests" ? "rateLimit" : "http",
+		kind: errorCode === "too_many_requests" ? "rateLimit" : errorCode === "unavailable" ? "unavailable" : "http",
 		message: `Anthropic web search returned an error result (${errorCode})`,
-		retryable: errorCode === "too_many_requests",
+		retryable,
 	});
 }
 
@@ -166,6 +170,9 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 	const stopReason = optionalString(root.stop_reason, 50);
 	if (stopReason === "refusal") {
 		throw createProviderError({ provider: "anthropic", kind: "http", message: "Anthropic refused the search request", retryable: false });
+	}
+	if (stopReason === "pause_turn") {
+		throw createProviderError({ provider: "anthropic", kind: "unavailable", message: "Anthropic paused the search turn; retry as a new call", retryable: true });
 	}
 	const candidates = new Map<string, AnthropicCandidate>();
 	const answerParts: string[] = [];
@@ -198,7 +205,10 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 			const content = (block as Record<string, unknown>).content;
 			if (content !== null && typeof content === "object" && !Array.isArray(content)) {
 				const record = content as Record<string, unknown>;
-				if (record.type === "web_search_tool_error") throwResultError(record.error_code);
+				// Docs name this `web_search_tool_result_error`; the bare
+				// error_code check keeps unknown variants from surfacing
+				// as a misleading empty-evidence error.
+				if (record.type === "web_search_tool_result_error" || record.error_code !== undefined) throwResultError(record.error_code);
 			}
 			if (!Array.isArray(content)) {
 				discarded += 1;
@@ -210,7 +220,7 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 					continue;
 				}
 				const item = itemValue as Record<string, unknown>;
-				if (item.type === "web_search_tool_error") throwResultError(item.error_code);
+				if (item.type === "web_search_tool_result_error") throwResultError(item.error_code);
 				// Error results may also arrive bare, without a wrapper type.
 				if (item.error_code !== undefined && item.url === undefined) throwResultError(item.error_code);
 				const candidate = candidateFromUrl(item.url, item.title);

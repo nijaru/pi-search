@@ -91,9 +91,29 @@ describe("AnthropicProvider", () => {
 	it("surfaces tool result errors instead of empty evidence", () => {
 		const errored = {
 			...payload,
-			content: [{ type: "web_search_tool_result", tool_use_id: "srv-1", content: { type: "web_search_tool_error", error_code: "too_many_requests" } }],
+			content: [{ type: "web_search_tool_result", tool_use_id: "srv-1", content: { type: "web_search_tool_result_error", error_code: "too_many_requests" } }],
 		};
 		expect(() => normalizeAnthropicResponse(errored, { query: "q" })).toThrow(/too_many_requests/);
+	});
+
+	it("maps retryable error codes and paused turns to fallback-eligible failures", () => {
+		const unavailable = {
+			...payload,
+			content: [{ type: "web_search_tool_result", tool_use_id: "srv-1", content: { type: "web_search_tool_result_error", error_code: "unavailable" } }],
+		};
+		try {
+			normalizeAnthropicResponse(unavailable, { query: "q" });
+			expect.unreachable();
+		} catch (error) {
+			expect(error).toMatchObject({ kind: "unavailable", retryable: true });
+		}
+		const paused = { ...payload, stop_reason: "pause_turn", content: [] };
+		try {
+			normalizeAnthropicResponse(paused, { query: "q" });
+			expect.unreachable();
+		} catch (error) {
+			expect(error).toMatchObject({ kind: "unavailable", retryable: true });
+		}
 	});
 
 	it("sends x-api-key auth without a bearer header", async () => {
