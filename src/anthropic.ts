@@ -14,7 +14,7 @@ import { createProviderError } from "./errors";
 import {
 	appendEndpointSuffix,
 	assertHttpEndpoint,
-	executeModelGroundingSearch,
+	executeGroundedSearch,
 	tokenUsage,
 	type GroundingPlan,
 } from "./grounding";
@@ -50,8 +50,6 @@ const profile: ProviderProfile = {
 	costModel: "usage-based",
 };
 
-export interface AnthropicRequestPlan extends GroundingPlan {}
-
 function buildInstructions(request: SearchRequest): string {
 	const lines = [
 		"Use web search and return a concise answer grounded only in the web sources.",
@@ -64,7 +62,7 @@ function buildInstructions(request: SearchRequest): string {
 }
 
 /** Build a Messages API request with the server-side web search tool. */
-export function buildAnthropicRequest(request: SearchRequest, toolType = ANTHROPIC_WEB_SEARCH_TOOL): AnthropicRequestPlan {
+export function buildAnthropicRequest(request: SearchRequest, toolType = ANTHROPIC_WEB_SEARCH_TOOL): GroundingPlan {
 	const normalized = validateSearchRequest(request);
 	if (normalized.dateRange !== undefined || normalized.social !== undefined) {
 		throw createProviderError({ provider: "anthropic", kind: "unsupported", message: "Anthropic web search does not expose exact date-range or dedicated social/X constraints", retryable: false });
@@ -139,8 +137,6 @@ interface AnthropicCandidate {
 	readonly url: string;
 	readonly title?: string;
 	readonly excerpt?: string;
-	readonly startIndex?: number;
-	readonly endIndex?: number;
 }
 
 function candidateFromUrl(url: unknown, title: unknown): AnthropicCandidate | undefined {
@@ -251,9 +247,8 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 	if (candidates.size === 0) {
 		throw createProviderError({ provider: "anthropic", kind: "malformed", message: "Anthropic web search returned no inspectable HTTP sources", retryable: false });
 	}
-	const citedUrls = answerCitationUrls;
 	const ordered = [...candidates.values()]
-		.sort((left, right) => Number(citedUrls.has(right.url)) - Number(citedUrls.has(left.url)))
+		.sort((left, right) => Number(answerCitationUrls.has(right.url)) - Number(answerCitationUrls.has(left.url)))
 		.slice(0, normalized.maxResults ?? 10);
 	const results: SearchResult[] = ordered.map((candidate) => {
 		const parsed = new URL(candidate.url);
@@ -324,7 +319,7 @@ export class AnthropicProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildAnthropicRequest(normalized, this.toolType);
-		return executeModelGroundingSearch({
+		return executeGroundedSearch({
 			provider: this.id,
 			modelProvider: "anthropic",
 			api: "anthropic-messages",
@@ -336,7 +331,7 @@ export class AnthropicProvider implements Provider {
 			endpointFor: (model) => endpointFor(model, this.endpoint),
 			headersFor: anthropicHeaders,
 			plan,
-			normalize: (payload, current) => normalizeAnthropicResponse(payload, current),
+			normalize: normalizeAnthropicResponse,
 		});
 	}
 }

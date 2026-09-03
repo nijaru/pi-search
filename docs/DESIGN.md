@@ -53,10 +53,11 @@ at most one visible fallback:
 2. For another active model, an authenticated OpenAI/Codex search model
    available through Pi's model registry is eligible, preserving built-in
    search without requiring a model switch.
-3. Gemini or xAI grounding when that provider is the active model; selecting
-   the model is the user's metered-call decision. Explicit `gemini`, `xai`, and
-   `xai-x` hints may use a compatible Pi-registry model via `executionModel`;
-   `xai-x` remains explicit for X-specific grounding.
+3. Gemini, xAI, Anthropic, or Meta grounding when that provider is the active
+   model; selecting the model is the user's metered-call decision. Explicit
+   `gemini`, `xai`, `xai-x`, `anthropic`, and `meta` hints may use a compatible
+   Pi-registry model via `executionModel`; `xai-x` remains explicit for
+   X-specific grounding.
 4. Exa for other models when `EXA_API_KEY` exists, metered search is allowed,
    and its hard constraints are supported. Exa supplies semantic retrieval,
    highlights, and reported cost. An explicit Exa hint is always intentional.

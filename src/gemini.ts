@@ -12,8 +12,9 @@ import type {
 } from "./contracts";
 import { createProviderError } from "./errors";
 import { cancelResponseBody } from "./http";
-import { httpSource, objectValue, optionalString, postJson, type SearchHttpFetch } from "./provider-http";
-import { selectModelExecution, modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { executeGroundedSearch } from "./grounding";
+import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
+import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
@@ -273,31 +274,22 @@ export class GeminiProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildGeminiRequest(normalized);
-		if (signal.aborted) throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
-		const execution = await selectModelExecution({ searchProvider: "gemini", modelProvider: "google", api: "google-generative-ai", request: normalized, context });
-		if (signal.aborted) throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
-		const result = await postJson({
+		return executeGroundedSearch({
 			provider: this.id,
-			url: endpointFor(execution.model, this.endpoint),
-			headers: authHeaders(execution),
-			body: plan.body,
+			modelProvider: "google",
+			api: "google-generative-ai",
+			request: normalized,
 			signal,
+			context,
 			fetchImpl: this.fetchImpl,
 			maxResponseBytes: this.maxResponseBytes,
+			// Gemini addresses the model in the URL, not the body.
+			includeModel: false,
+			endpointFor: (model) => endpointFor(model, this.endpoint),
+			headersFor: authHeaders,
+			plan,
+			normalize: (payload, current, grounding) => normalizeGeminiResponse(payload, current, grounding.signal, this.fetchImpl),
 		});
-		const response = await normalizeGeminiResponse(result.payload, normalized, signal, this.fetchImpl);
-		const usage = response.usage === undefined && result.rateLimits === undefined
-			? undefined
-			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
-		return {
-			...response,
-			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: execution.model.id } }),
-			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
-			...(usage === undefined ? {} : { usage }),
-			executionModel: execution.model.id,
-			appliedOptions: plan.appliedOptions,
-			warnings: [...plan.warnings, ...response.warnings],
-		};
 	}
 }
 

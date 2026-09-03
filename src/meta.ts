@@ -14,7 +14,7 @@ import {
 	appendEndpointSuffix,
 	assertHttpEndpoint,
 	bearerAuthHeaders,
-	executeModelGroundingSearch,
+	executeGroundedSearch,
 	type GroundingPlan,
 } from "./grounding";
 import { normalizeOpenAIResponse } from "./openai";
@@ -46,10 +46,8 @@ const profile: ProviderProfile = {
 	costModel: "usage-based",
 };
 
-export interface MetaRequestPlan extends GroundingPlan {}
-
 /** Build a Responses API request with Meta's `web_search` grounding tool. */
-export function buildMetaRequest(request: SearchRequest): MetaRequestPlan {
+export function buildMetaRequest(request: SearchRequest): GroundingPlan {
 	const normalized = validateSearchRequest(request);
 	if (normalized.domains?.include?.length || normalized.domains?.exclude?.length) {
 		throw createProviderError({ provider: "meta", kind: "unsupported", message: "Meta web search does not expose verified hard domain filters", retryable: false });
@@ -117,7 +115,7 @@ export class MetaProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildMetaRequest(normalized);
-		return executeModelGroundingSearch({
+		return executeGroundedSearch({
 			provider: this.id,
 			modelProvider: "meta",
 			api: "openai-responses",
@@ -129,7 +127,7 @@ export class MetaProvider implements Provider {
 			endpointFor: (model) => endpointFor(model, this.endpoint),
 			headersFor: (execution) => bearerAuthHeaders(execution, this.id),
 			plan,
-			normalize: (payload, current) => normalizeMetaResponse(payload, current),
+			normalize: normalizeMetaResponse,
 		});
 	}
 }

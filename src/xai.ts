@@ -11,8 +11,9 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError } from "./errors";
-import { httpSource, objectValue, optionalString, postJson, type SearchHttpFetch } from "./provider-http";
-import { selectModelExecution, modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { executeGroundedSearch } from "./grounding";
+import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
+import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const XAI_RESPONSES_ENDPOINT = "https://api.x.ai/v1";
@@ -231,30 +232,20 @@ export class XAIProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildXAIRequest(normalized, this.tool);
-		if (signal.aborted) throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
-		const execution = await selectModelExecution({ searchProvider: this.id, modelProvider: "xai", api: "openai-responses", request: normalized, context });
-		const result = await postJson({
+		return executeGroundedSearch({
 			provider: this.id,
-			url: endpointFor(execution.model, this.endpoint),
-			headers: authHeaders(execution, this.id),
-			body: { ...plan.body, model: execution.model.id },
+			modelProvider: "xai",
+			api: "openai-responses",
+			request: normalized,
 			signal,
+			context,
 			fetchImpl: this.fetchImpl,
 			maxResponseBytes: this.maxResponseBytes,
+			endpointFor: (model) => endpointFor(model, this.endpoint),
+			headersFor: (execution) => authHeaders(execution, this.id),
+			plan,
+			normalize: (payload, current) => normalizeXAIResponse(payload, current, this.tool),
 		});
-		const response = normalizeXAIResponse(result.payload, normalized, this.tool);
-		const usage = response.usage === undefined && result.rateLimits === undefined
-			? undefined
-			: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) };
-		return {
-			...response,
-			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: execution.model.id } }),
-			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
-			...(usage === undefined ? {} : { usage }),
-			executionModel: execution.model.id,
-			appliedOptions: plan.appliedOptions,
-			warnings: [...plan.warnings, ...response.warnings],
-		};
 	}
 }
 

@@ -90,7 +90,7 @@ export function bearerAuthHeaders(execution: ModelExecution, provider: ProviderI
 	return Object.fromEntries(headers.entries());
 }
 
-export interface GroundingSearchOptions {
+export interface GroundedSearchOptions {
 	readonly provider: ProviderId;
 	readonly modelProvider: string;
 	readonly api: string;
@@ -99,6 +99,11 @@ export interface GroundingSearchOptions {
 	readonly context: ProviderContext;
 	readonly fetchImpl: SearchHttpFetch;
 	readonly maxResponseBytes: number;
+	/**
+	 * Inject the execution model id into the request body. Gemini addresses
+	 * the model in the URL instead, so it opts out. Defaults to true.
+	 */
+	readonly includeModel?: boolean;
 	readonly endpointFor: (model: ProviderModel) => string;
 	readonly headersFor: (execution: ModelExecution) => Readonly<Record<string, string>>;
 	readonly plan: GroundingPlan;
@@ -111,10 +116,10 @@ export interface GroundingSearchOptions {
 
 /**
  * Run one non-streaming grounded-model search: resolve the execution model,
- * POST the plan body with the model id, normalize the payload, and attach
- * execution metadata. Callers supply only vendor-specific pieces.
+ * POST the plan body, normalize the payload, and attach execution metadata.
+ * Callers supply only vendor-specific pieces.
  */
-export async function executeModelGroundingSearch(options: GroundingSearchOptions): Promise<SearchResponse> {
+export async function executeGroundedSearch(options: GroundedSearchOptions): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(options.request);
 	if (options.signal.aborted) {
 		throw createProviderError({ provider: options.provider, kind: "canceled", message: "Search canceled", retryable: false });
@@ -133,7 +138,7 @@ export async function executeModelGroundingSearch(options: GroundingSearchOption
 		provider: options.provider,
 		url: options.endpointFor(execution.model),
 		headers: options.headersFor(execution),
-		body: { ...options.plan.body, model: execution.model.id },
+		body: options.includeModel === false ? options.plan.body : { ...options.plan.body, model: execution.model.id },
 		signal: options.signal,
 		fetchImpl: options.fetchImpl,
 		maxResponseBytes: options.maxResponseBytes,

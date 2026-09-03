@@ -12,8 +12,9 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError } from "./errors";
-import { httpSource, objectValue, optionalString, postJson, type SearchHttpFetch } from "./provider-http";
-import { selectModelExecution, modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { executeGroundedSearch } from "./grounding";
+import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
+import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const CODEX_SEARCH_ENDPOINT = "https://chatgpt.com/backend-api/codex/alpha/search";
@@ -291,19 +292,20 @@ export class CodexProvider implements Provider {
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildCodexRequest(normalized);
-		if (signal.aborted) throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
-		const execution = await selectModelExecution({ searchProvider: this.id, modelProvider: "openai-codex", api: "openai-codex-responses", request: normalized, context });
-		const result = await postJson({ provider: this.id, url: endpointFor(execution.model, this.endpoint), headers: codexHeaders(execution), body: { ...plan.body, model: execution.model.id }, signal, fetchImpl: this.fetchImpl, maxResponseBytes: this.maxResponseBytes });
-		const response = normalizeCodexResponse(result.payload, normalized);
-		return {
-			...response,
-			...(response.answer === undefined ? {} : { answer: { ...response.answer, executionModel: execution.model.id } }),
-			...(response.requestId === undefined && result.requestId === undefined ? {} : { requestId: response.requestId ?? result.requestId }),
-			...(response.usage === undefined && result.rateLimits === undefined ? {} : { usage: { ...response.usage, ...(result.rateLimits === undefined ? {} : { rateLimits: result.rateLimits }) } }),
-			executionModel: execution.model.id,
-			appliedOptions: plan.appliedOptions,
-			warnings: [...plan.warnings, ...response.warnings],
-		};
+		return executeGroundedSearch({
+			provider: this.id,
+			modelProvider: "openai-codex",
+			api: "openai-codex-responses",
+			request: normalized,
+			signal,
+			context,
+			fetchImpl: this.fetchImpl,
+			maxResponseBytes: this.maxResponseBytes,
+			endpointFor: (model) => endpointFor(model, this.endpoint),
+			headersFor: codexHeaders,
+			plan,
+			normalize: normalizeCodexResponse,
+		});
 	}
 }
 
