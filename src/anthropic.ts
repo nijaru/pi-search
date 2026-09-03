@@ -271,7 +271,6 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 			searchQuery: normalized.query,
 		};
 	});
-	const resultUrls = new Set(results.map((result) => result.url));
 	const answerText = answerParts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_ANTHROPIC_ANSWER_LENGTH);
 	const citations = results
 		.filter((result) => answerCitationUrls.has(result.url))
