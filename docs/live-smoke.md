@@ -22,8 +22,8 @@ the provider-specific `PI_SEARCH_LIVE_*` variables; never put them on the
 command line.
 
 Use `--provider=<id>` instead of `PI_SEARCH_LIVE_PROVIDER` when preferred. The
-supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`, `x`,
-`brave`, `exa`, and `parallel`.
+supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`,
+`anthropic`, `meta`, `x`, `brave`, `exa`, and `parallel`.
 
 ## Credentials
 
@@ -33,6 +33,8 @@ supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`, `x`,
 | `openai-codex` | `PI_SEARCH_LIVE_CODEX_TOKEN`, `PI_SEARCH_LIVE_CODEX_MODEL` |
 | `gemini` | `PI_SEARCH_LIVE_GEMINI_API_KEY`, `PI_SEARCH_LIVE_GEMINI_MODEL` |
 | `xai`, `xai-x` | `PI_SEARCH_LIVE_XAI_API_KEY`, `PI_SEARCH_LIVE_XAI_MODEL` |
+| `anthropic` | `PI_SEARCH_LIVE_ANTHROPIC_API_KEY`, `PI_SEARCH_LIVE_ANTHROPIC_MODEL` |
+| `meta` | `PI_SEARCH_LIVE_META_API_KEY`, `PI_SEARCH_LIVE_META_MODEL` |
 | `x` | `PI_SEARCH_LIVE_X_API_BEARER_TOKEN` |
 | `brave` | `PI_SEARCH_LIVE_BRAVE_API_KEY` |
 | `exa` | `PI_SEARCH_LIVE_EXA_API_KEY` |

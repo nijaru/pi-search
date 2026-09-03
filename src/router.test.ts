@@ -134,6 +134,33 @@ describe("search provider router", () => {
 		expect(selected.automatic).toBe(true);
 	});
 
+	it("selects active Anthropic and Meta grounding automatically", () => {
+		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
+		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
+		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(route({ query: "q" }, context("anthropic", "anthropic-messages")).provider.id).toBe("anthropic");
+		expect(route({ query: "q", providerHint: "native" }, context("anthropic", "anthropic-messages")).provider.id).toBe("anthropic");
+		expect(route({ query: "q" }, context("meta", "openai-responses")).provider.id).toBe("meta");
+		expect(route({ query: "q", providerHint: "native" }, context("meta", "openai-responses")).provider.id).toBe("meta");
+	});
+
+	it("allows explicit registry-backed Anthropic and Meta execution", () => {
+		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
+		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
+		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta });
+		expect(route({ query: "q", providerHint: "anthropic", executionModel: "claude-opus-5" }, context("openrouter", "openai-completions", [availableModel("anthropic", "anthropic-messages", "claude-opus-5")])).provider.id).toBe("anthropic");
+		expect(route({ query: "q", providerHint: "meta", executionModel: "muse-spark-1.3" }, context("openrouter", "openai-completions", [availableModel("meta", "openai-responses", "muse-spark-1.3")])).provider.id).toBe("meta");
+		expect(() => route({ query: "q", providerHint: "anthropic" }, context("openrouter", "openai-completions", []))).toThrow(/explicit executionModel/);
+	});
+
+	it("falls through when the active native model cannot honor a hard filter", () => {
+		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
+		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
+		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("anthropic", "anthropic-messages")).provider.id).toBe("exa");
+		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("meta", "openai-responses")).provider.id).toBe("exa");
+	});
+
 	it("uses explicitly selected direct providers when configured", () => {
 		const route = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true });
 		expect(route({ query: "q", providerHint: "exa" }, context("local")).provider.id).toBe("exa");

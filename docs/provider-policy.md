@@ -13,9 +13,10 @@ call for automatic routing:
 2. With another active model, an authenticated OpenAI/Codex search model in
    Pi's registry is eligible, so built-in search does not require changing the
    active model.
-3. Active Google Gemini and xAI Responses models use native grounding
-   automatically; selecting that active model is the user's metered-call
-   decision. Explicit `gemini`, `xai`, and `xai-x` hints may use a compatible
+3. Active Google Gemini, xAI Responses, Anthropic Messages, and Meta
+   Responses models use native grounding automatically; selecting that
+   active model is the user's metered-call decision. Explicit `gemini`,
+   `xai`, `xai-x`, `anthropic`, and `meta` hints may use a compatible
    Pi-registry model through `executionModel`; `xai-x` is explicit for
    X-specific retrieval.
 4. Other/local models use configured Exa automatically only when metered
@@ -48,6 +49,8 @@ hidden fan-out, or provider comparisons.
 | Gemini | Native Google Search grounding for active Gemini; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including Pi xAI/Gemini auth |
 | xAI | Native web grounding for active xAI Responses; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including xAI OAuth |
 | xAI X | Explicit social/X grounding with handle/date/media controls | Explicit `xai-x`; no fallback | Pi model registry, including xAI OAuth |
+| Anthropic | Messages `web_search_20250305` grounding for active Claude; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
+| Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
 | Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
@@ -93,6 +96,11 @@ Unsupported hard constraints are rejected or surfaced:
 - Gemini grounding has no hard domain-filter contract.
 - xAI web search supports allowed/excluded domains; xAI X search supports
   bounded handles, ISO date ranges, and opt-in image/video understanding.
+- Anthropic web search supports allowed or blocked domains (not both) and
+  user location; tool-result error codes surface instead of empty evidence.
+- Meta web search is Responses-compatible but domain, date, social, context,
+  location, and content-type controls are unverified, so the adapter rejects
+  them and the router only selects Meta for unconstrained queries.
 - Parallel Search supports include/exclude domain source policies and a lower
   publication-date bound through `advanced_settings.source_policy`; it does not
   support both include and exclude lists together or an upper date bound.
@@ -116,7 +124,7 @@ credential-gated smoke case.
 | --- | --- | --- |
 | Perplexity Search API | Structured results with hard domain, path, and date filters | Adds another metered direct provider; overlap and current schema need a fixture/live audit |
 | SearXNG | Self-hosted, privacy-oriented, non-metered search | Engine capabilities and freshness vary; endpoint configuration and SSRF policy need explicit design |
-| Anthropic native web search | Strong citations and native model integration | Search-use plus token billing; model-registry auth and evidence normalization are unverified |
+| Mistral web search | Responses-adjacent grounding for Mistral models | Agents/Conversations API shape differs from the non-streaming grounding flow; needs a dedicated adapter and fixture audit |
 | Tavily | Simple API, raw content option, predictable credits | Overlaps Brave/Exa/Perplexity and has no dedicated X path |
 | Z.AI / Claude bridge / DuckDuckGo | Possible native or keyless coverage | Current provenance, auth, or scraping contracts are not strong enough for the core |
 

@@ -21,6 +21,9 @@ Pi tools:
 - Active Gemini models use Google Search grounding automatically.
 - Active xAI Responses models use xAI web search automatically; select `xai-x`
   explicitly when the task requires X search.
+- Active Anthropic Messages models use the server-side `web_search` tool
+  automatically; active Meta Responses models use `web_search` grounding
+  automatically.
 - Other/local models use configured Exa automatically only when metered search
   is allowed; Exa returns semantic results with excerpts and reported usage.
 - In free-only mode, configured Brave is the conservative paced keyword/fresh
@@ -72,9 +75,9 @@ Gemini and xAI credentials come from Pi's model-registry authentication
 context. Active Gemini/xAI models use native search automatically. For
 search-only Gemini grounding, prefer Pi's current `gemini-flash-lite-latest`
 model alias rather than full Flash/Pro or legacy model IDs. Explicit
-`provider: "gemini"`, `"xai"`, or `"xai-x"` can use a compatible registry model
-with `executionModel` even when another model is active; this makes model and
-billing choice visible. Pi's `/login xai` subscription flow is supported by the
+`provider: "gemini"`, `"xai"`, `"xai-x"`, `"anthropic"`, or `"meta"` can use a
+compatible registry model with `executionModel` even when another model is
+active; this makes model and billing choice visible. Pi's `/login xai` subscription flow is supported by the
 registry for Grok web/X search. A provider hint such as `provider: "exa"`,
 `"parallel"`, or `"x"` is strict and never falls through to another provider.
 Without a hint, the router selects available native search first, then Exa,
@@ -82,7 +85,8 @@ then Brave when the corresponding credentials and hard constraints permit it.
 Set `includeContent: true` on `web_search` only when bounded excerpts from
 selected source pages are needed; this reuses the safe local fetch path. For
 `web_research`, use `executionModel` with an explicit model-mediated `provider`
-when a multi-query run should use a specific Gemini, xAI, OpenAI, or Codex model.
+when a multi-query run should use a specific Gemini, xAI, Anthropic, Meta,
+OpenAI, or Codex model.
 
 ### Local OpenAI-compatible endpoints
 

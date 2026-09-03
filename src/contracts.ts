@@ -412,7 +412,7 @@ export interface ResearchRequest {
 	readonly queries?: readonly string[];
 	readonly budget: ResearchBudget;
 	/** Select one provider strictly for the whole invocation. */
-	readonly provider?: "native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x";
+	readonly provider?: "native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x" | "anthropic" | "meta";
 	/** Explicit model id for a model-mediated provider. */
 	readonly executionModel?: string;
 	/** Number of result URLs to fetch after search, bounded by budget.maxFetches. */

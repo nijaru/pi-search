@@ -30,6 +30,8 @@ Shipped search adapters:
 | Gemini grounding | Active Google Gemini model | `gemini` plus optional `executionModel` | No hard domain filter; grounding citations required for typed answers |
 | xAI web grounding | Active xAI Responses model | `xai` plus optional `executionModel` | Web domain filters supported |
 | xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
+| Anthropic grounding | Active Anthropic Messages model | `anthropic` plus optional `executionModel` | Allowed or blocked domains (not both), user location; tool-result errors surface |
+| Meta grounding | Active Meta Responses model | `meta` plus optional `executionModel` | Responses-compatible web_search; domain/date/social/context controls unverified and rejected |
 | Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts; include/exclude domain policies and lower date bound |
@@ -75,6 +77,15 @@ fan-out, or provider comparisons. Provider profile usage and selected execution
 model are surfaced when available. A research cost ceiling is rejected when a provider cannot provide a reliable
 per-call estimate; this prevents a false guarantee
 for native grounding, Exa, and Parallel.
+
+## Native grounding structure
+
+Non-streaming grounded-model adapters share `src/grounding.ts` (model
+resolution, auth headers, endpoint joining, usage merging, response
+assembly); each vendor keeps only capabilities, request build, and response
+normalization. New native adapters are one registry row in `src/router.ts`
+plus those three pieces with offline fixtures. OpenAI's streaming Responses
+transport stays bespoke; Meta reuses the OpenAI-shaped normalizer.
 
 ## Native OpenAI stability contract
 

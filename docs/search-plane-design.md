@@ -30,9 +30,11 @@ not only on the active model:
 2. for another active model, an authenticated OpenAI/Codex search model in
    Pi's model registry is eligible. This preserves the useful built-in search
    behavior without requiring the user to change models;
-3. an active Gemini or xAI Responses model uses its native grounding;
-4. explicit `gemini`, `xai`, or `xai-x` hints may resolve a compatible registry
-   model through `executionModel` without changing the active model;
+3. an active Gemini, xAI Responses, Anthropic Messages, or Meta Responses
+   model uses its native grounding;
+4. explicit `gemini`, `xai`, `xai-x`, `anthropic`, or `meta` hints may resolve
+   a compatible registry model through `executionModel` without changing the
+   active model;
 5. configured Exa is the automatic direct path for other models only when
    metered search is allowed; an explicit Exa hint is always intentional;
 6. configured Brave is the automatic direct path in free-only mode, or the

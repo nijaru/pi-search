@@ -1,3 +1,4 @@
+import { createAnthropicProvider } from "../src/anthropic";
 import { BraveQuotaTracker, createBraveProvider } from "../src/brave";
 import { createExaProvider } from "../src/exa";
 import { createGeminiProvider } from "../src/gemini";
@@ -6,6 +7,7 @@ import { createOpenAIProvider } from "../src/openai";
 import { createParallelProvider } from "../src/parallel";
 import { executeSearch } from "../src/search";
 import { createXProvider } from "../src/x";
+import { createMetaProvider } from "../src/meta";
 import { createXAIProvider } from "../src/xai";
 import type { Provider, ProviderContext, ProviderModel, SearchRequest, SearchResponse } from "../src/contracts";
 
@@ -13,7 +15,7 @@ const LIVE_QUERY = "IANA protocol parameters";
 const LIVE_DOMAIN = "iana.org";
 const LIVE_MAX_RESULTS = 3;
 const LIVE_TIMEOUT_MS = 30_000;
-const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "x", "brave", "exa", "parallel"] as const;
+const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "exa", "parallel"] as const;
 type SmokeProvider = (typeof PROVIDERS)[number];
 
 function env(name: string): string | undefined {
@@ -44,6 +46,8 @@ export function modelBaseUrlForProvider(provider: string): string {
 	if (provider === "openai-codex") return "https://chatgpt.com/backend-api/codex";
 	if (provider === "xai") return "https://api.x.ai/v1";
 	if (provider === "google") return "https://generativelanguage.googleapis.com/v1beta";
+	if (provider === "anthropic") return "https://api.anthropic.com/v1";
+	if (provider === "meta") return "https://api.meta.ai/v1";
 	return "https://api.openai.com/v1";
 }
 
@@ -86,6 +90,16 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 			const model = required("PI_SEARCH_LIVE_XAI_MODEL");
 			const tool = id === "xai-x" ? "x_search" : "web_search";
 			return { provider: createXAIProvider({ tool }), context: modelContext("xai", "openai-responses", model, key), secret: key, requiredEnv: ["PI_SEARCH_LIVE_XAI_API_KEY", "PI_SEARCH_LIVE_XAI_MODEL"] };
+		}
+		case "anthropic": {
+			const key = required("PI_SEARCH_LIVE_ANTHROPIC_API_KEY");
+			const model = required("PI_SEARCH_LIVE_ANTHROPIC_MODEL");
+			return { provider: createAnthropicProvider(), context: modelContext("anthropic", "anthropic-messages", model, key), secret: key, requiredEnv: ["PI_SEARCH_LIVE_ANTHROPIC_API_KEY", "PI_SEARCH_LIVE_ANTHROPIC_MODEL"] };
+		}
+		case "meta": {
+			const key = required("PI_SEARCH_LIVE_META_API_KEY");
+			const model = required("PI_SEARCH_LIVE_META_MODEL");
+			return { provider: createMetaProvider(), context: modelContext("meta", "openai-responses", model, key), secret: key, requiredEnv: ["PI_SEARCH_LIVE_META_API_KEY", "PI_SEARCH_LIVE_META_MODEL"] };
 		}
 		case "x": {
 			const token = required("PI_SEARCH_LIVE_X_API_BEARER_TOKEN");
@@ -141,6 +155,8 @@ function printDryRun(provider: SmokeProvider): void {
 		: provider === "openai-codex" ? ["PI_SEARCH_LIVE_CODEX_TOKEN", "PI_SEARCH_LIVE_CODEX_MODEL"]
 			: provider === "gemini" ? ["PI_SEARCH_LIVE_GEMINI_API_KEY", "PI_SEARCH_LIVE_GEMINI_MODEL"]
 				: provider === "xai" || provider === "xai-x" ? ["PI_SEARCH_LIVE_XAI_API_KEY", "PI_SEARCH_LIVE_XAI_MODEL"]
+					: provider === "anthropic" ? ["PI_SEARCH_LIVE_ANTHROPIC_API_KEY", "PI_SEARCH_LIVE_ANTHROPIC_MODEL"]
+					: provider === "meta" ? ["PI_SEARCH_LIVE_META_API_KEY", "PI_SEARCH_LIVE_META_MODEL"]
 					: provider === "x" ? ["PI_SEARCH_LIVE_X_API_BEARER_TOKEN"]
 						: [`PI_SEARCH_LIVE_${provider.toUpperCase()}_API_KEY`];
 	console.log(JSON.stringify({
@@ -185,6 +201,8 @@ function secretFor(provider: string): string {
 		: provider === "openai" ? "PI_SEARCH_LIVE_OPENAI_API_KEY"
 			: provider === "gemini" ? "PI_SEARCH_LIVE_GEMINI_API_KEY"
 				: provider === "xai" || provider === "xai-x" ? "PI_SEARCH_LIVE_XAI_API_KEY"
+					: provider === "anthropic" ? "PI_SEARCH_LIVE_ANTHROPIC_API_KEY"
+						: provider === "meta" ? "PI_SEARCH_LIVE_META_API_KEY"
 					: provider === "x" ? "PI_SEARCH_LIVE_X_API_BEARER_TOKEN"
 						: provider === "brave" ? "PI_SEARCH_LIVE_BRAVE_API_KEY"
 						: provider === "exa" ? "PI_SEARCH_LIVE_EXA_API_KEY"

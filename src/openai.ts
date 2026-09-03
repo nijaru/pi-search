@@ -3,6 +3,7 @@ import type {
 	ProviderAuthResult,
 	ProviderCapabilities,
 	ProviderContext,
+	ProviderId,
 	ProviderModel,
 	ProviderProfile,
 	ProviderUsage,
@@ -93,7 +94,7 @@ const profile: ProviderProfile = {
 	costModel: "unknown",
 };
 
-function malformed(provider: "openai", message: string, cause?: unknown): never {
+function malformed(provider: ProviderId, message: string, cause?: unknown): never {
 	throw createProviderError({
 		provider,
 		kind: "malformed",
@@ -142,7 +143,7 @@ async function readErrorDiagnostic(response: Response, secrets: readonly string[
 	}
 }
 
-function objectValue(value: unknown, label: string, provider: "openai" = "openai"): Record<string, unknown> {
+function objectValue(value: unknown, label: string, provider: ProviderId = "openai"): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		return malformed(provider, `${label} is not an object`);
 	}
@@ -249,7 +250,7 @@ function sourceGroups(item: Record<string, unknown>): unknown[] {
 	return [actionSources, item.sources, item.results];
 }
 
-function outputItems(payload: unknown, provider: "openai" = "openai"): readonly unknown[] {
+function outputItems(payload: unknown, provider: ProviderId = "openai"): readonly unknown[] {
 	const root = objectValue(payload, "response", provider);
 	if (!Array.isArray(root.output)) return malformed(provider, "output is not an array");
 	return root.output;
@@ -275,7 +276,7 @@ function mergeCandidate(
 	});
 }
 
-function resultFromCandidate(candidate: SourceCandidate, query: string, provider: OpenAIProviderId): SearchResult {
+function resultFromCandidate(candidate: SourceCandidate, query: string, provider: ProviderId): SearchResult {
 	const parsed = new URL(candidate.url);
 	return {
 		url: candidate.url,
@@ -291,11 +292,15 @@ function resultFromCandidate(candidate: SourceCandidate, query: string, provider
 	};
 }
 
-/** Normalize an OpenAI Responses payload into evidence-first results. */
+/**
+ * Normalize an OpenAI-shaped Responses payload into evidence-first results.
+ * Shared with Meta's Responses-compatible grounding, which returns the same
+ * `output[]` / `url_citation` / `web_search_call` envelope under its own id.
+ */
 export function normalizeOpenAIResponse(
 	payload: unknown,
 	request: SearchRequest,
-	provider: "openai" = "openai",
+	provider: ProviderId = "openai",
 ): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", provider) as OpenAIResponsePayload & Record<string, unknown>;
@@ -357,7 +362,7 @@ export function normalizeOpenAIResponse(
 		.sort((left, right) => Number(citedUrls.has(right.url)) - Number(citedUrls.has(left.url)))
 		.slice(0, normalized.maxResults);
 	if (ordered.length === 0) {
-		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search returned no inspectable HTTP sources", retryable: false });
+		throw createProviderError({ provider, kind: "malformed", message: `${provider === "openai" ? "OpenAI" : provider} web search returned no inspectable HTTP sources`, retryable: false });
 	}
 	const results = ordered.map((candidate) => resultFromCandidate(candidate, normalized.query, provider));
 	const resultUrls = new Set(results.map((result) => result.url));

@@ -34,7 +34,7 @@ import {
 } from "./search";
 
 const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const, { description: "Search mode; auto selects the provider path" }) as TUnsafe<"auto" | "keyword" | "fresh">;
-const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x"] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x">;
+const SearchProviderSchema = StringEnum(["native", "openai", "openai-codex", "gemini", "brave", "exa", "parallel", "x", "xai", "xai-x", "anthropic", "meta"] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | "openai" | "openai-codex" | "gemini" | "brave" | "exa" | "parallel" | "x" | "xai" | "xai-x" | "anthropic" | "meta">;
 const SearchDateRangeSchema = Type.Object(
 	{
 		from: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DATE_LENGTH, description: "Inclusive start date, YYYY-MM-DD" })),

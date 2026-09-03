@@ -1,4 +1,4 @@
-import type { ProviderAuthResult, ProviderContext, ProviderHeaders, ProviderModel, SearchRequest } from "./contracts";
+import type { ProviderAuthResult, ProviderContext, ProviderHeaders, ProviderId, ProviderModel, SearchRequest } from "./contracts";
 import { createProviderError } from "./errors";
 
 export interface ModelExecution {
@@ -7,9 +7,12 @@ export interface ModelExecution {
 }
 
 interface ModelSelectionOptions {
-	readonly searchProvider: "gemini" | "xai" | "xai-x" | "openai-codex";
-	readonly modelProvider: "google" | "xai" | "openai-codex";
-	readonly api: "google-generative-ai" | "openai-responses" | "openai-codex-responses";
+	// Provider strings stay open so new native adapters (Anthropic, Meta,
+	// future Responses-family vendors) need no changes here; callers pass
+	// the Pi model-registry `provider`/`api` pair the adapter requires.
+	readonly searchProvider: ProviderId;
+	readonly modelProvider: string;
+	readonly api: string;
 	readonly request: SearchRequest;
 	readonly context: ProviderContext;
 }

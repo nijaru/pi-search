@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createAnthropicProvider } from "./anthropic";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
 import { createCodexProvider } from "./codex";
 import { createExaProvider } from "./exa";
@@ -6,6 +7,7 @@ import { createGeminiProvider } from "./gemini";
 import { registerWebFetch } from "./fetch-tool";
 import { createOpenAIProvider } from "./openai";
 import { createParallelProvider } from "./parallel";
+import { createMetaProvider } from "./meta";
 import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
@@ -32,6 +34,8 @@ export default function (pi: ExtensionAPI): void {
 	const gemini = createGeminiProvider();
 	const xai = createXAIProvider({ tool: "web_search" });
 	const xaiX = createXAIProvider({ tool: "x_search" });
+	const anthropic = createAnthropicProvider();
+	const meta = createMetaProvider();
 	const exaKey = process.env.EXA_API_KEY;
 	const parallelKey = process.env.PARALLEL_API_KEY;
 	const xToken = process.env.X_API_BEARER_TOKEN;
@@ -48,6 +52,8 @@ export default function (pi: ExtensionAPI): void {
 		gemini,
 		xai,
 		xaiX,
+		anthropic,
+		meta,
 		exa,
 		parallel,
 		x,
