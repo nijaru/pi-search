@@ -1,0 +1,28 @@
+{
+  "project": "pi-search",
+  "ref": "wr6o",
+  "title": "Execute accepted overhaul fixes",
+  "description": null,
+  "status": "done",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-09-06T12:33:20.243558Z",
+      "msg": "Sweep complete 2026-09-06; all 8 items accepted by user. Baseline: 231 tests green, typecheck clean, main==origin/main at 436bdfc. Order: (1) router attribution fix + mode validation + tests, (2) SSE trailing test, (3) Pi 0.85.1 bump, (4) CI workflow, (5) dead-surface prune, (6) table-driven dispatch refactor, (7) version field. Each = one verified commit."
+    },
+    {
+      "ts": "2026-09-06T14:23:15.767186Z",
+      "msg": "All 8 items shipped as 6 commits (6a88a6f..46054c2), each verified by bun run check (232 tests) + green CI runs. Installed copy pulled forward and byte-identical, deps installed, tests green there too."
+    }
+  ],
+  "created_at": "2026-09-06T12:32:40.331766Z",
+  "updated_at": "2026-09-06T14:23:15.778135Z",
+  "completed_at": "2026-09-06T14:23:15.778135Z",
+  "external": {}
+}
