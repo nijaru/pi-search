@@ -61,11 +61,6 @@ function makeProvider(over: Partial<Provider> = {}): Provider {
 		expect(p.id).toBe("future-provider");
 	});
 
-	it("Provider.fetch is optional", () => {
-		const p = makeProvider();
-		expect(p.fetch).toBeUndefined();
-	});
-
 	it("research budgets reject unbounded or invalid values", () => {
 		validateResearchBudget({ maxSteps: 3, maxProviderCalls: 4, maxFetches: 1, timeoutMs: 10_000, maxOutputChars: 10_000, maxCostUsd: 1 });
 		expect(() => validateResearchBudget({ maxSteps: 0, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 10_000, maxOutputChars: 10_000 })).toThrow(

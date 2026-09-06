@@ -178,15 +178,7 @@ export interface ProviderCapabilities {
  * How results should be ranked/retrieved. Mirrors the capability axes so the
  * router can pick a provider whose capabilities match the requested mode.
  */
-export const SearchMode = {
-	/** Exact / keyword matching. */
-	keyword: "keyword",
-	/** Freshness-first; newest relevant results. */
-	fresh: "fresh",
-	/** Provider-native default (no explicit bias). */
-	auto: "auto",
-} as const;
-export type SearchMode = (typeof SearchMode)[keyof typeof SearchMode];
+export type SearchMode = "auto" | "keyword" | "fresh";
 
 /**
  * Domain filter: restrict or exclude specific hosts.
@@ -645,9 +637,4 @@ export interface Provider {
 		signal: AbortSignal,
 		context: ProviderContext,
 	) => Promise<SearchResponse>;
-	/**
-	 * Optional page fetch. Most search providers do not implement this;
-	 * `web_fetch` uses a dedicated HTTP fetcher instead.
-	 */
-	readonly fetch?: (request: FetchRequest, signal: AbortSignal) => Promise<FetchedContent>;
 }
