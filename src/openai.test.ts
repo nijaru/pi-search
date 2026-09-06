@@ -590,6 +590,24 @@ describe("OpenAIProvider", () => {
 		expect(second.results).toHaveLength(1);
 	});
 
+	it("processes a terminal event not followed by a blank line", async () => {
+		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com", title: "Example" }] } };
+		// Stream ends immediately after the final data line with no trailing
+		// blank line; the parser's final flush must still process it. Pi fixed
+		// the identical defect in its own Codex SSE parser in 0.85.0.
+		const body = [
+			`data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
+			"",
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [] } })}`,
+		].join("\n");
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async () => response(body, 200, { "content-type": "text/event-stream" })) as OpenAIFetch,
+		});
+		const result = await provider.search({ query: "q" }, new AbortController().signal, context());
+		expect(result.results).toHaveLength(1);
+	});
+
 	it("rejects a stream that ends before completion", async () => {
 		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com" }] } };
 		const provider = createOpenAIProvider({
