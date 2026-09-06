@@ -21,9 +21,23 @@ describe("ParallelProvider", () => {
 			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			return response(payload);
 		} }).search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, {});
-		expect(seenBody).toMatchObject({ objective: "latest TypeScript release", search_queries: ["latest TypeScript release"], mode: "advanced", advanced_settings: { max_results: 1 } });
+		expect(seenBody).toMatchObject({ objective: "latest TypeScript release", search_queries: ["latest TypeScript release"], mode: "fast", advanced_settings: { max_results: 1 } });
 		expect(result).toMatchObject({ provider: "parallel", requestId: "search-1", appliedOptions: ["maxResults", "mode"] });
 		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." });
+	});
+
+	it("maps mode hints onto the current Parallel tier semantics", async () => {
+		// fast: recommended agent default; basic: extended snippets for keyword
+		// probes; advanced: multi-hop depth for freshness-sensitive work.
+		for (const [requestMode, parallelMode] of [["auto", "fast"], ["keyword", "basic"], ["fresh", "advanced"]] as const) {
+			let seenBody: Record<string, unknown> | undefined;
+			const configured = provider({ fetchImpl: async (_input, init) => {
+				seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+				return response(payload);
+			} });
+			await configured.search({ query: "q", mode: requestMode }, new AbortController().signal, {});
+			expect(seenBody?.mode).toBe(parallelMode);
+		}
 	});
 
 	it("maps supported domain and date constraints into source policy", async () => {

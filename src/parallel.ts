@@ -68,11 +68,18 @@ export function buildParallelRequest(request: SearchRequest): ParallelRequestPla
 	const appliedOptions: SearchOption[] = ["maxResults", "mode"];
 	if (normalized.domains !== undefined && (normalized.domains.include !== undefined || normalized.domains.exclude !== undefined)) appliedOptions.push("domains");
 	if (normalized.dateRange !== undefined && normalized.dateRange.from !== undefined) appliedOptions.push("dateRange");
+	// Mode mapping per docs.parallel.ai/search/modes (checked 2026-09-06):
+	// fast is the recommended high-quality default for agents ($1/1K, ~700ms);
+	// basic returns extended snippets for keyword/reference probes ($5/1K);
+	// advanced is the multi-hop depth pipeline for recency-sensitive work
+	// ($5/1K, ~3s). turbo is a latency tier with no quality advantage and
+	// partial language coverage, so it is deliberately not used.
+	const mode = normalized.mode === "keyword" ? "basic" : normalized.mode === "fresh" ? "advanced" : "fast";
 	return {
 		body: {
 			objective: normalized.query,
 			search_queries: [normalized.query],
-			mode: normalized.mode === "keyword" ? "basic" : normalized.mode === "fresh" ? "advanced" : "advanced",
+			mode,
 			advanced_settings: {
 				max_results: maxResults,
 				...(Object.keys(sourcePolicy).length === 0 ? {} : { source_policy: sourcePolicy }),
