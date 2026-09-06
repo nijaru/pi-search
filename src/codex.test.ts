@@ -9,6 +9,20 @@ function context(token = "test-token"): ProviderContext {
 	};
 }
 
+/** The router's registry-fallback dispatch: a non-Codex active model with an
+ * authenticated Codex model available in Pi's registry (DESIGN backend
+ * resolution step 2). */
+function registryFallbackContext(token = "test-token"): ProviderContext {
+	const codexModel = { provider: "openai-codex", id: "gpt-5.4", api: "openai-codex-responses", baseUrl: "https://chatgpt.com/backend-api/codex" };
+	return {
+		model: { provider: "anthropic", id: "claude-opus-5", api: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" },
+		modelRegistry: {
+			getModels: () => [codexModel],
+			getApiKeyAndHeaders: async (requested) => requested.id === "gpt-5.4" ? { ok: true as const, apiKey: token } : { ok: false as const, error: "not configured" },
+		},
+	};
+}
+
 function response(body: unknown): Response {
 	return new Response(JSON.stringify(body), { status: 200, headers: { "x-request-id": "req-codex" } });
 }
@@ -68,5 +82,45 @@ describe("CodexProvider", () => {
 		const provider = new CodexProvider({ fetchImpl: async () => { calls += 1; return response({}); } });
 		await expect(provider.search({ query: "q", dateRange: { from: "2025-01-01" } }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "unsupported" });
 		expect(calls).toBe(0);
+	});
+
+	it("selects an authenticated registry model when the active model is not Codex", async () => {
+		// Regression: the router dispatches Codex via its registry fallback for
+		// non-Codex active models (DESIGN backend-resolution step 2), but the
+		// shared model selection previously rejected the call instead of using
+		// the available registry model.
+		const payload = { output: "Answer cites turn0search0", results: [{ type: "text_result", ref_id: "turn0search0", url: "https://example.com/news", title: "News" }] };
+		let seenBody: Record<string, unknown> | undefined;
+		const provider = new CodexProvider({ fetchImpl: async (_input, init) => {
+			seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+			return response(payload);
+		} });
+		const result = await provider.search({ query: "q" }, new AbortController().signal, registryFallbackContext());
+		expect(seenBody).toMatchObject({ model: "gpt-5.4" });
+		expect(result.executionModel).toBe("gpt-5.4");
+	});
+
+	it("reports an auth failure when a listed registry model cannot authenticate", async () => {
+		// The registry lists the model but auth resolution fails for it; report
+		// the auth problem rather than a misleading executionModel requirement.
+		const broken = {
+			model: { provider: "anthropic", id: "claude-opus-5", api: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" },
+			modelRegistry: {
+				getModels: () => [{ provider: "openai-codex", id: "gpt-5.4", api: "openai-codex-responses", baseUrl: "https://chatgpt.com/backend-api/codex" }],
+				getApiKeyAndHeaders: async () => ({ ok: false as const, error: "no auth" }),
+			},
+		} as ProviderContext;
+		const provider = new CodexProvider({ fetchImpl: async () => response({ output: "", results: [] }) });
+		await expect(provider.search({ query: "q" }, new AbortController().signal, broken)).rejects.toThrow(/authentication is not configured/);
+	});
+
+	it("still requires an explicit executionModel outside the router's registry fallback", async () => {
+		// A compatible registry model exists but none authenticates and the
+		// router never sanctioned a fallback (active model not a match).
+		const provider = new CodexProvider({ fetchImpl: async () => response({ output: "", results: [] }) });
+		await expect(provider.search({ query: "q" }, new AbortController().signal, {
+			model: { provider: "anthropic", id: "claude-opus-5", api: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" },
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "k" }) },
+		} as ProviderContext)).rejects.toThrow(/An explicit executionModel is required/);
 	});
 });

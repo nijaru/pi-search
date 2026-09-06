@@ -1,5 +1,5 @@
 import type { ProviderAuthResult, ProviderContext, ProviderHeaders, ProviderId, ProviderModel, SearchRequest } from "./contracts";
-import { createProviderError } from "./errors";
+import { createProviderError, isProviderError } from "./errors";
 
 export interface ModelExecution {
 	readonly model: ProviderModel;
@@ -15,6 +15,15 @@ interface ModelSelectionOptions {
 	readonly api: string;
 	readonly request: SearchRequest;
 	readonly context: ProviderContext;
+	/**
+	 * Select an available registry model automatically when the active model
+	 * is not a compatible execution target. The router only dispatches here
+	 * after confirming a registry model is available, so this preserves the
+	 * built-in-search guarantee for non-native active models (DESIGN: backend
+	 * resolution step 2). Explicit cross-provider hints never reach this path
+	 * without an executionModel; the router rejects those first.
+	 */
+	readonly allowRegistryFallback?: boolean;
 }
 
 function compatible(model: ProviderModel, options: ModelSelectionOptions): boolean {
@@ -37,9 +46,10 @@ function candidates(options: ModelSelectionOptions): ProviderModel[] {
 }
 
 /**
- * Resolve one explicitly requested or active model without reading Pi auth
- * state directly. Cross-provider execution requires an explicit model id so a
- * stored subscription cannot silently create a metered request.
+ * Resolve one explicitly requested, active, or router-sanctioned registry
+ * model without reading Pi auth state directly. Cross-provider execution that
+ * was not router-initiated still requires an explicit model id so a stored
+ * subscription cannot silently create a metered request.
  */
 export async function selectModelExecution(options: ModelSelectionOptions): Promise<ModelExecution> {
 	const registry = options.context.modelRegistry;
@@ -49,35 +59,57 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 	const available = candidates(options);
 	const requested = options.request.executionModel;
 	const active = options.context.model;
-	const selected = requested === undefined
-		? (active === undefined ? undefined : available.find((model) => model.provider === active.provider && model.api === active.api && model.id === active.id))
-		: available.find((model) => model.id === requested);
-	if (selected === undefined) {
-		if (requested === undefined) {
+	const activeMatch = active === undefined
+		? undefined
+		: available.find((model) => model.provider === active.provider && model.api === active.api && model.id === active.id);
+	if (requested !== undefined) {
+		const requestedMatch = available.find((model) => model.id === requested);
+		if (requestedMatch === undefined) {
 			throw createProviderError({
 				provider: options.searchProvider,
 				kind: "unsupported",
-				message: `An explicit executionModel is required when ${options.searchProvider} is not the active model`,
+				message: `Model ${requested} is not an available ${options.searchProvider} search model`,
 				retryable: false,
 			});
 		}
-		throw createProviderError({
-			provider: options.searchProvider,
-			kind: "unsupported",
-			message: `Model ${requested} is not an available ${options.searchProvider} search model`,
-			retryable: false,
-		});
+		return authenticate(requestedMatch, registry, options);
 	}
+	if (activeMatch !== undefined) return authenticate(activeMatch, registry, options);
+	if (options.allowRegistryFallback === true && available.length > 0) {
+		// The router dispatched here because a compatible registry model is
+		// available (DESIGN backend-resolution step 2). Try candidates in the
+		// registry's own order; Pi lists default models first. Preserve the last
+		// auth failure so an unauthenticated registry reports an auth problem,
+		// not a misleading model-selection problem.
+		let lastAuthError: unknown;
+		for (const candidate of available) {
+			try {
+				return await authenticate(candidate, registry, options);
+			} catch (error) {
+				if (isProviderError(error) && error.kind === "auth") lastAuthError = error;
+			}
+		}
+		if (lastAuthError !== undefined) throw lastAuthError;
+	}
+	throw createProviderError({
+		provider: options.searchProvider,
+		kind: "unsupported",
+		message: `An explicit executionModel is required when ${options.searchProvider} is not the active model`,
+		retryable: false,
+	});
+}
+
+async function authenticate(model: ProviderModel, registry: NonNullable<ProviderContext["modelRegistry"]>, options: ModelSelectionOptions): Promise<ModelExecution> {
 	let auth: ProviderAuthResult;
 	try {
-		auth = await registry.getApiKeyAndHeaders(selected);
+		auth = await registry.getApiKeyAndHeaders(model);
 	} catch (error) {
 		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 	}
 	if (!auth.ok) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
+		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
 	}
-	return { model: selected, auth };
+	return { model, auth };
 }
 
 export interface ModelAuthHeaderOptions {
