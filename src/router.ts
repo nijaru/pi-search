@@ -102,6 +102,22 @@ function availableNativeModel(provider: ProviderId, context: ExtensionContext, r
 	}
 }
 
+/** Active-model dispatch order: the active model's own grounding first. */
+const ACTIVE_NATIVE_IDS = ["openai-codex", "openai", "gemini", "xai", "anthropic", "meta"] as const;
+
+/** Registry fallback order: preserve Pi's built-in search for other active models. */
+const REGISTRY_NATIVE_IDS = ["openai-codex", "openai"] as const;
+
+/**
+ * Resolve the provider for an active-model native id. xAI is the one native
+ * family whose choice depends on the request: X-specific constraints select
+ * the X grounding tool over web search.
+ */
+function activeNativeProvider(id: (typeof ACTIVE_NATIVE_IDS)[number], request: SearchRequest, options: SearchRouterOptions): Provider | undefined {
+	if (id === "xai" && (request.social !== undefined || request.dateRange !== undefined)) return options.xaiX;
+	return options[NATIVE_REGISTRY[id]!.option];
+}
+
 function selection(provider: Provider, automatic: boolean, fallbacks: readonly Provider[] = []): SearchProviderSelection {
 	return { provider, automatic, fallbacks: fallbacks.slice(0, 1) };
 }
@@ -216,38 +232,23 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		// A compatible active native model is the primary choice. A model using a
 		// different API variant (for example OpenAI chat completions) is not a
 		// grounded search backend; continue to registry/native or direct routing
-		// instead of making the user configure a provider manually.
-		if (context.model?.provider === "openai-codex" && nativeModelCompatible("openai-codex", context.model)) {
-			if (options.openaiCodex !== undefined && canServe(options.openaiCodex, normalized)) return selection(options.openaiCodex, true, directFallback(options.openaiCodex, normalized, options, policy));
-		}
-		if (context.model?.provider === "openai" && nativeModelCompatible("openai", context.model)) {
-			if (options.openai !== undefined && canServe(options.openai, normalized)) return selection(options.openai, true, directFallback(options.openai, normalized, options, policy));
-		}
-		if (context.model?.provider === "google" && nativeModelCompatible("gemini", context.model)) {
-			if (options.gemini !== undefined && canServe(options.gemini, normalized)) return selection(options.gemini, true, directFallback(options.gemini, normalized, options, policy));
-			// Continue to another eligible provider when Gemini cannot honor a hard
-			// constraint instead of selecting it and failing after dispatch.
-		}
-		if (context.model?.provider === "xai" && nativeModelCompatible("xai", context.model)) {
-			const xaiProvider = normalized.social !== undefined || normalized.dateRange !== undefined ? options.xaiX : options.xai;
-			if (xaiProvider !== undefined && canServe(xaiProvider, normalized)) return selection(xaiProvider, true, directFallback(xaiProvider, normalized, options, policy));
-			// Continue to another eligible provider when the active xAI tool cannot
-			// satisfy the requested web/X constraints.
-		}
-		if (context.model?.provider === "anthropic" && nativeModelCompatible("anthropic", context.model)) {
-			if (options.anthropic !== undefined && canServe(options.anthropic, normalized)) return selection(options.anthropic, true, directFallback(options.anthropic, normalized, options, policy));
-			// Continue when Anthropic cannot honor a hard constraint.
-		}
-		if (context.model?.provider === "meta" && nativeModelCompatible("meta", context.model)) {
-			if (options.meta !== undefined && canServe(options.meta, normalized)) return selection(options.meta, true, directFallback(options.meta, normalized, options, policy));
-			// Continue when Meta cannot honor a hard constraint.
+		// instead of making the user configure a provider manually. When the
+		// active model's native tool cannot honor a hard constraint, continue to
+		// the next eligible path rather than failing after dispatch.
+		for (const id of ACTIVE_NATIVE_IDS) {
+			if (!nativeModelCompatible(id, context.model)) continue;
+			const candidate = activeNativeProvider(id, normalized, options);
+			if (candidate !== undefined && canServe(candidate, normalized)) {
+				return selection(candidate, true, directFallback(candidate, normalized, options, policy));
+			}
 		}
 
 		// Preserve Pi's built-in search when an authenticated same-provider model
 		// exists, even if the active model is OpenRouter, Anthropic, or local.
-		for (const [providerId, provider] of [["openai-codex", options.openaiCodex], ["openai", options.openai]] as const) {
-			if (provider !== undefined && availableNativeModel(providerId, context) && canServe(provider, normalized)) {
-				return selection(provider, true, directFallback(provider, normalized, options, policy));
+		for (const id of REGISTRY_NATIVE_IDS) {
+			const candidate = options[NATIVE_REGISTRY[id]!.option];
+			if (candidate !== undefined && availableNativeModel(id, context) && canServe(candidate, normalized)) {
+				return selection(candidate, true, directFallback(candidate, normalized, options, policy));
 			}
 		}
 
