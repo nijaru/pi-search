@@ -34,7 +34,7 @@ Shipped search adapters:
 | Meta grounding | Active Meta Responses model | `meta` plus optional `executionModel` | Responses-compatible web_search; domain/date/social/context controls unverified and rejected |
 | Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
-| Parallel | — | `parallel` with configured key | Search objective/excerpts; include/exclude domain policies and lower date bound |
+| Parallel | — | `parallel` with configured key | Search objective/excerpts on the GA tiers (`auto`→`fast`, `keyword`→`basic`, `fresh`→`advanced`); include/exclude domain policies and lower date bound |
 | Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
 Explicit provider failures are final. Automatic routing may use one visible

@@ -38,6 +38,12 @@ Report precision among the top 3 results, authoritative-result rate, useful
 excerpt rate, and duplicates separately for each case. Do not collapse these
 into a permanent provider ranking: the winner can differ by role.
 
+These labels exist for debugging a specific case or verifying a contract
+mapping after an adapter change. They are not a quality benchmark: a handful
+of local calls cannot meaningfully measure answer quality, so provider
+quality comparisons defer to current published evaluations (see the
+quality-posture section in [`provider-policy.md`](./provider-policy.md)).
+
 ## Cost worksheet
 
 For every explicit live call, record the provider, mode, result limit, request

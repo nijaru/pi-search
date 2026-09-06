@@ -53,7 +53,7 @@ hidden fan-out, or provider comparisons.
 | Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
-| Parallel | Objective-oriented search and excerpts | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
+| Parallel | Objective-oriented search and excerpts; `auto`/`keyword`/`fresh` map to the `fast`/`basic`/`advanced` tiers | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
 The word “fallback” for Brave primarily means fallback in model *selection*
@@ -77,13 +77,51 @@ billing policy permits metered use because it returns useful highlights and
 source evidence. `PI_SEARCH_PREFER_FREE=1` makes admitted Brave the first
 non-native path while retaining Exa as a fallback. Free-only mode never
 silently dispatches Exa; explicit Exa hints remain user-directed. Parallel is
-an objective-oriented provider. The
+an objective-oriented provider whose `fast` tier is the recommended agent
+default and whose `advanced` tier suits multi-hop depth; both Exa and Parallel
+are retained because their evidence shapes are complementary (semantic
+document discovery versus objective-oriented ranked excerpts) and both rank
+in the top tier of current independent evaluations. The
 official X API is a separate exact recent-search path; X query operators can
 target posts or users, but dedicated lookup and archive endpoints are not
 implemented. xAI X remains the semantic, model-mediated path. None of these
 direct providers
 provides a reliable fixed per-call estimate for every hard research cost
 ceiling, so unsupported cost ceilings are rejected before calls.
+
+## Direct-provider quality and cost posture (2026-09)
+
+This is recorded evidence, not a permanent ranking; providers change pricing
+and quality faster than this document. Priorities for provider decisions are
+quality first, cost second, latency last.
+
+- **Comparable-tier benchmarks.** The Artificial Analysis Search Index
+  (August 2026, independent) ranks Parallel Search (advanced tier) first of
+  12 search API products on quality lift over a no-search baseline. Parallel's
+  own published evals (July 2026, methodology disclosed) place their turbo
+  tier above Exa Instant, Tavily Ultra Fast, Brave, and SerpAPI on
+  BrowseComp/HLE/WebWalker/SimpleQA accuracy at lowest latency — vendor-run,
+  so weight accordingly, but the independent index agrees on the top tier.
+  AIMultiple (May 2026, independent, 100-query LLM-judge methodology) put
+  Brave (14.89), Firecrawl, Exa (14.39), and Parallel's agentic tier in one
+  statistically tied top band with Tavily meaningfully behind. Comparing
+  *comparable tiers*: standard Exa search and Brave's base plan sit in the
+  top band with Parallel's search tiers; Parallel's 13.6s Task/pro tier is a
+  different product and is not comparable to sub-second search tiers.
+- **Current pricing (verified 2026-09 against vendor pages).** Parallel
+  Search: `fast`/`turbo` \$1 per 1K, `basic`/`advanced` \$5 per 1K, 5,000 free
+  requests/month. Exa: \$7 per 1K search with contents for the first 10
+  results bundled since March 2026 (highlights we already request are now
+  included); Deep Search \$12–15 per 1K. Brave: \$5 per 1K with \$5 monthly free
+  credits. Perplexity Sonar Pro is token-metered (\$3/\$15 per 1M) plus
+  per-request search fees.
+- **No local quality smoke.** Published independent evaluations measure
+  quality better than a handful of local corpus calls could; a local smoke run
+  cannot meaningfully measure answer quality. Live provider checks are for
+  contract/correctness validation only (request mapping, normalization,
+  constraint enforcement, usage reporting), using `docs/live-smoke.md`.
+  Provider-quality decisions defer to current published benchmarks, and this
+  section is refreshed when they change materially.
 
 ## Search constraints
 
@@ -104,6 +142,8 @@ Unsupported hard constraints are rejected or surfaced:
 - Parallel Search supports include/exclude domain source policies and a lower
   publication-date bound through `advanced_settings.source_policy`; it does not
   support both include and exclude lists together or an upper date bound.
+  Its GA mode tiers are `turbo`, `fast` (the recommended agent default this
+  adapter sends for `auto`), `basic`, and `advanced`.
 - Exa applies domain and published-date filters; Brave applies domain filters
   and returns normalized evidence.
 - Official X recent search maps bounded date ranges and handle operators; it
