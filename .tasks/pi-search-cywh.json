@@ -1,0 +1,28 @@
+{
+  "project": "pi-search",
+  "ref": "cywh",
+  "title": "Provider priority: codex registry fallback, parallel fast default, provider docs",
+  "description": null,
+  "status": "done",
+  "priority": 1,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-09-06T16:23:42.137685Z",
+      "msg": "User direction 2026-09-06: quality == cost \u003e speed; keep both exa and parallel; no local quality smoke (published benches cover it); parallel fast is the right default. Work: (1) fix codex registry-fallback routing failure found live (web_research from non-codex active model throws 'explicit executionModel required' instead of using the registry model the router selected per DESIGN), (2) map parallel auto-\u003efast (/1K vs /1K advanced), keyword-\u003efast, fresh-\u003eadvanced, (3) update provider-policy/eval docs with comparable-tier landscape + no-quality-smoke policy."
+    },
+    {
+      "ts": "2026-09-06T18:13:53.567341Z",
+      "msg": "All three items shipped: (1) 474537f codex registry-fallback fix — live-verified end-to-end via child pi session with openrouter active model dispatching web_research through gpt-5.3-codex-spark, stopReason completed (this exact path failed live pre-fix); (2) 8b86fc4 parallel auto-\u003efast mapping (keyword-\u003ebasic, fresh-\u003eadvanced, turbo unused); (3) 9f55cb4 provider docs with comparable-tier posture + no-local-quality-smoke policy. 236 tests green, installed copy synced byte-identical and verified. 3 commits pushed."
+    }
+  ],
+  "created_at": "2026-09-06T16:23:42.106019Z",
+  "updated_at": "2026-09-06T18:13:53.595946Z",
+  "completed_at": "2026-09-06T18:13:53.595946Z",
+  "external": {}
+}
