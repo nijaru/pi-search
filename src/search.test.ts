@@ -43,6 +43,8 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "q", contentResults: 21 })).toThrow("between 1 and 20");
 		expect(() => validateSearchRequest({ query: "q", contentMaxLength: 32_001 })).toThrow("between 1 and 32000");
 		expect(() => validateSearchRequest({ query: "q", executionModel: 42 as never })).toThrow("executionModel must be a string");
+		expect(() => validateSearchRequest({ query: "q", mode: "garbage" as never })).toThrow("Search mode must be auto, keyword, or fresh");
+		expect(validateSearchRequest({ query: "q", mode: "fresh" })).toMatchObject({ mode: "fresh" });
 		expect(() => validateSearchRequest({ query: "q", domains: { include: ["example.com"], exclude: ["example.com"] } })).toThrow(
 			"both included and excluded",
 		);

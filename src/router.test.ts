@@ -85,6 +85,18 @@ describe("search provider router", () => {
 		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("google", "google-generative-ai")).provider.id).toBe("exa");
 	});
 
+	it("names the unsatisfiable hard constraint, not the retrieval mode, when no direct provider can serve", () => {
+		const braveOnly = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(() => braveOnly({ query: "q", mode: "fresh", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/social\/X constraints/);
+		expect(() => braveOnly({ query: "q", mode: "fresh", dateRange: { from: "2026-01-01" } }, context("anthropic"))).toThrow(/a date range/);
+		expect(() => braveOnly({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(
+			/Brave cannot satisfy the requested social\/X constraints/,
+		);
+		const exaToo = createSearchRouter({ exa, exaConfigured: true, billingPolicy: "allow-configured-metered", brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(() => exaToo({ query: "q", mode: "fresh", searchContextSize: "low" }, context("anthropic"))).toThrow(/Exa cannot satisfy the requested search context size/);
+		expect(exaToo({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("exa");
+	});
+
 	it("does not silently drop hard date constraints on native OpenAI", () => {
 		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("openai", "openai-responses")).provider.id).toBe("exa");

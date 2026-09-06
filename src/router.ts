@@ -188,6 +188,21 @@ function explicitProvider(
 	return unavailable(`Search provider ${provider} is not configured`, provider);
 }
 
+/** Human-readable names of the hard constraints a request carries. */
+function unmetConstraintNames(request: SearchRequest): readonly string[] {
+	const names: string[] = [];
+	if (request.domains?.include?.length || request.domains?.exclude?.length) names.push("domain filters");
+	if (request.dateRange !== undefined) names.push("a date range");
+	if (request.social !== undefined) names.push("social/X constraints");
+	if (request.searchContextSize !== undefined) names.push("search context size");
+	if (request.returnTokenBudget !== undefined) names.push("a returned-token budget");
+	if (request.externalWebAccess !== undefined) names.push("live-access selection");
+	if (request.userLocation !== undefined) names.push("a user location");
+	if (request.searchContentTypes !== undefined) names.push("content-type selection");
+	if (request.imageSettings !== undefined) names.push("image result settings");
+	return names;
+}
+
 /** Select one primary provider plus at most one automatic alternative. */
 export function createSearchRouter(options: SearchRouterOptions): SearchProviderResolver {
 	const policy = options.billingPolicy ?? "free-only";
@@ -236,7 +251,6 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 			}
 		}
 
-		const mode = normalized.mode ?? "auto";
 		const exaConfigured = options.exaConfigured === true;
 		const exaAllowed = policy !== "free-only";
 		const exaCanMatchMode = exaAllowed && options.exa !== undefined && canServe(options.exa, normalized);
@@ -250,13 +264,22 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 			return selection(options.brave!, true);
 		}
 		if (exaConfigured && exaCanMatchMode) return selection(options.exa!, true, directFallback(options.exa!, normalized, options, policy));
-		if (exaAllowed && exaConfigured && mode !== "auto" && options.exa !== undefined && !exaCanMatchMode) return unavailable(`Exa cannot satisfy ${mode} search semantics`, "exa");
 		if (braveCanMatchMode && braveConfigured && braveAllowed) {
 			checkBraveCapacity(options);
 			return selection(options.brave!, true);
 		}
+		// No direct provider was eligible; name the hard constraints the
+		// configured providers could not honor instead of blaming the retrieval
+		// mode, which never blocks selection on its own.
+		if (exaAllowed && exaConfigured && options.exa !== undefined) {
+			const unmet = unmetConstraintNames(normalized);
+			return unavailable(`Exa cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "exa");
+		}
 		if (braveConfigured && !braveAllowed) return unavailable("Brave is configured but free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "router");
-		if (braveConfigured && mode !== "auto" && options.brave !== undefined && !braveCanMatchMode) return unavailable(`Brave cannot satisfy ${mode} search semantics`, "brave");
+		if (braveConfigured && options.brave !== undefined) {
+			const unmet = unmetConstraintNames(normalized);
+			return unavailable(`Brave cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "brave");
+		}
 		return unavailable("No eligible search provider is configured; configure a provider or use an active grounded model", "router");
 	};
 }

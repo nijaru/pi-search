@@ -212,6 +212,10 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (executionModel !== undefined && (executionModel.length === 0 || executionModel.length > MAX_EXECUTION_MODEL_LENGTH)) {
 		throw invalidRequest(`Search executionModel must be between 1 and ${MAX_EXECUTION_MODEL_LENGTH} characters`);
 	}
+	const mode = request.mode ?? "auto";
+	if (mode !== "auto" && mode !== "keyword" && mode !== "fresh") {
+		throw invalidRequest("Search mode must be auto, keyword, or fresh");
+	}
 	const dateRange = normalizeDateRange(request.dateRange);
 	const social = normalizeSocial(request.social);
 	const userLocation = normalizeLocation(request.userLocation);
@@ -257,7 +261,7 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	return {
 		...request,
 		query,
-		mode: request.mode ?? "auto",
+		mode,
 		maxResults,
 		...(executionModel === undefined ? {} : { executionModel }),
 		...(dateRange === undefined ? {} : { dateRange }),
