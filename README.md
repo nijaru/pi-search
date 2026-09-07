@@ -43,7 +43,10 @@ location, live-access, and content-type controls when requested.
 ## Configuration
 
 The extension reads credentials only at construction or through Pi's model
-registry; it never logs keys.
+registry; it never logs keys. Keys can live in a shell-local secret injector
+(e.g. `fnox`) rather than global environment files — because providers are
+registered only when their key is present at construction, an unset
+variable simply leaves that provider disabled.
 
 ```bash
 # Optional metered semantic search for non-native/local models

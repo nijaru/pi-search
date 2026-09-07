@@ -168,10 +168,21 @@ credential-gated smoke case.
 | Tavily | Simple API, raw content option, predictable credits | Overlaps Brave/Exa/Perplexity and has no dedicated X path |
 | Z.AI / Claude bridge / DuckDuckGo | Possible native or keyless coverage | Current provenance, auth, or scraping contracts are not strong enough for the core |
 
-Per-provider research recommends Perplexity as the first addition only if hard
-filters are materially needed. SearXNG should be an explicitly configured
-self-hosted option, never a hidden fallback. Dedicated X remains an xAI
-capability; a general provider returning `x.com` links is not equivalent.
+### Declined providers (do not re-research)
+
+| Provider | Decision and rationale |
+| --- | --- |
+| Parallel Responses API | Declined 2026-09. Metered per reasoning effort ($10–$250 per 1K) for provider-synthesized answers. The calling agent already has cheap evidence search (native grounding plus Exa/Brave/Parallel) and `web_fetch`, and synthesizes answers from inspectable evidence at model cost — better output than vendor synthesis, with no added metered call. |
+| Brave Answers | Declined 2026-09. Same rationale: token-metered answer synthesis the agent performs better from evidence. Brave keeps its role as the conservative free-mode evidence path. |
+
+Per-provider research previously recommended Perplexity as the first
+addition if hard filters are materially needed; that position is now
+second to the declined-synthesis rationale above — hard filters on a
+metered direct provider must beat what the agent does with native
+grounding plus `web_fetch` before earning a slot. SearXNG should be an
+explicitly configured self-hosted option, never a hidden fallback.
+Dedicated X remains an xAI capability; a general provider returning
+`x.com` links is not equivalent.
 
 ## Transient failures
 
