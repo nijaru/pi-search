@@ -44,10 +44,12 @@ export default function (pi: ExtensionAPI): void {
 	const exa = createExaProvider({ apiKey: exaKey });
 	const parallel = createParallelProvider({ apiKey: parallelKey });
 	const x = createXProvider({ bearerToken: xToken });
-	// Opt-in answer-synthesis providers: registered only behind their explicit
-	// enable gates, never automatic routing, never the native alias.
-	const parallelResponsesEnabled = process.env.PI_SEARCH_ENABLE_PARALLEL_RESPONSES === "1" && parallelKey !== undefined && parallelKey.trim().length > 0;
-	const braveAnswersEnabled = process.env.PI_SEARCH_ENABLE_BRAVE_ANSWERS === "1" && braveKey !== undefined && braveKey.trim().length > 0;
+	// Opt-in answer-synthesis providers: the enable gate alone controls
+	// registration so each failure names its actual missing piece. A gate
+	// without a key dispatches to the adapter, which reports the missing key;
+	// a key without the gate never registers the provider at all.
+	const parallelResponsesEnabled = process.env.PI_SEARCH_ENABLE_PARALLEL_RESPONSES === "1";
+	const braveAnswersEnabled = process.env.PI_SEARCH_ENABLE_BRAVE_ANSWERS === "1";
 	const parallelResponses = createParallelResponsesProvider({ apiKey: parallelKey });
 	const braveAnswers = createBraveAnswersProvider({ apiKey: braveKey });
 	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1"
