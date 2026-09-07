@@ -2,8 +2,8 @@
   "project": "pi-search",
   "ref": "wwam",
   "title": "Evaluate Brave Answers endpoint for native-style grounded answers",
-  "description": "Brave ships an OpenAI-compatible Answers plan (per AIMultiple May 2026 pricing: $4 per 1K requests plus $5 per 1M input/output tokens, 2 queries/second, streaming, citation-supported grounding, OpenAI SDK compatible; verify against brave.com/search/api current docs before starting). It could ride the native grounding infrastructure like the Parallel Responses idea (executeGroundedSearch + NATIVE_REGISTRY row), giving Brave-synthesized answers with citations. Open questions: (1) billing policy — token-metered answers differ from Brave's free-tier search path, so the existing BRAVE_API_KEY free-mode admission gates must not silently cover it; it needs its own explicit opt-in; (2) whether BRAVE_API_KEY works for the Answers endpoint or a separate subscription key is required; (3) how synthesized answers interact with Brave's role as the conservative last-resort keyword path (DESIGN.md) — answers may justify a different routing position than search; (4) contract smoke with live credentials once scoped. User direction 2026-09-06: not wanted now; task exists so the option is tracked. Prerequisite before any work: verify current Brave Answers API surface and pricing against official docs (vendor pricing moves fast).",
-  "status": "closed",
+  "description": "Evaluate and possibly implement the Brave Answers endpoint (OpenAI-compatible, token-metered: ~$4 per 1K requests + $5 per 1M tokens per AIMultiple May 2026 — verify against brave.com/search/api current docs first) as an opt-in, disabled-by-default native-style answer capability. Prerequisite: verify the official API surface and pricing before any scoping. Open questions: (1) billing — token-metered answers must sit behind their own explicit opt-in gate, NOT covered by the existing BRAVE_API_KEY free-mode admission that gates search; (2) credential var — same key or separate subscription key; (3) routing position — Brave's search role is conservative last-resort keyword path (DESIGN.md), so answers likely need a different position (explicit-hint only). Same user rationale as pi-search-06j6: agent-side synthesis covers current workflows, so this stays opt-in, not default.",
+  "status": "open",
   "priority": 3,
   "labels": [
     "provider",
@@ -23,10 +23,14 @@
     {
       "ts": "2026-09-07T11:48:30.997211Z",
       "msg": "Declined 2026-09-06: same rationale as 06j6 — Brave Answers is token-metered answer synthesis that the agent itself performs better from evidence. Brave's role stays the conservative free-mode evidence path. Task closed as declined."
+    },
+    {
+      "ts": "2026-09-07T12:08:51.692982Z",
+      "msg": "Reopened same day: prior 'declined' close was too absolute. Correct position: opt-in capability behind its own gate, never under the free-mode Brave search admission."
     }
   ],
   "created_at": "2026-09-07T11:14:30.557227Z",
-  "updated_at": "2026-09-07T11:48:31.008626Z",
+  "updated_at": "2026-09-07T12:08:51.692982Z",
   "completed_at": null,
   "external": {}
 }

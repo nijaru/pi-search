@@ -2,8 +2,8 @@
   "project": "pi-search",
   "ref": "06j6",
   "title": "Add Parallel Responses adapter as a native grounding family",
-  "description": "Parallel's Responses API (docs.parallel.ai/responses-api) is OpenAI-compatible with citations, priced by reasoning effort at $10 (low) / $50 (medium) / $250 (high) per 1K requests, 5s-60s latency. It could ride the existing native grounding infrastructure: executeGroundedSearch in src/grounding.ts + one NATIVE_REGISTRY row in src/router.ts + capabilities/build/normalize + offline fixtures, same shape as Meta (which reuses the OpenAI-shaped normalizer). It would add Parallel-synthesized grounded answers alongside evidence. Open questions to resolve before starting: (1) routing/billing policy — metered per reasoning effort, so it must be explicit-hint only or behind a policy flag like the Exa/Brave gates, never automatic; (2) which reasoning-effort tier maps from our contracts (answerMode? a new option?) — the extension has no effort control today; (3) credential mechanism — PARALLEL_API_KEY works for the x-api-key header per docs.parallel.ai, but confirm the Responses endpoint accepts it; (4) live contract smoke with the existing key per docs/live-smoke.md once implemented. User direction 2026-09-06: not wanted now; task exists so the option is tracked. Quality posture evidence in docs/provider-policy.md (2026-09 section): Parallel advanced ranks #1 of 12 on the independent Artificial Analysis Search Index (Aug 2026).",
-  "status": "closed",
+  "description": "Implement the Parallel Responses adapter as a native grounding family, DISABLED BY DEFAULT behind an explicit opt-in gate (e.g. PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1 or a dedicated credential var) — never automatic, never selected by provider: native. It rides the existing native grounding infrastructure: executeGroundedSearch in src/grounding.ts + one NATIVE_REGISTRY row in src/router.ts + capabilities/build/normalize + offline fixtures, same shape as Meta. Open questions to resolve at implementation: (1) billing/routing policy — metered per reasoning effort ($10 low/$50 medium/$250 high per 1K), so opt-in gate required and reasoning-effort mapping decision (contracts have no effort control today; options: hardcode a tier, map answerMode, or add a new option); (2) credential mechanism — confirm the Responses endpoint accepts PARALLEL_API_KEY (x-api-key) or needs a separate var; (3) live contract smoke with the existing key per docs/live-smoke.md. User direction 2026-09-06: not enabled by default because agent-side synthesis from cheap evidence search + web_fetch covers current workflows; the adapter is still worth having as an opt-in capability. Quality evidence: Parallel advanced ranks #1 of 12 on independent Artificial Analysis Search Index (Aug 2026); recorded in docs/provider-policy.md.",
+  "status": "open",
   "priority": 3,
   "labels": [
     "provider",
@@ -23,10 +23,14 @@
     {
       "ts": "2026-09-07T11:48:30.977448Z",
       "msg": "Declined 2026-09-06: provider-synthesized answers are redundant for this extension. The calling agent already has cheap evidence search (native grounding + Exa/Brave/Parallel) plus web_fetch, and can synthesize its own answers from inspectable evidence at model cost. Parallel Responses is metered per reasoning effort (0-250/1K) for output the agent produces better from raw evidence. Task closed as declined; do not reopen without a workflow that genuinely needs provider-side synthesis."
+    },
+    {
+      "ts": "2026-09-07T12:08:51.676701Z",
+      "msg": "Reopened same day: prior 'declined' close was too absolute. Correct position: viable opt-in capability, disabled by default, gated explicitly — not enabled-by-default because agent-side synthesis from cheap evidence search + web_fetch covers current workflows."
     }
   ],
   "created_at": "2026-09-07T11:12:09.911311Z",
-  "updated_at": "2026-09-07T11:48:30.977448Z",
+  "updated_at": "2026-09-07T12:08:51.676701Z",
   "completed_at": null,
   "external": {}
 }

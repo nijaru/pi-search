@@ -168,21 +168,21 @@ credential-gated smoke case.
 | Tavily | Simple API, raw content option, predictable credits | Overlaps Brave/Exa/Perplexity and has no dedicated X path |
 | Z.AI / Claude bridge / DuckDuckGo | Possible native or keyless coverage | Current provenance, auth, or scraping contracts are not strong enough for the core |
 
-### Declined providers (do not re-research)
+### Synthesis providers (opt-in only, not enabled by default)
 
-| Provider | Decision and rationale |
+| Provider | Position and rationale |
 | --- | --- |
-| Parallel Responses API | Declined 2026-09. Metered per reasoning effort ($10–$250 per 1K) for provider-synthesized answers. The calling agent already has cheap evidence search (native grounding plus Exa/Brave/Parallel) and `web_fetch`, and synthesizes answers from inspectable evidence at model cost — better output than vendor synthesis, with no added metered call. |
-| Brave Answers | Declined 2026-09. Same rationale: token-metered answer synthesis the agent performs better from evidence. Brave keeps its role as the conservative free-mode evidence path. |
+| Parallel Responses API | Worth having as an explicit opt-in capability, disabled by default. Metered per reasoning effort ($10–$250 per 1K). Not a default: the calling agent already has cheap evidence search (native grounding plus Exa/Brave/Parallel) and `web_fetch`, and synthesizes answers from inspectable evidence at model cost, which covers current workflows without an added metered call. Any adapter lands behind its own enable gate or credential var, never automatic routing and never `provider: native`. |
+| Brave Answers | Same position: opt-in only, and its token-metered billing must sit behind a separate gate from the `BRAVE_API_KEY` free-mode admission that governs Brave search. Revisit whenever a workflow genuinely needs provider-side synthesis or a different quality/cost point than agent-side synthesis. |
 
 Per-provider research previously recommended Perplexity as the first
 addition if hard filters are materially needed; that position is now
-second to the declined-synthesis rationale above — hard filters on a
-metered direct provider must beat what the agent does with native
-grounding plus `web_fetch` before earning a slot. SearXNG should be an
-explicitly configured self-hosted option, never a hidden fallback.
-Dedicated X remains an xAI capability; a general provider returning
-`x.com` links is not equivalent.
+second to the synthesis position above — hard filters on a metered
+direct provider must beat what the agent does with native grounding
+plus `web_fetch` before earning a slot. SearXNG should be an explicitly
+configured self-hosted option, never a hidden fallback. Dedicated X
+remains an xAI capability; a general provider returning `x.com` links
+is not equivalent.
 
 ## Transient failures
 
