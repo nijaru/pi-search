@@ -14,6 +14,7 @@ import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
 import { adaptLocalLlamaPayload, isLocalOpenAICompatibleModel } from "./local-llama-compat";
+import { availableProviderHints } from "./provider-availability";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 
@@ -80,11 +81,21 @@ export default function (pi: ExtensionAPI): void {
 		braveCapacity,
 		billingPolicy,
 	});
+	// Expose only provider hints this installation can actually dispatch so
+	// the tool schemas never advertise options whose keys or gates are absent.
+	const availableHints = availableProviderHints({
+		brave: braveKey !== undefined && braveKey.trim().length > 0,
+		braveAnswers: braveAnswersEnabled,
+		exa: exaKey !== undefined && exaKey.trim().length > 0,
+		parallel: parallelKey !== undefined && parallelKey.trim().length > 0,
+		parallelResponses: parallelResponsesEnabled,
+		x: xToken !== undefined && xToken.trim().length > 0,
+	});
 	pi.on("before_provider_request", (event, context) => {
 		if (!isLocalOpenAICompatibleModel(context.model)) return;
 		return adaptLocalLlamaPayload(event.payload);
 	});
-	registerWebSearch(pi, route);
+	registerWebSearch(pi, route, { availableProviderHints: availableHints });
 	registerWebFetch(pi);
-	registerWebResearch(pi, route);
+	registerWebResearch(pi, route, { availableProviderHints: availableHints });
 }
