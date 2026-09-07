@@ -76,7 +76,7 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 # Opt-in answer-synthesis providers (disabled by default; explicit provider
 # hint only -- never selected automatically, never the native alias):
 # export PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1   # also needs PARALLEL_API_KEY
-# export PI_SEARCH_ENABLE_BRAVE_ANSWERS=1       # also needs BRAVE_API_KEY
+# export PI_SEARCH_ENABLE_BRAVE_ANSWERS=1       # also needs BRAVE_API_KEY on a plan with AI Answers
 # Parallel Responses is metered per reasoning effort ($10-$250/1K requests);
 # Brave Answers is $4/1K requests plus $5/1M tokens, billed separately
 # from Brave search's free-mode admission.

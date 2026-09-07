@@ -100,6 +100,16 @@ describe("BraveAnswersProvider", () => {
 		await expect(unauthorized.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "auth" });
 	});
 
+	it("surfaces the Brave ErrorResponse detail on failure statuses", async () => {
+		const planMissing = provider({ fetchImpl: async () => sse(JSON.stringify({ type: "ErrorResponse", error: { id: "x", status: 400, detail: "The option is not included in the plan.", code: "OPTION_NOT_IN_PLAN" }, time: 0 }), 400, { "content-type": "application/json" }) });
+		await expect(planMissing.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "badRequest", message: "brave-answers failed with HTTP 400 (OPTION_NOT_IN_PLAN: The option is not included in the plan.)" });
+	});
+
+	it("falls back to the status-code message when the error body is not a Brave envelope", async () => {
+		const html = provider({ fetchImpl: async () => sse("<html>gateway error</html>", 502, { "content-type": "text/html" }) });
+		await expect(html.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "http", message: "brave-answers failed with HTTP 502" });
+	});
+
 	it("requires an API key", async () => {
 		const missing = createBraveAnswersProvider({ endpoint: "https://brave.test/res/v1/chat/completions", fetchImpl: async () => sse(sseBody(streamedAnswer)) });
 		await expect(missing.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "auth" });

@@ -11,7 +11,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError } from "./errors";
-import { cancelResponseBody, readBoundedResponseText } from "./http";
+import { readBoundedResponseText } from "./http";
 import { httpSource, objectValue, optionalString, requireApiKey, retryAfterMsFromHeaders, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
 
@@ -113,6 +113,34 @@ export function buildBraveAnswersRequest(request: SearchRequest): BraveAnswersPl
 
 function malformed(message: string): never {
 	throw createProviderError({ provider: "brave-answers", kind: "malformed", message: `Brave Answers returned a malformed response (${message})`, retryable: false });
+}
+
+/**
+ * Parse a Brave `ErrorResponse` envelope and fold its `detail` and `code`
+ * into the provider-error message. A plan-entitlement failure (HTTP 400,
+ * code `OPTION_NOT_IN_PLAN`) reads as "Brave plan does not include this
+ * option (…)" instead of an opaque status code.
+ */
+async function braveErrorDetail(response: Response, provider: "brave-answers", status: number, signal: AbortSignal, maxBytes: number, fetchImpl: SearchHttpFetch): Promise<string> {
+	let envelopeText = "";
+	try {
+		envelopeText = await readBoundedResponseText(response, Math.min(maxBytes, 16_384), signal);
+	} catch {
+		return "";
+	}
+	try {
+		const parsed = JSON.parse(envelopeText) as unknown;
+		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return "";
+		const error = (parsed as Record<string, unknown>).error;
+		if (error === null || typeof error !== "object" || Array.isArray(error)) return "";
+		const record = error as Record<string, unknown>;
+		const detail = typeof record.detail === "string" ? record.detail.trim() : "";
+		const code = typeof record.code === "string" ? record.code.trim() : "";
+		if (detail.length === 0 && code.length === 0) return "";
+		return code.length > 0 && detail.length > 0 ? `${code}: ${detail}` : (code.length > 0 ? code : detail);
+	} catch {
+		return "";
+	}
 }
 
 interface CitationCandidate {
@@ -290,21 +318,25 @@ export class BraveAnswersProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "network", message: `${this.id} network request failed`, retryable: true, cause: error });
 		}
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? undefined;
+		const statusMessage = async (): Promise<string> => {
+			const detail = await braveErrorDetail(response, this.id, response.status, signal, this.maxResponseBytes, this.fetchImpl);
+			return detail.length > 0 ? `${this.id} failed with HTTP ${response.status} (${detail})` : `${this.id} failed with HTTP ${response.status}`;
+		};
 		if (response.status === 401 || response.status === 403) {
-			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `${this.id} authentication failed (HTTP ${response.status})`, status: response.status, retryable: false, ...(requestId === undefined ? {} : { requestId }) });
+			const message = await statusMessage();
+			throw createProviderError({ provider: this.id, kind: "auth", message, status: response.status, retryable: false, ...(requestId === undefined ? {} : { requestId }) });
 		}
 		if (response.status === 429) {
-			await cancelResponseBody(response);
+			const message = await statusMessage();
 			const retryAfterMs = retryAfterMsFromHeaders(response.headers);
-			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `${this.id} rate limit exceeded`, status: response.status, retryable: true, ...(requestId === undefined ? {} : { requestId }), ...(retryAfterMs === undefined ? {} : { retryAfterMs }) });
+			throw createProviderError({ provider: this.id, kind: "rateLimit", message, status: response.status, retryable: true, ...(requestId === undefined ? {} : { requestId }), ...(retryAfterMs === undefined ? {} : { retryAfterMs }) });
 		}
 		if (response.status < 200 || response.status >= 300) {
-			await cancelResponseBody(response);
+			const message = await statusMessage();
 			throw createProviderError({
 				provider: this.id,
 				kind: response.status === 400 || response.status === 422 ? "badRequest" : "http",
-				message: `${this.id} failed with HTTP ${response.status}`,
+				message,
 				status: response.status,
 				retryable: response.status === 408 || response.status === 425 || response.status >= 500,
 				...(requestId === undefined ? {} : { requestId }),
