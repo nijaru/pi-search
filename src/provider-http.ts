@@ -42,6 +42,11 @@ function retryAfterMs(headers: Headers): number | undefined {
 	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
 
+/** Retry delay from provider headers, in milliseconds, when present. */
+export function retryAfterMsFromHeaders(headers: Headers): number | undefined {
+	return retryAfterMs(headers);
+}
+
 function nonNegativeHeaderNumber(value: string | null): number | undefined {
 	if (value === null || !/^\d+(?:\.\d+)?$/.test(value.trim())) return undefined;
 	const parsed = Number(value);

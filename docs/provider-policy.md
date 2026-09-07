@@ -170,10 +170,15 @@ credential-gated smoke case.
 
 ### Synthesis providers (opt-in only, not enabled by default)
 
+Both adapters are implemented and ship disabled. They register only when their
+explicit enable gate is set (plus the underlying credential), are selected
+only through an explicit `provider` hint, never ride automatic routing or the
+`native` alias, and expose no automatic fallback.
+
 | Provider | Position and rationale |
 | --- | --- |
-| Parallel Responses API | Worth having as an explicit opt-in capability, disabled by default. Metered per reasoning effort ($10–$250 per 1K). Not a default: the calling agent already has cheap evidence search (native grounding plus Exa/Brave/Parallel) and `web_fetch`, and synthesizes answers from inspectable evidence at model cost, which covers current workflows without an added metered call. Any adapter lands behind its own enable gate or credential var, never automatic routing and never `provider: native`. |
-| Brave Answers | Same position: opt-in only, and its token-metered billing must sit behind a separate gate from the `BRAVE_API_KEY` free-mode admission that governs Brave search. Revisit whenever a workflow genuinely needs provider-side synthesis or a different quality/cost point than agent-side synthesis. |
+| Parallel Responses (`parallel-responses`) | Implemented behind `PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1`. Maps `searchContextSize` onto the reasoning tier (low/medium/high, default medium; $10–$250 per 1K). Grounded answers arrive as `url_citation` annotations with character spans; results are the cited sources. Not enabled by default: the calling agent already has cheap evidence search (native grounding plus Exa/Brave/Parallel) and `web_fetch`, and synthesizes answers from inspectable evidence at model cost. |
+| Brave Answers (`brave-answers`) | Implemented behind `PI_SEARCH_ENABLE_BRAVE_ANSWERS=1`. Streaming chat-completions with inline citation tags; usage costs are parsed from the `<usage>` tag so per-call cost is reported. Metered $4 per 1K plus $5 per 1M tokens, billed separately from the `BRAVE_API_KEY` free-mode admission that governs Brave search. Research mode is deliberately not exposed in v1: the agent's own `web_research` orchestration covers multi-step depth. |
 
 Per-provider research previously recommended Perplexity as the first
 addition if hard filters are materially needed; that position is now

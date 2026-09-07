@@ -555,6 +555,8 @@ export type ProviderId =
 	| "brave"
 	| "exa"
 	| "parallel"
+	| "parallel-responses"
+	| "brave-answers"
 	| "x"
 	| "xai"
 	| "xai-x"
@@ -570,6 +572,8 @@ export const SEARCH_PROVIDER_HINT_IDS = [
 	"brave",
 	"exa",
 	"parallel",
+	"parallel-responses",
+	"brave-answers",
 	"x",
 	"xai",
 	"xai-x",

@@ -72,6 +72,14 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 # Optional: to deliberately disable Brave's default free-mode pacing:
 # export PI_SEARCH_BRAVE_FREE_ONLY=0
 # export PI_SEARCH_ALLOW_METERED=1
+
+# Opt-in answer-synthesis providers (disabled by default; explicit provider
+# hint only -- never selected automatically, never the native alias):
+# export PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1   # also needs PARALLEL_API_KEY
+# export PI_SEARCH_ENABLE_BRAVE_ANSWERS=1       # also needs BRAVE_API_KEY
+# Parallel Responses is metered per reasoning effort ($10-$250/1K requests);
+# Brave Answers is $4/1K requests plus $5/1M tokens, billed separately
+# from Brave search's free-mode admission.
 ```
 
 Gemini and xAI credentials come from Pi's model-registry authentication

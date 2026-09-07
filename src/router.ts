@@ -18,11 +18,15 @@ export interface SearchRouterOptions {
 	readonly brave?: Provider;
 	readonly exa?: Provider;
 	readonly parallel?: Provider;
+	readonly parallelResponses?: Provider;
+	readonly braveAnswers?: Provider;
 	readonly x?: Provider;
 	/** Credential presence is supplied by the construction boundary. */
 	readonly braveConfigured?: boolean;
 	readonly exaConfigured?: boolean;
 	readonly parallelConfigured?: boolean;
+	readonly parallelResponsesConfigured?: boolean;
+	readonly braveAnswersConfigured?: boolean;
 	readonly xConfigured?: boolean;
 	/** Explicit user assertion that Brave calls are covered by free capacity. */
 	readonly braveFreeCapacityConfigured?: boolean;
@@ -188,6 +192,18 @@ function explicitProvider(
 		if (options.parallel === undefined || options.parallelConfigured !== true) return unavailable("Parallel search is not configured", provider);
 		if (!canServe(options.parallel, request)) return unavailable("Parallel cannot satisfy the requested search constraints", provider);
 		return selection(options.parallel, false);
+	}
+	// Opt-in synthesis providers: explicit hint only, never automatic, never
+	// the native alias. Registered only behind their enable gates.
+	if (provider === "parallel-responses") {
+		if (options.parallelResponses === undefined || options.parallelResponsesConfigured !== true) return unavailable("Parallel Responses is not enabled; set PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1", provider);
+		if (!canServe(options.parallelResponses, request)) return unavailable("Parallel Responses cannot satisfy the requested search constraints", provider);
+		return selection(options.parallelResponses, false);
+	}
+	if (provider === "brave-answers") {
+		if (options.braveAnswers === undefined || options.braveAnswersConfigured !== true) return unavailable("Brave Answers is not enabled; set PI_SEARCH_ENABLE_BRAVE_ANSWERS=1", provider);
+		if (!canServe(options.braveAnswers, request)) return unavailable("Brave Answers cannot satisfy the requested search constraints", provider);
+		return selection(options.braveAnswers, false);
 	}
 	if (provider === "x") {
 		if (options.x === undefined || options.xConfigured !== true) return unavailable("X API search is not configured", provider);

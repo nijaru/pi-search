@@ -1,12 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createAnthropicProvider } from "./anthropic";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
+import { createBraveAnswersProvider } from "./brave-answers";
 import { createCodexProvider } from "./codex";
 import { createExaProvider } from "./exa";
 import { createGeminiProvider } from "./gemini";
 import { registerWebFetch } from "./fetch-tool";
 import { createOpenAIProvider } from "./openai";
 import { createParallelProvider } from "./parallel";
+import { createParallelResponsesProvider } from "./parallel-responses";
 import { createMetaProvider } from "./meta";
 import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
@@ -42,6 +44,12 @@ export default function (pi: ExtensionAPI): void {
 	const exa = createExaProvider({ apiKey: exaKey });
 	const parallel = createParallelProvider({ apiKey: parallelKey });
 	const x = createXProvider({ bearerToken: xToken });
+	// Opt-in answer-synthesis providers: registered only behind their explicit
+	// enable gates, never automatic routing, never the native alias.
+	const parallelResponsesEnabled = process.env.PI_SEARCH_ENABLE_PARALLEL_RESPONSES === "1" && parallelKey !== undefined && parallelKey.trim().length > 0;
+	const braveAnswersEnabled = process.env.PI_SEARCH_ENABLE_BRAVE_ANSWERS === "1" && braveKey !== undefined && braveKey.trim().length > 0;
+	const parallelResponses = createParallelResponsesProvider({ apiKey: parallelKey });
+	const braveAnswers = createBraveAnswersProvider({ apiKey: braveKey });
 	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1"
 		? "allow-configured-metered"
 		: process.env.PI_SEARCH_PREFER_FREE === "1" ? "prefer-free" : "free-only";
@@ -56,11 +64,15 @@ export default function (pi: ExtensionAPI): void {
 		meta,
 		exa,
 		parallel,
+		parallelResponses,
+		braveAnswers,
 		x,
 		brave,
 		braveConfigured: braveKey !== undefined && braveKey.trim().length > 0,
 		exaConfigured: exaKey !== undefined && exaKey.trim().length > 0,
 		parallelConfigured: parallelKey !== undefined && parallelKey.trim().length > 0,
+		parallelResponsesConfigured: parallelResponsesEnabled,
+		braveAnswersConfigured: braveAnswersEnabled,
 		xConfigured: xToken !== undefined && xToken.trim().length > 0,
 		braveFreeCapacityConfigured,
 		braveCapacity,

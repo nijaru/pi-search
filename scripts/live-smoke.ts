@@ -1,10 +1,12 @@
 import { createAnthropicProvider } from "../src/anthropic";
 import { BraveQuotaTracker, createBraveProvider } from "../src/brave";
+import { createBraveAnswersProvider } from "../src/brave-answers";
 import { createExaProvider } from "../src/exa";
 import { createGeminiProvider } from "../src/gemini";
 import { createCodexProvider } from "../src/codex";
 import { createOpenAIProvider } from "../src/openai";
 import { createParallelProvider } from "../src/parallel";
+import { createParallelResponsesProvider } from "../src/parallel-responses";
 import { executeSearch } from "../src/search";
 import { createXProvider } from "../src/x";
 import { createMetaProvider } from "../src/meta";
@@ -15,7 +17,7 @@ const LIVE_QUERY = "IANA protocol parameters";
 const LIVE_DOMAIN = "iana.org";
 const LIVE_MAX_RESULTS = 3;
 const LIVE_TIMEOUT_MS = 30_000;
-const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "exa", "parallel"] as const;
+const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "brave-answers", "exa", "parallel", "parallel-responses"] as const;
 type SmokeProvider = (typeof PROVIDERS)[number];
 
 function env(name: string): string | undefined {
@@ -109,6 +111,10 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 			const key = required("PI_SEARCH_LIVE_BRAVE_API_KEY");
 			return { provider: createBraveProvider({ apiKey: key, capacityTracker: new BraveQuotaTracker() }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_BRAVE_API_KEY"] };
 		}
+		case "brave-answers": {
+			const key = required("PI_SEARCH_LIVE_BRAVE_API_KEY");
+			return { provider: createBraveAnswersProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_BRAVE_API_KEY"] };
+		}
 		case "exa": {
 			const key = required("PI_SEARCH_LIVE_EXA_API_KEY");
 			return { provider: createExaProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_EXA_API_KEY"] };
@@ -116,6 +122,10 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 		case "parallel": {
 			const key = required("PI_SEARCH_LIVE_PARALLEL_API_KEY");
 			return { provider: createParallelProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_PARALLEL_API_KEY"] };
+		}
+		case "parallel-responses": {
+			const key = required("PI_SEARCH_LIVE_PARALLEL_API_KEY");
+			return { provider: createParallelResponsesProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_PARALLEL_API_KEY"] };
 		}
 	}
 }

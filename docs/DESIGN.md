@@ -35,6 +35,8 @@ Shipped search adapters:
 | Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
 | Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts on the GA tiers (`auto`→`fast`, `keyword`→`basic`, `fresh`→`advanced`); include/exclude domain policies and lower date bound |
+| Parallel Responses | — | `parallel-responses` behind `PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1` | Grounded answer with `url_citation` spans; `searchContextSize` selects the low/medium/high reasoning tier; no hard filters |
+| Brave Answers | — | `brave-answers` behind `PI_SEARCH_ENABLE_BRAVE_ANSWERS=1` | Streaming chat-completions with inline citations and per-call usage cost; `searchContextSize` and user location only |
 | Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
 
 Explicit provider failures are final. Automatic routing may use one visible

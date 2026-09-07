@@ -180,4 +180,26 @@ describe("search provider router", () => {
 		expect(route({ query: "q", providerHint: "x" }, context("local")).provider.id).toBe("x");
 		expect(() => createSearchRouter({ exa })({ query: "q", providerHint: "exa" }, context("local"))).toThrow(/not configured/);
 	});
+
+	it("keeps opt-in synthesis providers explicit and gated", () => {
+		const parallelResponses = provider("parallel-responses", { semantic: true, freshness: true, nativeGrounding: true, searchContextSize: true });
+		const braveAnswers = provider("brave-answers", { semantic: true, freshness: true, nativeGrounding: true, searchContextSize: true, userLocation: true });
+		// Not enabled: the hint is rejected with the enable-gate message.
+		const off = createSearchRouter({ parallelResponses, braveAnswers });
+		expect(() => off({ query: "q", providerHint: "parallel-responses" }, context("local"))).toThrow(/PI_SEARCH_ENABLE_PARALLEL_RESPONSES/);
+		expect(() => off({ query: "q", providerHint: "brave-answers" }, context("local"))).toThrow(/PI_SEARCH_ENABLE_BRAVE_ANSWERS/);
+		// Enabled and hinted: dispatches explicitly with no fallback.
+		const on = createSearchRouter({ parallelResponses, braveAnswers, parallelResponsesConfigured: true, braveAnswersConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		const selected = on({ query: "q", providerHint: "parallel-responses" }, context("local"));
+		expect(selected.provider.id).toBe("parallel-responses");
+		expect(selected.automatic).toBe(false);
+		expect(selected.fallbacks).toHaveLength(0);
+		expect(on({ query: "q", providerHint: "brave-answers" }, context("local")).provider.id).toBe("brave-answers");
+		// Never automatic: an ordinary query never selects a synthesis provider.
+		expect(on({ query: "q" }, context("local")).provider.id).toBe("brave");
+		// Never the native alias.
+		expect(() => on({ query: "q", providerHint: "native" }, context("local"))).toThrow(/grounded model/);
+		// Hard constraints the synthesis adapters do not support are rejected.
+		expect(() => on({ query: "q", providerHint: "parallel-responses", dateRange: { from: "2026-01-01" } }, context("local"))).toThrow(/cannot satisfy/);
+	});
 });
