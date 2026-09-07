@@ -1,0 +1,28 @@
+{
+  "project": "pi-search",
+  "ref": "06j6",
+  "title": "Add Parallel Responses adapter as a native grounding family",
+  "description": "Parallel's Responses API (docs.parallel.ai/responses-api) is OpenAI-compatible with citations, priced by reasoning effort at $10 (low) / $50 (medium) / $250 (high) per 1K requests, 5s-60s latency. It could ride the existing native grounding infrastructure: executeGroundedSearch in src/grounding.ts + one NATIVE_REGISTRY row in src/router.ts + capabilities/build/normalize + offline fixtures, same shape as Meta (which reuses the OpenAI-shaped normalizer). It would add Parallel-synthesized grounded answers alongside evidence. Open questions to resolve before starting: (1) routing/billing policy — metered per reasoning effort, so it must be explicit-hint only or behind a policy flag like the Exa/Brave gates, never automatic; (2) which reasoning-effort tier maps from our contracts (answerMode? a new option?) — the extension has no effort control today; (3) credential mechanism — PARALLEL_API_KEY works for the x-api-key header per docs.parallel.ai, but confirm the Responses endpoint accepts it; (4) live contract smoke with the existing key per docs/live-smoke.md once implemented. User direction 2026-09-06: not wanted now; task exists so the option is tracked. Quality posture evidence in docs/provider-policy.md (2026-09 section): Parallel advanced ranks #1 of 12 on the independent Artificial Analysis Search Index (Aug 2026).",
+  "status": "open",
+  "priority": 3,
+  "labels": [
+    "provider",
+    "parallel",
+    "native-grounding"
+  ],
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-09-07T11:15:25.080782Z",
+      "msg": "Created from 2026-09-06 provider round: user declined implementation now, wants the option tracked. Do not start without explicit user direction; resolve the four open questions first."
+    }
+  ],
+  "created_at": "2026-09-07T11:12:09.911311Z",
+  "updated_at": "2026-09-07T11:15:25.080782Z",
+  "completed_at": null,
+  "external": {}
+}
