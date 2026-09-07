@@ -3,7 +3,7 @@
   "ref": "06j6",
   "title": "Add Parallel Responses adapter as a native grounding family",
   "description": "Implement the Parallel Responses adapter as a native grounding family, DISABLED BY DEFAULT behind an explicit opt-in gate (e.g. PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1 or a dedicated credential var) — never automatic, never selected by provider: native. It rides the existing native grounding infrastructure: executeGroundedSearch in src/grounding.ts + one NATIVE_REGISTRY row in src/router.ts + capabilities/build/normalize + offline fixtures, same shape as Meta. Open questions to resolve at implementation: (1) billing/routing policy — metered per reasoning effort ($10 low/$50 medium/$250 high per 1K), so opt-in gate required and reasoning-effort mapping decision (contracts have no effort control today; options: hardcode a tier, map answerMode, or add a new option); (2) credential mechanism — confirm the Responses endpoint accepts PARALLEL_API_KEY (x-api-key) or needs a separate var; (3) live contract smoke with the existing key per docs/live-smoke.md. User direction 2026-09-06: not enabled by default because agent-side synthesis from cheap evidence search + web_fetch covers current workflows; the adapter is still worth having as an opt-in capability. Quality evidence: Parallel advanced ranks #1 of 12 on independent Artificial Analysis Search Index (Aug 2026); recorded in docs/provider-policy.md.",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": [
     "provider",
@@ -27,10 +27,18 @@
     {
       "ts": "2026-09-07T12:08:51.676701Z",
       "msg": "Reopened same day: prior 'declined' close was too absolute. Correct position: viable opt-in capability, disabled by default, gated explicitly — not enabled-by-default because agent-side synthesis from cheap evidence search + web_fetch covers current workflows."
+    },
+    {
+      "ts": "2026-09-07T17:12:11.793896Z",
+      "msg": "Implementation started 2026-09-07. Surfaces verified against official docs (fetched today): Parallel Responses = POST api.parallel.ai/v1/responses, model 'parallel', reasoning.effort low/medium/high (default medium), url_citation annotations w/ start/end_index on output_text, usage tokens, Bearer PARALLEL_API_KEY. Brave Answers = POST api.search.brave.com/res/v1/chat/completions, model 'brave'/'brave-pro', streaming REQUIRED for citations (inline \u003ccitation\u003e{json}\u003c/citation\u003e tags + trailing \u003cusage\u003e{json}\u003c/usage\u003e in stream), enable_research + budget params, search_context_size, user_location, x-subscription-token BRAVE_API_KEY, /1K + /1M. DESIGN: both are direct providers (env credential, not Pi-registry models) behind PI_SEARCH_ENABLE_* opt-in env gates; provider ids 'parallel-responses' and 'brave-answers'; explicit hint only, never automatic, never native alias; searchContextSize maps to effort tiers; Brave research mode off in v1 (agent's web_research covers multi-step depth)."
+    },
+    {
+      "ts": "2026-09-07T18:04:38.911131Z",
+      "msg": "Implemented and shipped in 49b7ccb: parallel-responses adapter (direct provider, env credential) + brave-answers adapter, both behind PI_SEARCH_ENABLE_* gates at construction, explicit providerHint only, never automatic/native/fallback. searchContextSize maps to reasoning tier (parallel) / web_search_options (brave); answerMode evidence strips the synthesized answer. 17 new tests (253 total green), CI green, live-smoke entries added, README/DESIGN/provider-policy documented. Remaining before calling the adapter production-verified: one live contract smoke per provider (bun scripts/live-smoke.ts --provider=parallel-responses / brave-answers) when the user opts in — fixtures cover request shape, normalization, gating, and error mapping offline."
     }
   ],
   "created_at": "2026-09-07T11:12:09.911311Z",
-  "updated_at": "2026-09-07T12:08:51.676701Z",
-  "completed_at": null,
+  "updated_at": "2026-09-07T18:04:38.926287Z",
+  "completed_at": "2026-09-07T18:04:38.926287Z",
   "external": {}
 }

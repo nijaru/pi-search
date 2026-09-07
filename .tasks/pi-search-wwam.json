@@ -3,7 +3,7 @@
   "ref": "wwam",
   "title": "Evaluate Brave Answers endpoint for native-style grounded answers",
   "description": "Evaluate and possibly implement the Brave Answers endpoint (OpenAI-compatible, token-metered: ~$4 per 1K requests + $5 per 1M tokens per AIMultiple May 2026 — verify against brave.com/search/api current docs first) as an opt-in, disabled-by-default native-style answer capability. Prerequisite: verify the official API surface and pricing before any scoping. Open questions: (1) billing — token-metered answers must sit behind their own explicit opt-in gate, NOT covered by the existing BRAVE_API_KEY free-mode admission that gates search; (2) credential var — same key or separate subscription key; (3) routing position — Brave's search role is conservative last-resort keyword path (DESIGN.md), so answers likely need a different position (explicit-hint only). Same user rationale as pi-search-06j6: agent-side synthesis covers current workflows, so this stays opt-in, not default.",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": [
     "provider",
@@ -27,10 +27,14 @@
     {
       "ts": "2026-09-07T12:08:51.692982Z",
       "msg": "Reopened same day: prior 'declined' close was too absolute. Correct position: opt-in capability behind its own gate, never under the free-mode Brave search admission."
+    },
+    {
+      "ts": "2026-09-07T18:04:38.942519Z",
+      "msg": "Shipped together with 06j6 in 49b7ccb: brave-answers implemented behind PI_SEARCH_ENABLE_BRAVE_ANSWERS=1, billing separate from free-mode search admission; research mode deliberately not exposed (agent's web_research covers multi-step depth). Live contract smoke pending user opt-in."
     }
   ],
   "created_at": "2026-09-07T11:14:30.557227Z",
-  "updated_at": "2026-09-07T12:08:51.692982Z",
-  "completed_at": null,
+  "updated_at": "2026-09-07T18:04:38.953706Z",
+  "completed_at": "2026-09-07T18:04:38.953706Z",
   "external": {}
 }
