@@ -2,6 +2,12 @@
 
 A standalone, provider-neutral web search and fetching extension for Pi.
 
+## Install
+
+```sh
+pi install npm:@nijaru/pi-search
+```
+
 ## Status
 
 The cost-controlled core is implemented. The extension exposes exactly three

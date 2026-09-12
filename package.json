@@ -1,9 +1,14 @@
 {
-  "name": "pi-search",
-  "version": "0.1.0",
+  "name": "@nijaru/pi-search",
+  "version": "0.0.1",
   "description": "Provider-neutral web search and fetching tools for Pi",
   "type": "module",
   "license": "MIT",
+  "author": "Nick Naru <nick@nijaru.com>",
+
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "pi-package",
     "pi",
@@ -25,6 +30,7 @@
   },
   "files": [
     "src",
+    "!src/**/*.test.ts",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
