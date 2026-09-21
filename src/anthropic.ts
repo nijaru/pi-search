@@ -18,7 +18,7 @@ import {
 	tokenUsage,
 	type GroundingPlan,
 } from "./grounding";
-import { modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { hasExplicitHeader, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
 
@@ -125,10 +125,17 @@ function endpointFor(model: ProviderModel, override?: string): string {
 function anthropicHeaders(execution: ModelExecution): Readonly<Record<string, string>> {
 	const headers = modelAuthHeaders(execution, { bearerApiKey: false });
 	const apiKey = execution.auth.apiKey;
-	if (apiKey === undefined || apiKey.trim().length === 0) {
+	// An explicit x-api-key (value or null deletion) wins over a derived key.
+	if (
+		apiKey !== undefined &&
+		apiKey.trim().length > 0 &&
+		!hasExplicitHeader([execution.model.headers, execution.auth.headers], "x-api-key")
+	) {
+		headers.set("x-api-key", apiKey);
+	}
+	if (!headers.has("x-api-key")) {
 		throw createProviderError({ provider: "anthropic", kind: "auth", message: "Anthropic authentication returned no API key", retryable: false });
 	}
-	headers.set("x-api-key", apiKey);
 	headers.set("anthropic-version", ANTHROPIC_VERSION);
 	return Object.fromEntries(headers.entries());
 }

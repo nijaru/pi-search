@@ -135,4 +135,21 @@ describe("AnthropicProvider", () => {
 		expect(result.executionModel).toBe("claude-opus-5");
 		expect(result.appliedOptions).toContain("maxResults");
 	});
+
+	it("lets an explicit x-api-key win over the derived key", async () => {
+		let seenHeaders: Headers | undefined;
+		const provider = createAnthropicProvider({
+			endpoint: "https://anthropic.test/v1/messages",
+			fetchImpl: (async (_input, init) => {
+				seenHeaders = new Headers(init?.headers);
+				return response(payload);
+			}) as typeof fetch,
+		});
+		const model = { id: "claude-opus-5", provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" } as const;
+		await provider.search({ query: "latest news" }, new AbortController().signal, {
+			model,
+			modelRegistry: { getModels: () => [model], getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "derived", headers: { "x-api-key": "explicit" } }) },
+		});
+		expect(seenHeaders?.get("x-api-key")).toBe("explicit");
+	});
 });

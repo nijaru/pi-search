@@ -14,7 +14,7 @@ import { createProviderError } from "./errors";
 import { cancelResponseBody } from "./http";
 import { executeGroundedSearch } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
-import { modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { hasExplicitHeader, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 
 export const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
@@ -88,7 +88,14 @@ function endpointFor(model: ProviderModel, override?: string): string {
 
 function authHeaders(execution: ModelExecution): Readonly<Record<string, string>> {
 	const headers = modelAuthHeaders(execution, { bearerApiKey: false });
-	if (execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("x-goog-api-key", execution.auth.apiKey);
+	// An explicit x-goog-api-key (value or null deletion) wins over a derived key.
+	if (
+		execution.auth.apiKey !== undefined &&
+		execution.auth.apiKey.trim().length > 0 &&
+		!hasExplicitHeader([execution.model.headers, execution.auth.headers], "x-goog-api-key")
+	) {
+		headers.set("x-goog-api-key", execution.auth.apiKey);
+	}
 	if (!headers.has("x-goog-api-key")) {
 		throw createProviderError({ provider: "gemini", kind: "auth", message: "Gemini authentication returned no API key", retryable: false });
 	}

@@ -41,6 +41,20 @@ describe("GeminiProvider", () => {
 		expect(result.answer).toMatchObject({ text: "Grounded Gemini answer", contentTrust: "untrusted", citations: [{ url: "https://example.com/page" }] });
 	});
 
+	it("lets an explicit x-goog-api-key win over the derived key", async () => {
+		let seenHeaders: Headers | undefined;
+		const provider = createGeminiProvider({ endpoint: "https://gemini.test/v1beta", fetchImpl: async (_input, init) => {
+			seenHeaders = new Headers(init?.headers);
+			return response({ candidates: [{ content: { parts: [{ text: "answer" }] }, groundingMetadata: { webSearchQueries: ["q"], groundingChunks: [{ web: { uri: "https://example.com/page", title: "Example" } }], groundingSupports: [{ groundingChunkIndices: [0] }] } }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 } });
+		} });
+		const model = { id: "gemini-flash-lite-latest", provider: "google", api: "google-generative-ai", baseUrl: "https://gemini.test/v1beta" } as const;
+		await provider.search({ query: "q", maxResults: 1 }, new AbortController().signal, {
+			model,
+			modelRegistry: { getModels: () => [model], getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "derived", headers: { "x-goog-api-key": "explicit" } }) },
+		});
+		expect(seenHeaders?.get("x-goog-api-key")).toBe("explicit");
+	});
+
 	it("resolves Google grounding redirects to canonical source URLs", async () => {
 		const redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token";
 		const calls: Array<{ url: string; method: string }> = [];
