@@ -125,10 +125,26 @@ export function applyProviderHeaders(headers: Headers, source: ProviderHeaders |
 	}
 }
 
+/**
+ * Whether any source declares a header, including a `null` deletion. An explicit
+ * `authorization` entry must win over a bearer synthesized from the API key.
+ */
+export function hasExplicitHeader(sources: readonly (ProviderHeaders | undefined)[], name: string): boolean {
+	const lower = name.toLowerCase();
+	return sources.some((source) => source !== undefined && Object.keys(source).some((key) => key.toLowerCase() === lower));
+}
+
 export function modelAuthHeaders(execution: ModelExecution, options: ModelAuthHeaderOptions = {}): Headers {
 	const headers = new Headers();
 	applyProviderHeaders(headers, execution.model.headers);
 	applyProviderHeaders(headers, execution.auth.headers);
-	if (options.bearerApiKey !== false && execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) headers.set("authorization", `Bearer ${execution.auth.apiKey}`);
+	if (
+		options.bearerApiKey !== false &&
+		execution.auth.apiKey !== undefined &&
+		execution.auth.apiKey.trim().length > 0 &&
+		!hasExplicitHeader([execution.model.headers, execution.auth.headers], "authorization")
+	) {
+		headers.set("authorization", `Bearer ${execution.auth.apiKey}`);
+	}
 	return headers;
 }

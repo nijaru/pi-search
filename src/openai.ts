@@ -14,7 +14,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
-import { applyProviderHeaders } from "./model-selection";
+import { applyProviderHeaders, hasExplicitHeader } from "./model-selection";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { parseProviderRateLimits } from "./provider-http";
 import { validateSearchRequest } from "./search";
@@ -776,7 +776,11 @@ export class OpenAIProvider implements Provider {
 		const headers = new Headers();
 		applyProviderHeaders(headers, execution.model.headers);
 		applyProviderHeaders(headers, execution.auth.headers);
-		if (execution.auth.apiKey !== undefined && execution.auth.apiKey.trim().length > 0) {
+		if (
+			execution.auth.apiKey !== undefined &&
+			execution.auth.apiKey.trim().length > 0 &&
+			!hasExplicitHeader([execution.model.headers, execution.auth.headers], "authorization")
+		) {
 			headers.set("Authorization", `Bearer ${execution.auth.apiKey}`);
 		}
 		if (!headers.has("authorization")) {
