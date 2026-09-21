@@ -55,6 +55,10 @@ export type ProviderAuthResult =
 			readonly ok: true;
 			readonly apiKey?: string;
 			readonly headers?: ProviderHeaders;
+			/** Provider-resolved endpoint override; wins over the catalog `baseUrl`. */
+			readonly baseUrl?: string;
+			/** Provider-scoped environment credentials resolved with the request. */
+			readonly env?: Readonly<Record<string, string>>;
 		}
 	| {
 			readonly ok: false;
