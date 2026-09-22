@@ -30,10 +30,12 @@ research workflow.
 
 ## Architecture rules
 
-- Preserve the registry's resolved routing. The tool boundary must forward
-  `baseUrl`/`env` from `getApiKeyAndHeaders`, and model selection applies the
-  resolved base URL to the execution model so adapters honor a provider-owned
-  endpoint override instead of falling back to catalog metadata.
+- Preserve the registry's resolved routing in every selection path
+  (`selectModelExecution` and the OpenAI adapter's own `selectSearchExecution`).
+  The tool boundary must forward `baseUrl`/`env` from `getApiKeyAndHeaders`, and
+  each selector applies the resolved base URL to the execution model so adapters
+  honor a provider-owned endpoint override instead of falling back to catalog
+  metadata.
 - Let an explicit `authorization` entry (a value or a `null` deletion) win over a
   bearer synthesized from the API key.
 - Keep Pi registration in `src/index.ts`; put reusable contracts and behavior

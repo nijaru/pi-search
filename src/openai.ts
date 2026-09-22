@@ -444,7 +444,9 @@ async function selectSearchExecution(active: ProviderModel | undefined, registry
 		} catch (error) {
 			throw createProviderError({ provider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 		}
-		if (auth.ok) return { model: selected, auth };
+		// A provider-resolved endpoint wins over the catalog base URL; the adapter
+		// builds its request URL from this model. Mirrors selectModelExecution().
+		if (auth.ok) return { model: auth.baseUrl ? { ...selected, baseUrl: auth.baseUrl } : selected, auth };
 		if (request.executionModel !== undefined) {
 			throw createProviderError({ provider, kind: "auth", message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
 		}

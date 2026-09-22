@@ -617,3 +617,24 @@ describe("OpenAIProvider", () => {
 		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ provider: "openai", kind: "malformed", retryable: true });
 	});
 });
+
+describe("resolved endpoint", () => {
+	it("uses the auth-resolved base URL over the catalog base URL", async () => {
+		let seenUrl: string | undefined;
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: (async (input) => {
+				seenUrl = String(input);
+				return response(payload);
+			}) as OpenAIFetch,
+		});
+		await provider.search(request, new AbortController().signal, {
+			model: model(),
+			modelRegistry: {
+				getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key", baseUrl: "https://resolved.invalid/v1" }),
+			},
+		});
+		expect(seenUrl).toContain("https://resolved.invalid/v1");
+		expect(seenUrl).not.toContain("api.openai.com");
+	});
+});
