@@ -105,6 +105,28 @@ describe("search result cleanup", () => {
 		expect(cleanupSearchResponse({ ...response, answer: { ...response.answer!, citations: [{ url: "https://example.com" }] } }, validateSearchRequest({ query: "q", answerMode: "evidence" }), "openai").answer).toBeUndefined();
 	});
 
+	it("preserves answer text exactly so provider citation offsets remain valid", () => {
+		const text = "  cited claim\n";
+		const response: SearchResponse = {
+			query: "q", provider: "openai", results: [{ url: "https://example.com/", provider: "openai", searchQuery: "q" }],
+			answer: { text, contentTrust: "untrusted", provider: "openai", citations: [{ url: "https://example.com/", startIndex: 2, endIndex: 13 }] },
+			appliedOptions: [], warnings: [],
+		};
+		const answer = cleanupSearchResponse(response, validateSearchRequest({ query: "q" }), "openai").answer;
+		expect(answer?.text).toBe(text);
+		expect(answer?.citations[0]).toMatchObject({ startIndex: 2, endIndex: 13 });
+	});
+
+	it("retains original source URLs and upstream provenance from pre-normalized adapters", () => {
+		const response: SearchResponse = {
+			query: "q", provider: "cloudflare", upstreamProvider: "exa",
+			results: [{ url: "https://example.com/page", sourceUrl: "https://EXAMPLE.com/page#section", provider: "cloudflare", upstreamProvider: "exa", searchQuery: "q" }],
+			appliedOptions: [], warnings: [],
+		};
+		const cleaned = cleanupSearchResponse(response, validateSearchRequest({ query: "q" }), "cloudflare");
+		expect(cleaned.results[0]).toMatchObject({ sourceUrl: "https://EXAMPLE.com/page#section", provider: "cloudflare", upstreamProvider: "exa" });
+	});
+
 	it("removes nested percent-encoded path tails without decoding reserved characters", () => {
 		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
 		expect(cleanupSearchResponse({

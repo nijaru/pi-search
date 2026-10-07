@@ -130,6 +130,19 @@ describe("search provider router", () => {
 		const capacity = { canAttempt: () => false, observe: () => {}, snapshot: () => ({ windows: [{ remaining: 0, resetAfterMs: 1000 }] }) };
 		const exhausted = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity });
 		expect(() => exhausted({ query: "q" }, context("anthropic"))).toThrow("Brave quota window is exhausted");
+		const admittedExa = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity, billingPolicy: "prefer-free" });
+		expect(admittedExa({ query: "q" }, context("anthropic")).provider.id).toBe("exa");
+		expect(() => admittedExa({ query: "q", providerHint: "brave" }, context("anthropic"))).toThrow("Brave quota window is exhausted");
+	});
+
+	it("keeps configured Cloudflare explicit-only with no paid fallback", () => {
+		const cloudflare = provider("cloudflare", { semantic: true, excerpts: true });
+		const route = createSearchRouter({ cloudflare, cloudflareConfigured: true, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(route({ query: "q" }, context()).provider.id).toBe("exa");
+		expect(route({ query: "q", providerHint: "cloudflare" }, context())).toEqual({ provider: cloudflare, automatic: false, fallbacks: [] });
+		expect(() => route({ query: "q", providerHint: "cloudflare", domains: { include: ["example.com"] } }, context())).toThrow(/constraints/);
+		const onlyCloudflare = createSearchRouter({ cloudflare, cloudflareConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(() => onlyCloudflare({ query: "q" }, context())).toThrow(/No eligible/);
 	});
 
 	it("honors strict provider hints without hidden fallback", () => {

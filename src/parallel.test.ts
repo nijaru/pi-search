@@ -57,6 +57,7 @@ describe("ParallelProvider", () => {
 		await expect(configured.search({ query: "q", domains: { include: ["example.com"], exclude: ["blocked.example"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
 		await expect(configured.search({ query: "q", dateRange: { from: "2026-01-01", to: "2026-01-02" } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
 		await expect(configured.search({ query: "q", social: { includeHandles: ["parallel"] } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
+		await expect(configured.search({ query: "q", dateRange: { from: "2026-01-02T23:59:00-08:00" } }, new AbortController().signal, {})).rejects.toMatchObject({ provider: "parallel", kind: "unsupported" });
 		expect(calls).toBe(0);
 	});
 

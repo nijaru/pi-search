@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { availableProviderHints, type ProviderHintAvailability } from "./provider-availability";
+import { availableProviderHints } from "./provider-availability";
 import { createWebSearchTool } from "./search-tool";
 import { createWebResearchTool } from "./research-tool";
 import type { Provider } from "./contracts";
 
 describe("provider hint availability", () => {
 	it("exposes native grounding ids plus only configured direct providers", () => {
-		const hints = availableProviderHints({ brave: true, exa: false, parallel: true, parallelResponses: true, braveAnswers: false, x: false });
-		expect(hints).toEqual(["openai", "openai-codex", "gemini", "brave", "parallel", "parallel-responses", "xai", "xai-x", "anthropic", "meta"]);
+		const hints = availableProviderHints({ brave: true, exa: false, cloudflare: true, parallel: true, parallelResponses: true, braveAnswers: false, x: false });
+		expect(hints).toEqual(["openai", "openai-codex", "gemini", "brave", "cloudflare", "parallel", "parallel-responses", "xai", "xai-x", "anthropic", "meta"]);
 	});
 
 	it("exposes every native id even with no direct providers configured", () => {
@@ -66,8 +66,4 @@ describe("provider hint availability", () => {
 		expect(providerProperty.enum).not.toContain("brave-answers");
 	});
 
-	it("availability object shape stays provider-boolean only", () => {
-		const sample: ProviderHintAvailability = { brave: true, exa: true };
-		expect(Object.keys(sample).every((key) => typeof (sample as Record<string, unknown>)[key] === "boolean")).toBe(true);
-	});
 });

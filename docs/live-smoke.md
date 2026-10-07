@@ -23,7 +23,8 @@ command line.
 
 Use `--provider=<id>` instead of `PI_SEARCH_LIVE_PROVIDER` when preferred. The
 supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`,
-`anthropic`, `meta`, `x`, `brave`, `exa`, and `parallel`.
+`anthropic`, `meta`, `x`, `brave`, `brave-answers`, `exa`, `cloudflare`,
+`parallel`, and `parallel-responses`.
 
 ## Credentials
 
@@ -38,12 +39,20 @@ supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`,
 | `x` | `PI_SEARCH_LIVE_X_API_BEARER_TOKEN` |
 | `brave` | `PI_SEARCH_LIVE_BRAVE_API_KEY` |
 | `exa` | `PI_SEARCH_LIVE_EXA_API_KEY` |
-| `parallel` | `PI_SEARCH_LIVE_PARALLEL_API_KEY` |
+| `parallel`, `parallel-responses` | `PI_SEARCH_LIVE_PARALLEL_API_KEY` |
+| `brave-answers` | `PI_SEARCH_LIVE_BRAVE_API_KEY` |
+| `cloudflare` | `PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN`, `PI_SEARCH_LIVE_CLOUDFLARE_ACCOUNT_ID`, `PI_SEARCH_LIVE_CLOUDFLARE_PROVIDER` |
 
 Codex smoke calls use the ChatGPT backend's standalone `alpha/search`
 endpoint (`https://chatgpt.com/backend-api/codex/alpha/search`), not the public
 OpenAI API Responses endpoint. Use a token accepted by that backend; when it is
 an OAuth JWT, the adapter forwards its ChatGPT account id when present.
+
+Cloudflare requires an explicit upstream (`exa`, `linkup`, or `ceramic`).
+Optional settings are `PI_SEARCH_LIVE_CLOUDFLARE_GATEWAY_ID` and
+`PI_SEARCH_LIVE_CLOUDFLARE_BYOK_ALIAS`. Without an alias, gateway credits may
+be charged. Resolve Ceramic's transcript-retention restrictions before selecting
+it; see the [README](../README.md#cloudflare-web-search).
 
 Use a dedicated smoke key or token. The acknowledgement flag is required
 because these calls may consume quota or incur charges, including native

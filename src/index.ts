@@ -4,6 +4,7 @@ import { createBraveProvider, BraveQuotaTracker } from "./brave";
 import { createBraveAnswersProvider } from "./brave-answers";
 import { createCodexProvider } from "./codex";
 import { createExaProvider } from "./exa";
+import { createCloudflareProvider, type CloudflareUpstream } from "./cloudflare";
 import { createGeminiProvider } from "./gemini";
 import { registerWebFetch } from "./fetch-tool";
 import { createOpenAIProvider } from "./openai";
@@ -13,7 +14,6 @@ import { createMetaProvider } from "./meta";
 import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
-import { adaptLocalLlamaPayload, isLocalOpenAICompatibleModel } from "./local-llama-compat";
 import { availableProviderHints } from "./provider-availability";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
@@ -43,6 +43,19 @@ export default function (pi: ExtensionAPI): void {
 	const parallelKey = process.env.PARALLEL_API_KEY;
 	const xToken = process.env.X_API_BEARER_TOKEN;
 	const exa = createExaProvider({ apiKey: exaKey });
+	const cloudflareUpstream = process.env.PI_SEARCH_CLOUDFLARE_PROVIDER;
+	const cloudflareAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+	const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+	// Credentials alone do not enable gateway spending or select Ceramic.
+	const cloudflareConfigured = ["ceramic", "exa", "linkup"].includes(cloudflareUpstream ?? "")
+		&& Boolean(cloudflareAccount?.trim()) && Boolean(cloudflareToken?.trim());
+	const cloudflare = cloudflareConfigured ? createCloudflareProvider({
+		upstream: cloudflareUpstream as CloudflareUpstream,
+		accountId: cloudflareAccount,
+		apiToken: cloudflareToken,
+		gatewayId: process.env.PI_SEARCH_CLOUDFLARE_GATEWAY_ID,
+		byokAlias: process.env.PI_SEARCH_CLOUDFLARE_BYOK_ALIAS,
+	}) : undefined;
 	const parallel = createParallelProvider({ apiKey: parallelKey });
 	const x = createXProvider({ bearerToken: xToken });
 	// Opt-in answer-synthesis providers: the enable gate alone controls
@@ -66,6 +79,8 @@ export default function (pi: ExtensionAPI): void {
 		anthropic,
 		meta,
 		exa,
+		cloudflare,
+		cloudflareConfigured,
 		parallel,
 		parallelResponses,
 		braveAnswers,
@@ -87,13 +102,10 @@ export default function (pi: ExtensionAPI): void {
 		brave: braveKey !== undefined && braveKey.trim().length > 0,
 		braveAnswers: braveAnswersEnabled,
 		exa: exaKey !== undefined && exaKey.trim().length > 0,
+		cloudflare: cloudflareConfigured,
 		parallel: parallelKey !== undefined && parallelKey.trim().length > 0,
 		parallelResponses: parallelResponsesEnabled,
 		x: xToken !== undefined && xToken.trim().length > 0,
-	});
-	pi.on("before_provider_request", (event, context) => {
-		if (!isLocalOpenAICompatibleModel(context.model)) return;
-		return adaptLocalLlamaPayload(event.payload);
 	});
 	registerWebSearch(pi, route, { availableProviderHints: availableHints });
 	registerWebFetch(pi);

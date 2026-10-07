@@ -34,7 +34,7 @@ Pi tools:
   is allowed; Exa returns semantic results with excerpts and reported usage.
 - In free-only mode, configured Brave is the conservative paced keyword/fresh
   path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered Exa.
-  Parallel and the official X API remain explicit providers.
+  Parallel, Cloudflare Web Search, and the official X API remain explicit providers.
 - Automatic routing permits at most one visible fallback after a safe
   authentication, rate-limit, or unavailable failure. Network, timeout, and
   post-dispatch HTTP failures remain final because their effects are uncertain.
@@ -88,8 +88,11 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 # from Brave search's free-mode admission.
 ```
 
-Gemini and xAI credentials come from Pi's model-registry authentication
-context. Active Gemini/xAI models use native search automatically. For
+Native-provider credentials come from Pi's model-registry authentication
+context. Anthropic supports API keys, registry-owned bearer headers, and
+workload identity federation; federation exchanges use the official SDK
+protocol with bounded, cancellable requests. Anthropic Pro/Max subscription
+search is not supported; its tokens are rejected before dispatch. Active Gemini/xAI models use native search automatically. For
 search-only Gemini grounding, prefer Pi's current `gemini-flash-lite-latest`
 model alias rather than full Flash/Pro or legacy model IDs. Explicit
 `provider: "gemini"`, `"xai"`, `"xai-x"`, `"anthropic"`, or `"meta"` can use a
@@ -105,13 +108,45 @@ selected source pages are needed; this reuses the safe local fetch path. For
 when a multi-query run should use a specific Gemini, xAI, Anthropic, Meta,
 OpenAI, or Codex model.
 
-### Local OpenAI-compatible endpoints
+### Cloudflare Web Search
 
-The extension keeps the public and runtime 2,000-character query limit. For
-local/private OpenAI-compatible endpoints, it applies a compatibility-only
-outgoing schema adjustment for llama.cpp's nested-string grammar boundary; the
-schema sent to hosted GPT and other public providers is unchanged. No setting
-or tool toggle is required.
+Cloudflare routes search through Ceramic, Exa, or Linkup. It is an explicit
+secondary provider, never an automatic choice or fallback:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID=...
+export CLOUDFLARE_API_TOKEN=...
+export PI_SEARCH_CLOUDFLARE_PROVIDER=exa  # required: exa, linkup, or ceramic
+# export PI_SEARCH_CLOUDFLARE_GATEWAY_ID=default
+# export PI_SEARCH_CLOUDFLARE_BYOK_ALIAS=default
+```
+
+Use `provider: "cloudflare"` with `web_search` or `web_research`. The API token
+needs **Workers AI Read** and **AI Gateway Read** permissions. Queries are
+limited to 1,024 characters and results to 10. Domain/date/social filters and
+native-model controls are rejected, not silently dropped. Results identify
+both Cloudflare and the configured upstream.
+
+An explicit BYOK alias fails if its stored key is missing. Without an alias,
+Cloudflare uses the upstream's stored `default` key when present, otherwise
+prepaid gateway credits. See [Cloudflare's API and billing instructions](https://developers.cloudflare.com/web-search/how-to-use/).
+
+**Keep direct Exa as the default direct search choice for now.** It provides
+richer controls than the gateway. Ceramic has an independent web index and
+long result descriptions; it is not merely a keyword-only engine. Its much
+lower advertised price does not establish comparable quality. More
+importantly, [Ceramic's terms §7(n)–(p)](https://www.ceramic.ai/terms-of-service)
+restrict result retention and extractability in ways that appear incompatible
+with saved/exportable Pi transcripts unless contractually permitted. Clarify
+those rights before using Ceramic. Zero Data Retention describes provider
+handling, not permission to retain results yourself.
+
+### Local and virtual models
+
+Research queries retain the 2,000-character runtime limit. The tool schema
+omits that nested string bound because llama.cpp cannot compile it; validation
+still rejects overlong queries before search. This works with direct local
+models and virtual routes without endpoint detection or request rewriting.
 
 ## Fetch coverage
 

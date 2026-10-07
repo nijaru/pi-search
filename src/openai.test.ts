@@ -139,6 +139,28 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
+	it("omits the output-token cap only for direct ChatGPT OAuth requests", async () => {
+		for (const [baseUrl, apiKey, capped] of [
+			["https://api.openai.com/v1", "chatgpt-access-token", false],
+			["https://api.openai.com/v1", "sk-test-key", true],
+			["https://proxy.example/v1", "proxy-token", true],
+		] as const) {
+			let sent: Record<string, unknown> | undefined;
+			const provider = createOpenAIProvider({
+				provider: "openai",
+				fetchImpl: async (_input, init) => {
+					sent = JSON.parse(String(init?.body));
+					return response(payload);
+				},
+			});
+			await provider.search(request, new AbortController().signal, {
+				model: model(),
+				modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey, baseUrl }) },
+			});
+			expect(sent?.max_output_tokens).toBe(capped ? 2_048 : undefined);
+		}
+	});
+
 	it("selects an authenticated registry model when another provider is active", async () => {
 		let authenticatedModel = "";
 		let body: Record<string, unknown> | undefined;
@@ -320,6 +342,14 @@ describe("OpenAIProvider", () => {
 			kind: "auth",
 			message: expect.not.stringContaining("header-only"),
 		});
+	});
+
+	it("reports bounded, redacted SSE error diagnostics", async () => {
+		const provider = createOpenAIProvider({ provider: "openai", fetchImpl: async () => response(`data: ${JSON.stringify({ type: "error", code: "unsupported_value", message: "Unsupported option; Bearer test-key" })}\n\n`) });
+		let error: unknown;
+		try { await provider.search(request, new AbortController().signal, context()); } catch (caught) { error = caught; }
+		expect(error).toMatchObject({ kind: "http", message: expect.stringContaining("Unsupported option") });
+		expect(error).toMatchObject({ message: expect.not.stringContaining("test-key") });
 	});
 
 	it("includes structured image results and preserves their source page", () => {

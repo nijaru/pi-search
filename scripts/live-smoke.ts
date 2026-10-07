@@ -2,6 +2,7 @@ import { createAnthropicProvider } from "../src/anthropic";
 import { BraveQuotaTracker, createBraveProvider } from "../src/brave";
 import { createBraveAnswersProvider } from "../src/brave-answers";
 import { createExaProvider } from "../src/exa";
+import { createCloudflareProvider, type CloudflareUpstream } from "../src/cloudflare";
 import { createGeminiProvider } from "../src/gemini";
 import { createCodexProvider } from "../src/codex";
 import { createOpenAIProvider } from "../src/openai";
@@ -17,7 +18,7 @@ const LIVE_QUERY = "IANA protocol parameters";
 const LIVE_DOMAIN = "iana.org";
 const LIVE_MAX_RESULTS = 3;
 const LIVE_TIMEOUT_MS = 30_000;
-const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "brave-answers", "exa", "parallel", "parallel-responses"] as const;
+const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "brave-answers", "exa", "cloudflare", "parallel", "parallel-responses"] as const;
 type SmokeProvider = (typeof PROVIDERS)[number];
 
 function env(name: string): string | undefined {
@@ -119,6 +120,16 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 			const key = required("PI_SEARCH_LIVE_EXA_API_KEY");
 			return { provider: createExaProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_EXA_API_KEY"] };
 		}
+		case "cloudflare": {
+			const token = required("PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN");
+			return { provider: createCloudflareProvider({
+				apiToken: token,
+				accountId: required("PI_SEARCH_LIVE_CLOUDFLARE_ACCOUNT_ID"),
+				upstream: required("PI_SEARCH_LIVE_CLOUDFLARE_PROVIDER") as CloudflareUpstream,
+				gatewayId: env("PI_SEARCH_LIVE_CLOUDFLARE_GATEWAY_ID"),
+				byokAlias: env("PI_SEARCH_LIVE_CLOUDFLARE_BYOK_ALIAS"),
+			}), context: {}, secret: token, requiredEnv: ["PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN", "PI_SEARCH_LIVE_CLOUDFLARE_ACCOUNT_ID", "PI_SEARCH_LIVE_CLOUDFLARE_PROVIDER"] };
+		}
 		case "parallel": {
 			const key = required("PI_SEARCH_LIVE_PARALLEL_API_KEY");
 			return { provider: createParallelProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_PARALLEL_API_KEY"] };
@@ -168,6 +179,7 @@ function printDryRun(provider: SmokeProvider): void {
 					: provider === "anthropic" ? ["PI_SEARCH_LIVE_ANTHROPIC_API_KEY", "PI_SEARCH_LIVE_ANTHROPIC_MODEL"]
 					: provider === "meta" ? ["PI_SEARCH_LIVE_META_API_KEY", "PI_SEARCH_LIVE_META_MODEL"]
 					: provider === "x" ? ["PI_SEARCH_LIVE_X_API_BEARER_TOKEN"]
+					: provider === "cloudflare" ? ["PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN", "PI_SEARCH_LIVE_CLOUDFLARE_ACCOUNT_ID", "PI_SEARCH_LIVE_CLOUDFLARE_PROVIDER"]
 						: [`PI_SEARCH_LIVE_${provider.toUpperCase()}_API_KEY`];
 	console.log(JSON.stringify({
 		provider,
@@ -207,7 +219,8 @@ async function main(): Promise<void> {
 }
 
 function secretFor(provider: string): string {
-	const name = provider === "openai-codex" ? "PI_SEARCH_LIVE_CODEX_TOKEN"
+	const name = provider === "cloudflare" ? "PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN"
+		: provider === "openai-codex" ? "PI_SEARCH_LIVE_CODEX_TOKEN"
 		: provider === "openai" ? "PI_SEARCH_LIVE_OPENAI_API_KEY"
 			: provider === "gemini" ? "PI_SEARCH_LIVE_GEMINI_API_KEY"
 				: provider === "xai" || provider === "xai-x" ? "PI_SEARCH_LIVE_XAI_API_KEY"

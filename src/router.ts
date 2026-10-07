@@ -17,6 +17,7 @@ export interface SearchRouterOptions {
 	readonly meta?: Provider;
 	readonly brave?: Provider;
 	readonly exa?: Provider;
+	readonly cloudflare?: Provider;
 	readonly parallel?: Provider;
 	readonly parallelResponses?: Provider;
 	readonly braveAnswers?: Provider;
@@ -24,6 +25,7 @@ export interface SearchRouterOptions {
 	/** Credential presence is supplied by the construction boundary. */
 	readonly braveConfigured?: boolean;
 	readonly exaConfigured?: boolean;
+	readonly cloudflareConfigured?: boolean;
 	readonly parallelConfigured?: boolean;
 	readonly parallelResponsesConfigured?: boolean;
 	readonly braveAnswersConfigured?: boolean;
@@ -134,7 +136,7 @@ function directFallback(
 ): readonly Provider[] {
 	if (policy !== "free-only" && primary.id !== "exa" && options.exaConfigured === true && options.exa !== undefined && canServe(options.exa, request)) return [options.exa];
 	const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
-	if (primary.id !== "brave" && options.braveConfigured === true && options.brave !== undefined && braveAllowed && canServe(options.brave, request)) return [options.brave];
+	if (primary.id !== "brave" && options.braveConfigured === true && options.brave !== undefined && braveAllowed && options.braveCapacity?.canAttempt() !== false && canServe(options.brave, request)) return [options.brave];
 	return [];
 }
 
@@ -187,6 +189,11 @@ function explicitProvider(
 		if (options.exa === undefined || options.exaConfigured !== true) return unavailable("Exa search is not configured", provider);
 		if (!canServe(options.exa, request)) return unavailable("Exa cannot satisfy the requested search constraints", provider);
 		return selection(options.exa, false);
+	}
+	if (provider === "cloudflare") {
+		if (options.cloudflare === undefined || options.cloudflareConfigured !== true) return unavailable("Cloudflare search is not configured; set its account ID, API token, and explicit upstream", provider);
+		if (!canServe(options.cloudflare, request)) return unavailable("Cloudflare cannot satisfy the requested search constraints", provider);
+		return selection(options.cloudflare, false);
 	}
 	if (provider === "parallel") {
 		if (options.parallel === undefined || options.parallelConfigured !== true) return unavailable("Parallel search is not configured", provider);
@@ -276,7 +283,7 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
 		// prefer-free chooses the admitted Brave path before a metered Exa call.
-		if (policy === "prefer-free" && braveCanMatchMode && braveConfigured && braveAllowed) {
+		if (policy === "prefer-free" && braveCanMatchMode && braveConfigured && braveAllowed && options.braveCapacity?.canAttempt() !== false) {
 			checkBraveCapacity(options);
 			return selection(options.brave!, true);
 		}

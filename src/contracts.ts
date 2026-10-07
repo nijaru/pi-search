@@ -343,8 +343,10 @@ export interface SearchResult {
 	 * when the provider exposes any text; never synthesized.
 	 */
 	readonly excerpt?: string;
-	/** The provider that produced this result. */
+	/** Adapter that served this result. */
 	readonly provider: ProviderId;
+	/** Search backend behind a gateway adapter, when applicable. */
+	readonly upstreamProvider?: ProviderId;
 	/** The query that produced this result. */
 	readonly searchQuery: string;
 	/** Provider-internal id for the result, for citation/debugging. */
@@ -368,8 +370,10 @@ export interface SearchResponse {
 	readonly answer?: SearchAnswer;
 	/** Bounded source pages fetched after search when requested. */
 	readonly sourceContents?: readonly FetchedContent[];
-	/** Which provider actually served the request. */
+	/** Which adapter actually served the request. */
 	readonly provider: ProviderId;
+	/** Search backend behind a gateway adapter, when applicable. */
+	readonly upstreamProvider?: ProviderId;
 	/** Model used by a model-mediated provider, when available. */
 	readonly executionModel?: string;
 	/** Providers attempted by bounded automatic routing, in order. */
@@ -419,8 +423,10 @@ export type ResearchStopReason = "completed" | "partial" | "budget" | "deadline"
 
 export interface ResearchResponse {
 	readonly question: string;
-	/** The single provider selected for the whole research invocation. */
+	/** The single adapter selected for the whole research invocation. */
 	readonly provider: ProviderId;
+	/** Search backend behind a gateway adapter, when applicable. */
+	readonly upstreamProvider?: ProviderId;
 	/** Model used when the selected provider is model-mediated. */
 	readonly executionModel?: string;
 	readonly results: readonly SearchResult[];
@@ -558,6 +564,7 @@ export type ProviderId =
 	| "gemini"
 	| "brave"
 	| "exa"
+	| "cloudflare"
 	| "parallel"
 	| "parallel-responses"
 	| "brave-answers"
@@ -575,6 +582,7 @@ export const SEARCH_PROVIDER_HINT_IDS = [
 	"gemini",
 	"brave",
 	"exa",
+	"cloudflare",
 	"parallel",
 	"parallel-responses",
 	"brave-answers",

@@ -24,7 +24,8 @@ describe("X API provider", () => {
 		const url = new URL(plan.url);
 		expect(url.searchParams.get("query")).toBe("from:alice protocols");
 		expect(url.searchParams.get("max_results")).toBe("10");
-		expect(url.searchParams.get("tweet_fields")).toContain("created_at");
+		expect(url.searchParams.get("post.fields")).toContain("created_at");
+		expect(url.searchParams.get("user.fields")).toBe("username,name");
 		expect(plan.appliedOptions).toEqual(["maxResults", "mode"]);
 	});
 

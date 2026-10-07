@@ -82,9 +82,9 @@ export function buildXRequest(request: SearchRequest, endpoint = X_RECENT_SEARCH
 		// X requires at least 10 for recent search; the normalized boundary
 		// slices the response back to the caller's requested maxResults.
 		max_results: String(Math.max(X_MIN_REQUEST_RESULTS, Math.min(normalized.maxResults ?? 10, X_MAX_RESULTS))),
-		tweet_fields: "created_at,author_id,public_metrics",
+		"post.fields": "created_at,author_id,public_metrics",
 		expansions: "author_id",
-		user_fields: "username,name",
+		"user.fields": "username,name",
 		...(normalized.dateRange?.from === undefined ? {} : { start_time: xDate(normalized.dateRange.from, false) }),
 		...(normalized.dateRange?.to === undefined ? {} : { end_time: xDate(normalized.dateRange.to, true) }),
 	});

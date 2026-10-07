@@ -36,7 +36,7 @@ describe("web_research", () => {
 		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
 	});
 
-	it("keeps the 2000-character runtime query bound independent of outgoing schema adaptation", async () => {
+	it("enforces the 2000-character runtime query bound without provider-specific schema rewrites", async () => {
 		const accepted = await executeResearch({ question: "main", queries: ["q".repeat(2_000)], budget: { ...budget, maxProviderCalls: 1 } }, () => provider(), context());
 		expect(accepted.providerCalls).toBe(1);
 		await expect(executeResearch({ question: "main", queries: ["q".repeat(2_001)], budget }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_INVALID_REQUEST" });
@@ -133,6 +133,20 @@ describe("web_research", () => {
 		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", usage: { costUsd: 0.6 } });
 	});
 
+	it("retains the cost reservation for malformed potentially billed responses", async () => {
+		const selected: Provider = {
+			...provider(false, 0.007),
+			search: async () => { throw new SearchToolError("WEB_SEARCH_MALFORMED_RESPONSE", "invalid sources", { kind: "malformed" }); },
+		};
+		const result = await executeResearch({ question: "main", queries: ["one", "two", "three"], budget: { ...budget, maxProviderCalls: 3, maxCostUsd: 0.007 } }, () => selected, context());
+		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", usage: { costUsd: 0.007 } });
+	});
+
+	it("reports a budget stop rather than completion when steps omit planned queries", async () => {
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget: { ...budget, maxSteps: 1 } }, () => provider(), context());
+		expect(result).toMatchObject({ providerCalls: 1, stepsCompleted: 1, stopReason: "budget" });
+	});
+
 	it("counts fetch attempts separately from successful fetches", async () => {
 		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["http://127.0.0.1/blocked", "http://127.0.0.1/blocked-2"]), context());
 		expect(result.fetchAttempts).toBe(1);
@@ -150,7 +164,7 @@ describe("web_research", () => {
 				destroy() {},
 			},
 		})) as never;
-		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, maxOutputChars: 1_000 } }, () => provider(false), context(), { transport });
+		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, maxOutputChars: 1_000 } }, () => provider(false), context(), { transport, lookup: async () => [{ address: "93.184.216.34", family: 4 as const }] });
 		expect(result.warnings.filter((item) => item.message.startsWith("Research output was bounded")).length).toBe(1);
 	});
 

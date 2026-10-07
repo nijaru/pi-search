@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { ProviderContext } from "./contracts";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ProviderAuthResult, ProviderContext } from "./contracts";
 import { buildAnthropicRequest, createAnthropicProvider, normalizeAnthropicResponse } from "./anthropic";
 
 function response(body: unknown, status = 200, headers: Record<string, string> = { "content-type": "application/json" }): Response {
@@ -7,7 +10,7 @@ function response(body: unknown, status = 200, headers: Record<string, string> =
 }
 
 function context(): ProviderContext {
-	const model = { id: "claude-opus-5", provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" } as const;
+	const model = { id: "claude-opus-5", provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com" } as const;
 	return {
 		model,
 		modelRegistry: { getModels: () => [model], getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "anthropic-test" }) },
@@ -134,6 +137,112 @@ describe("AnthropicProvider", () => {
 		expect(seenBody).toMatchObject({ model: "claude-opus-5" });
 		expect(result.executionModel).toBe("claude-opus-5");
 		expect(result.appliedOptions).toContain("maxResults");
+	});
+
+	it("accepts registry-owned bearer authentication without an API key", async () => {
+		let headers: Headers | undefined;
+		const provider = createAnthropicProvider({ fetchImpl: async (input, init) => {
+			expect(String(input)).toBe("https://api.anthropic.com/v1/messages");
+			headers = new Headers(init?.headers);
+			return response(payload);
+		} });
+		const original = context();
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			...original,
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, headers: { Authorization: "Bearer registry-token" } }) },
+		});
+		expect(headers?.get("authorization")).toBe("Bearer registry-token");
+		expect(headers?.get("x-api-key")).toBeNull();
+	});
+
+	it("exchanges registry federation identity through the official protocol and reuses its token", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "pi-search-identity-"));
+		const path = join(directory, "identity");
+		await writeFile(path, "projected-identity\n");
+		let exchanges = 0;
+		let searches = 0;
+		let rejectNextSearch = false;
+		const controller = new AbortController();
+		const provider = createAnthropicProvider({ fetchImpl: async (input, init) => {
+			if (String(input).endsWith("/oauth/token")) {
+				exchanges += 1;
+				expect(String(input)).toBe("https://anthropic-proxy.test/v1/oauth/token");
+				expect(init?.signal).toBe(controller.signal);
+				expect(init?.redirect).toBe("error");
+				expect(JSON.parse(String(init?.body))).toEqual({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: "projected-identity", federation_rule_id: "rule", organization_id: "org", service_account_id: "account", workspace_id: "workspace" });
+				return response({ access_token: "federated-access", expires_in: 3600, token_type: "Bearer" });
+			}
+			searches += 1;
+			if (rejectNextSearch) {
+				rejectNextSearch = false;
+				return response({}, 401);
+			}
+			const headers = new Headers(init?.headers);
+			expect(headers.get("authorization")).toBe("Bearer federated-access");
+			expect(headers.get("x-api-key")).toBeNull();
+			expect(headers.get("anthropic-beta")).toContain("oauth-2025-04-20");
+			return response(payload);
+		} });
+		const env = { ANTHROPIC_FEDERATION_RULE_ID: "rule", ANTHROPIC_ORGANIZATION_ID: "org", ANTHROPIC_IDENTITY_TOKEN_FILE: path, ANTHROPIC_SERVICE_ACCOUNT_ID: "account", ANTHROPIC_WORKSPACE_ID: "workspace" };
+		const configured: ProviderContext = { ...context(), modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, baseUrl: "https://anthropic-proxy.test/v1", env }) } };
+		try {
+			await provider.search({ query: "q" }, controller.signal, configured);
+			await provider.search({ query: "q" }, controller.signal, configured);
+			expect(exchanges).toBe(1);
+			expect(searches).toBe(2);
+			rejectNextSearch = true;
+			await expect(provider.search({ query: "q" }, controller.signal, configured)).rejects.toMatchObject({ kind: "auth" });
+			expect(exchanges).toBe(1); // no hidden retry after the rejected search
+			await provider.search({ query: "q" }, controller.signal, configured);
+			expect(exchanges).toBe(2);
+			expect(searches).toBe(4);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
+	it("preserves explicit auth deletion and rejects incomplete federation before I/O", async () => {
+		let calls = 0;
+		const provider = createAnthropicProvider({ fetchImpl: async () => { calls += 1; return response(payload); } });
+		const credentials: ProviderAuthResult[] = [
+			{ ok: true as const, apiKey: "derived", headers: { "x-api-key": null } },
+			{ ok: true as const, headers: { authorization: null }, env: { ANTHROPIC_FEDERATION_RULE_ID: "rule", ANTHROPIC_ORGANIZATION_ID: "org", ANTHROPIC_IDENTITY_TOKEN_FILE: "/must-not-be-read" } },
+			{ ok: true as const, env: { ANTHROPIC_FEDERATION_RULE_ID: "rule" } },
+		];
+		for (const auth of credentials) {
+			await expect(provider.search({ query: "q" }, new AbortController().signal, { ...context(), modelRegistry: { getApiKeyAndHeaders: async () => auth } })).rejects.toMatchObject({ kind: "auth" });
+		}
+		expect(calls).toBe(0);
+	});
+
+	it("cancels a pending federation exchange without issuing a Messages request", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "pi-search-identity-"));
+		const path = join(directory, "identity");
+		await writeFile(path, "projected-identity");
+		const controller = new AbortController();
+		let calls = 0;
+		const provider = createAnthropicProvider({ fetchImpl: async (_input, init) => {
+			calls += 1;
+			expect(init?.signal).toBe(controller.signal);
+			controller.abort();
+			throw new DOMException("aborted", "AbortError");
+		} });
+		try {
+			await expect(provider.search({ query: "q" }, controller.signal, { ...context(), modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, env: { ANTHROPIC_FEDERATION_RULE_ID: "rule", ANTHROPIC_ORGANIZATION_ID: "org", ANTHROPIC_IDENTITY_TOKEN_FILE: path } }) } })).rejects.toMatchObject({ kind: "canceled" });
+			expect(calls).toBe(1);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects unsupported subscription request identities before dispatch", async () => {
+		let calls = 0;
+		const provider = createAnthropicProvider({ fetchImpl: async () => { calls += 1; return response(payload); } });
+		const credentials: ProviderAuthResult[] = [{ ok: true, apiKey: "sk-ant-oat-test" }, { ok: true, headers: { Authorization: "Bearer sk-ant-oat-test" } }];
+		for (const auth of credentials) {
+			await expect(provider.search({ query: "q" }, new AbortController().signal, { ...context(), modelRegistry: { getApiKeyAndHeaders: async () => auth } })).rejects.toMatchObject({ kind: "unsupported" });
+		}
+		expect(calls).toBe(0);
 	});
 
 	it("lets an explicit x-api-key win over the derived key", async () => {

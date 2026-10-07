@@ -99,13 +99,12 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	const excerpt = boundedString(result.excerpt, MAX_SEARCH_EXCERPT_LENGTH);
 	const sourceId = boundedString(result.sourceId, MAX_SEARCH_SOURCE_ID_LENGTH);
 	const score = optionalScore(result.score);
+	const upstreamProvider = boundedString(result.upstreamProvider, 100);
 	const suppliedSource = normalizeSearchUrl(result.sourceUrl);
 	const sourcePage = normalizeSearchUrl(result.sourcePageUrl);
-	const sourceUrl = suppliedSource === undefined
+	const sourceUrl = suppliedSource === undefined || result.sourceUrl?.trim() === parsed.url
 		? parsed.sourceUrl
-		: suppliedSource.url === parsed.url
-			? parsed.sourceUrl
-			: boundedString(result.sourceUrl, MAX_SEARCH_URL_LENGTH);
+		: boundedString(result.sourceUrl, MAX_SEARCH_URL_LENGTH);
 	return {
 		url: parsed.url,
 		...(sourceUrl === undefined ? {} : { sourceUrl }),
@@ -115,6 +114,7 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 		...(publishedAt === undefined ? {} : { publishedAt }),
 		...(excerpt === undefined ? {} : { excerpt }),
 		provider,
+		...(upstreamProvider === undefined ? {} : { upstreamProvider }),
 		searchQuery: request.query,
 		...(sourceId === undefined ? {} : { sourceId }),
 		...(score === undefined ? {} : { score }),
@@ -123,8 +123,9 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 
 function normalizeAnswer(answer: SearchAnswer | undefined, provider: ProviderId, results: readonly SearchResult[], request: SearchRequest): SearchAnswer | undefined {
 	if (answer === undefined || request.answerMode === "evidence") return undefined;
-	const text = boundedString(answer.text, MAX_SEARCH_ANSWER_LENGTH);
-	if (text === undefined) return undefined;
+	// Citation offsets address the exact provider text, including whitespace.
+	if (typeof answer.text !== "string" || answer.text.trim().length === 0) return undefined;
+	const text = answer.text.slice(0, MAX_SEARCH_ANSWER_LENGTH);
 	const resultUrls = new Set(results.map((result) => result.url));
 	const citations: SearchCitation[] = [];
 	for (const citationValue of Array.isArray(answer.citations) ? answer.citations : []) {

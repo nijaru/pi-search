@@ -52,6 +52,9 @@ export function buildParallelRequest(request: SearchRequest): ParallelRequestPla
 	if (normalized.dateRange?.to !== undefined) {
 		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search supports a date-range start but not an upper date bound", retryable: false });
 	}
+	if (normalized.dateRange?.from?.includes("T")) {
+		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search supports a date-only start, not an exact timestamp", retryable: false });
+	}
 	if (normalized.domains?.include?.length && normalized.domains?.exclude?.length) {
 		throw createProviderError({ provider: "parallel", kind: "unsupported", message: "Parallel Search accepts either included or excluded domains, not both", retryable: false });
 	}
@@ -63,7 +66,7 @@ export function buildParallelRequest(request: SearchRequest): ParallelRequestPla
 	const sourcePolicy = {
 		...(normalized.domains?.include === undefined ? {} : { include_domains: [...normalized.domains.include] }),
 		...(normalized.domains?.exclude === undefined ? {} : { exclude_domains: [...normalized.domains.exclude] }),
-		...(normalized.dateRange?.from === undefined ? {} : { after_date: normalized.dateRange.from.slice(0, 10) }),
+		...(normalized.dateRange?.from === undefined ? {} : { after_date: normalized.dateRange.from }),
 	};
 	const appliedOptions: SearchOption[] = ["maxResults", "mode"];
 	if (normalized.domains !== undefined && (normalized.domains.include !== undefined || normalized.domains.exclude !== undefined)) appliedOptions.push("domains");

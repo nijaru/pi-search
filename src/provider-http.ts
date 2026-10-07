@@ -113,6 +113,7 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 	try {
 		response = await options.fetchImpl(options.url, {
 			method,
+			redirect: "error",
 			headers: {
 				...options.headers,
 				accept: "application/json",

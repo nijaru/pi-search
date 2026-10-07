@@ -30,7 +30,8 @@ call for automatic routing:
    admitted Brave path before metered Exa. `PI_SEARCH_ALLOW_METERED=1` allows
    automatic Exa and deliberate metered Brave use. Neither mode inspects
    account billing or guarantees against paid overage.
-6. Parallel and official X API require an explicit provider hint.
+6. Parallel, Cloudflare Web Search, and official X API require an explicit
+   provider hint. Cloudflare is never an automatic fallback.
 
 An automatic primary failure may use at most one eligible alternative for
 authentication, rate-limit, or unavailable errors known not to have produced a
@@ -53,6 +54,7 @@ hidden fan-out, or provider comparisons.
 | Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
+| Cloudflare | Gateway to explicitly configured Ceramic, Exa, or Linkup | Explicit `cloudflare` only; stored BYOK or prepaid gateway credits; never automatic | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PI_SEARCH_CLOUDFLARE_PROVIDER` |
 | Parallel | Objective-oriented search and excerpts; `auto`/`keyword`/`fresh` map to the `fast`/`basic`/`advanced` tiers | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
 
@@ -123,6 +125,31 @@ quality first, cost second, latency last.
   Provider-quality decisions defer to current published benchmarks, and this
   section is refreshed when they change materially.
 
+## Cloudflare gateway posture (2026-10-07)
+
+The [Web Search API](https://developers.cloudflare.com/web-search/how-to-use/)
+is a billing/auth gateway, not a new Cloudflare search index. Its published
+limits are 1,024-character queries and 10 results, with no domain/date/social
+filters. The adapter rejects unsupported controls, requires an explicit
+upstream, and preserves upstream provenance in results and tool output.
+
+[Advertised list prices](https://developers.cloudflare.com/web-search/providers/)
+per 1,000 requests are Ceramic $0.25, Exa $7, and Linkup $5. Gateway credits
+have no advertised markup; BYOK billing follows the upstream agreement.
+Actual billed cost is not inferred, so hard research cost ceilings are rejected.
+An explicit BYOK alias prevents missing-key fallback to credits.
+
+Keep direct Exa as the direct-search default: it has richer filtering than the
+gateway and there is no representative Ceramic quality comparison here.
+Ceramic operates its own independent index, with long descriptions intended
+for agent grounding; lower price does not make it keyword-only or prove
+quality parity. Its [terms §7(n)–(p)](https://www.ceramic.ai/terms-of-service)
+restrict retaining and independently extracting results. Saved/exportable Pi
+transcripts appear to need contractual permission. This is an unresolved
+contractual concern, not a legal determination. Provider-side ZDR does not
+grant user retention rights; Cloudflare's launch announcement and provider
+table also disagree on Exa's ZDR status.
+
 ## Search constraints
 
 Unsupported hard constraints are rejected or surfaced:
@@ -141,7 +168,8 @@ Unsupported hard constraints are rejected or surfaced:
   them and the router only selects Meta for unconstrained queries.
 - Parallel Search supports include/exclude domain source policies and a lower
   publication-date bound through `advanced_settings.source_policy`; it does not
-  support both include and exclude lists together or an upper date bound.
+  support both include and exclude lists together, an upper date bound, or
+  exact timestamp lower bounds.
   Its GA mode tiers are `turbo`, `fast` (the recommended agent default this
   adapter sends for `auto`), `basic`, and `advanced`.
 - Exa applies domain and published-date filters; Brave applies domain filters

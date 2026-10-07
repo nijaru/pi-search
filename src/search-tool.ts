@@ -248,7 +248,8 @@ function renderAnswerText(response: SearchResponse, maxLength: number): string {
 
 /** Render useful untrusted search content for model-visible chat. */
 export function renderSearchResponse(response: SearchResponse): string {
-	const providerLabel = response.executionModel === undefined ? response.provider : `${response.provider}/${response.executionModel}`;
+	const backend = response.executionModel ?? response.upstreamProvider;
+	const providerLabel = backend === undefined ? response.provider : `${response.provider}/${backend}`;
 	const lines = [`Query: ${compactText(response.query, MAX_QUERY_LENGTH)}`, `Provider: ${providerLabel}`];
 	if (response.latencyMs !== undefined) lines[1] += ` (${response.latencyMs}ms)`;
 	if (response.attemptedProviders !== undefined && response.attemptedProviders.length > 1) lines.push(`Attempted: ${response.attemptedProviders.join(" → ")}`);
@@ -295,7 +296,8 @@ function searchResultPreview(result: SearchResponse["results"][number]): string 
 export function renderSearchResult(response: SearchResponse, expanded: boolean, theme: Parameters<NonNullable<ToolDefinition["renderResult"]>>[2]): string {
 	const count = response.results.length;
 	const status = count === 0 ? "No results" : `${count} result${count === 1 ? "" : "s"}`;
-	const providerLabel = response.executionModel === undefined ? response.provider : `${response.provider}/${response.executionModel}`;
+	const backend = response.executionModel ?? response.upstreamProvider;
+	const providerLabel = backend === undefined ? response.provider : `${response.provider}/${backend}`;
 	const meta = [providerLabel, response.latencyMs === undefined ? undefined : `${response.latencyMs}ms`].filter(Boolean).join(" · ");
 	let text = theme.fg(response.warnings.length > 0 ? "warning" : "success", status);
 	if (response.answer !== undefined) text += `\n${theme.fg("accent", `Answer: ${renderAnswerText(response, expanded ? 500 : 220)}`)}`;
@@ -389,11 +391,13 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 			...(result.publishedAt === undefined ? {} : { publishedAt: result.publishedAt.slice(0, 100) }),
 			...(result.excerpt === undefined ? {} : { excerpt: result.excerpt.slice(0, MAX_SEARCH_EXCERPT_CHARS) }),
 			provider: result.provider,
+			...(result.upstreamProvider === undefined ? {} : { upstreamProvider: result.upstreamProvider.slice(0, 100) }),
 			searchQuery: result.searchQuery.slice(0, MAX_QUERY_LENGTH),
 			...(result.sourceId === undefined ? {} : { sourceId: result.sourceId.slice(0, 500) }),
 			...(result.score === undefined ? {} : { score: result.score }),
 		})),
 		provider: response.provider,
+		...(response.upstreamProvider === undefined ? {} : { upstreamProvider: response.upstreamProvider.slice(0, 100) }),
 		...(response.executionModel === undefined ? {} : { executionModel: response.executionModel.slice(0, 500) }),
 		...(response.attemptedProviders === undefined ? {} : { attemptedProviders: response.attemptedProviders.slice(0, 4) }),
 		appliedOptions: [...response.appliedOptions],

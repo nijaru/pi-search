@@ -105,7 +105,7 @@ export interface GroundedSearchOptions {
 	 */
 	readonly includeModel?: boolean;
 	readonly endpointFor: (model: ProviderModel) => string;
-	readonly headersFor: (execution: ModelExecution) => Readonly<Record<string, string>>;
+	readonly headersFor: (execution: ModelExecution, signal: AbortSignal) => Readonly<Record<string, string>> | Promise<Readonly<Record<string, string>>>;
 	readonly plan: GroundingPlan;
 	readonly normalize: (
 		payload: unknown,
@@ -145,7 +145,7 @@ export async function executeGroundedSearch(options: GroundedSearchOptions): Pro
 	const result = await postJson({
 		provider: options.provider,
 		url: options.endpointFor(execution.model),
-		headers: options.headersFor(execution),
+		headers: await options.headersFor(execution, options.signal),
 		body: options.includeModel === false ? options.plan.body : { ...options.plan.body, model: execution.model.id },
 		signal: options.signal,
 		fetchImpl: options.fetchImpl,

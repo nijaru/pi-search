@@ -10,20 +10,19 @@ import type {
 	SearchResult,
 	SearchWarning,
 } from "./contracts";
-import { createProviderError } from "./errors";
+import { createProviderError, isProviderError } from "./errors";
 import {
-	appendEndpointSuffix,
 	assertHttpEndpoint,
 	executeGroundedSearch,
 	tokenUsage,
 	type GroundingPlan,
 } from "./grounding";
-import { hasExplicitHeader, modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { AnthropicSearchAuth } from "./anthropic-auth";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
 
 export const ANTHROPIC_MESSAGES_ENDPOINT = "https://api.anthropic.com/v1/messages";
-export const ANTHROPIC_VERSION = "2023-06-01";
+export { ANTHROPIC_VERSION } from "./anthropic-auth";
 export const ANTHROPIC_WEB_SEARCH_TOOL = "web_search_20250305";
 export const DEFAULT_ANTHROPIC_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_ANTHROPIC_ANSWER_LENGTH = 8_000;
@@ -118,26 +117,12 @@ export function buildAnthropicRequest(request: SearchRequest, toolType = ANTHROP
 }
 
 function endpointFor(model: ProviderModel, override?: string): string {
-	const base = override ?? (model.baseUrl.trim().length > 0 ? model.baseUrl : ANTHROPIC_MESSAGES_ENDPOINT);
-	return assertHttpEndpoint(appendEndpointSuffix(base, "/messages"), "anthropic", "Anthropic Messages endpoint");
-}
-
-function anthropicHeaders(execution: ModelExecution): Readonly<Record<string, string>> {
-	const headers = modelAuthHeaders(execution, { bearerApiKey: false });
-	const apiKey = execution.auth.apiKey;
-	// An explicit x-api-key (value or null deletion) wins over a derived key.
-	if (
-		apiKey !== undefined &&
-		apiKey.trim().length > 0 &&
-		!hasExplicitHeader([execution.model.headers, execution.auth.headers], "x-api-key")
-	) {
-		headers.set("x-api-key", apiKey);
-	}
-	if (!headers.has("x-api-key")) {
-		throw createProviderError({ provider: "anthropic", kind: "auth", message: "Anthropic authentication returned no API key", retryable: false });
-	}
-	headers.set("anthropic-version", ANTHROPIC_VERSION);
-	return Object.fromEntries(headers.entries());
+	if (override !== undefined) return assertHttpEndpoint(override, "anthropic", "Anthropic Messages endpoint");
+	const base = model.baseUrl.trim().length > 0 ? model.baseUrl : ANTHROPIC_MESSAGES_ENDPOINT;
+	const url = new URL(assertHttpEndpoint(base, "anthropic", "Anthropic Messages endpoint"));
+	const path = url.pathname.replace(/\/+$/, "");
+	if (!path.endsWith("/messages")) url.pathname = `${path}${path.endsWith("/v1") ? "/messages" : "/v1/messages"}`;
+	return url.toString();
 }
 
 interface AnthropicCandidate {
@@ -321,6 +306,7 @@ export class AnthropicProvider implements Provider {
 	private readonly fetchImpl: SearchHttpFetch;
 	private readonly maxResponseBytes: number;
 	private readonly toolType: string;
+	private readonly auth: AnthropicSearchAuth;
 
 	constructor(options: AnthropicAdapterOptions = {}) {
 		this.endpoint = options.endpoint;
@@ -330,25 +316,33 @@ export class AnthropicProvider implements Provider {
 			throw new Error("Anthropic maxResponseBytes must be a positive integer");
 		}
 		this.toolType = options.toolType ?? ANTHROPIC_WEB_SEARCH_TOOL;
+		this.auth = new AnthropicSearchAuth(this.fetchImpl);
 	}
 
 	async search(request: SearchRequest, signal: AbortSignal, context: ProviderContext): Promise<SearchResponse> {
 		const normalized = validateSearchRequest(request);
 		const plan = buildAnthropicRequest(normalized, this.toolType);
-		return executeGroundedSearch({
-			provider: this.id,
-			modelProvider: "anthropic",
-			api: "anthropic-messages",
-			request: normalized,
-			signal,
-			context,
-			fetchImpl: this.fetchImpl,
-			maxResponseBytes: this.maxResponseBytes,
-			endpointFor: (model) => endpointFor(model, this.endpoint),
-			headersFor: anthropicHeaders,
-			plan,
-			normalize: normalizeAnthropicResponse,
-		});
+		try {
+			return await executeGroundedSearch({
+				provider: this.id,
+				modelProvider: "anthropic",
+				api: "anthropic-messages",
+				request: normalized,
+				signal,
+				context,
+				fetchImpl: this.fetchImpl,
+				maxResponseBytes: this.maxResponseBytes,
+				endpointFor: (model) => endpointFor(model, this.endpoint),
+				headersFor: (execution, signal) => this.auth.headers(execution, endpointFor(execution.model, this.endpoint), signal),
+				plan,
+				normalize: normalizeAnthropicResponse,
+			});
+		} catch (error) {
+			// Do not retry the search. A subsequent explicit call may exchange
+			// fresh identity after the server rejects a cached access token.
+			if (isProviderError(error) && error.kind === "auth") this.auth.invalidate();
+			throw error;
+		}
 	}
 }
 

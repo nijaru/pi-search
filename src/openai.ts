@@ -16,7 +16,7 @@ import type {
 import { createProviderError, isProviderError } from "./errors";
 import { applyProviderHeaders, hasExplicitHeader } from "./model-selection";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
-import { parseProviderRateLimits } from "./provider-http";
+import { parseProviderRateLimits, retryAfterMsFromHeaders as parseRetryAfter } from "./provider-http";
 import { validateSearchRequest } from "./search";
 import { normalizeSearchUrl } from "./search-cleanup";
 
@@ -616,22 +616,6 @@ async function readBody(response: Response, signal: AbortSignal, maxBytes: numbe
 	}
 }
 
-function parseRetryAfter(headers: Headers): number | undefined {
-	const milliseconds = headers.get("retry-after-ms");
-	if (milliseconds !== null && /^\d+(?:\.\d+)?$/.test(milliseconds.trim())) {
-		const value = Number(milliseconds);
-		if (Number.isFinite(value)) return Math.max(0, Math.round(value));
-	}
-	const retryAfter = headers.get("retry-after");
-	if (retryAfter === null) return undefined;
-	if (/^\d+(?:\.\d+)?$/.test(retryAfter.trim())) {
-		const value = Number(retryAfter);
-		return Number.isFinite(value) ? Math.max(0, Math.round(value * 1_000)) : undefined;
-	}
-	const date = Date.parse(retryAfter);
-	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
-}
-
 function parseSseEventData(body: string, provider: OpenAIProviderId): readonly Record<string, unknown>[] {
 	const events: Record<string, unknown>[] = [];
 	let dataLines: string[] = [];
@@ -661,7 +645,7 @@ function parseSseEventData(body: string, provider: OpenAIProviderId): readonly R
 	return events;
 }
 
-function parseResponseBody(body: string, provider: OpenAIProviderId): Record<string, unknown> {
+function parseResponseBody(body: string, provider: OpenAIProviderId, secrets: readonly string[]): Record<string, unknown> {
 	const trimmed = body.trim();
 	if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
 		try {
@@ -682,7 +666,8 @@ function parseResponseBody(body: string, provider: OpenAIProviderId): Record<str
 	for (const event of parseSseEventData(body, provider)) {
 		const type = String(event.type ?? "");
 		if (type === "error") {
-			throw createProviderError({ provider, kind: "http", message: "OpenAI web search returned an error event", retryable: false });
+			const diagnostic = sanitizeErrorDiagnostic(JSON.stringify(event), secrets);
+			throw createProviderError({ provider, kind: "http", message: `OpenAI web search returned an error event${diagnostic === undefined ? "" : `: ${diagnostic}`}`, retryable: false });
 		}
 		if (type === "response.output_item.done" && event.item !== undefined) output.push(event.item);
 		if (["response.done", "response.completed", "response.incomplete", "response.failed"].includes(type)) {
@@ -770,11 +755,7 @@ export class OpenAIProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false });
 		}
 
-		const body = {
-			...plan.body,
-			model: execution.model.id,
-			max_output_tokens: 2_048,
-		};
+		const endpoint = endpointFor(execution.model, this.endpoint);
 		const headers = new Headers();
 		applyProviderHeaders(headers, execution.model.headers);
 		applyProviderHeaders(headers, execution.auth.headers);
@@ -788,6 +769,15 @@ export class OpenAIProvider implements Provider {
 		if (!headers.has("authorization")) {
 			throw createProviderError({ provider: this.id, kind: "auth", message: "Pi model authentication returned no authorization header", retryable: false });
 		}
+		// Pi's direct ChatGPT sign-in uses a non-sk bearer on the OpenAI API.
+		// That auth path rejects max_output_tokens; API keys and proxies do not.
+		const bearer = headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+		const chatGPT = endpoint === OPENAI_RESPONSES_ENDPOINT && bearer !== undefined && !bearer.startsWith("sk-");
+		const body = {
+			...plan.body,
+			model: execution.model.id,
+			...(chatGPT ? {} : { max_output_tokens: 2_048 }),
+		};
 		const diagnosticSecrets = [
 			execution.auth.apiKey,
 			...Object.entries(execution.model.headers ?? {}).filter(([key]) => /authorization|api[-_]?key|token|secret|cookie/i.test(key)).map(([, value]) => value),
@@ -798,8 +788,9 @@ export class OpenAIProvider implements Provider {
 
 		let response: Response;
 		try {
-			response = await this.fetchImpl(endpointFor(execution.model, this.endpoint), {
+			response = await this.fetchImpl(endpoint, {
 				method: "POST",
+				redirect: "error",
 				headers,
 				body: JSON.stringify(body),
 				signal,
@@ -830,7 +821,7 @@ export class OpenAIProvider implements Provider {
 
 		try {
 			const responseBody = await readBody(response, signal, this.maxResponseBytes, this.id);
-			const payload = parseResponseBody(responseBody, this.id);
+			const payload = parseResponseBody(responseBody, this.id, diagnosticSecrets);
 			responseStatusFailure(this.id, payload);
 			const normalizedResponse = normalizeOpenAIResponse(payload, normalized, this.id);
 			const usage = normalizedResponse.usage === undefined && responseRateLimits === undefined
