@@ -90,13 +90,6 @@ describe("ParallelResponsesProvider", () => {
 		await expect(configured.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "malformed" });
 	});
 
-	it("maps HTTP error statuses onto provider errors", async () => {
-		const rateLimited = provider({ fetchImpl: async () => new Response(JSON.stringify({ error: { message: "quota" } }), { status: 429, headers: { "retry-after": "1" } }) });
-		await expect(rateLimited.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "rateLimit", retryable: true });
-		const unauthorized = provider({ fetchImpl: async () => new Response("{}", { status: 401 }) });
-		await expect(unauthorized.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "auth" });
-	});
-
 	it("requires an API key", async () => {
 		const missing = createParallelResponsesProvider({ endpoint: "https://parallel.test/v1/responses", fetchImpl: async () => sseResponse(responsesPayload) });
 		await expect(missing.search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "auth" });

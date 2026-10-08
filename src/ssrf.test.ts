@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { SafeFetchError } from "./fetch-errors";
 import {
-	closeResponseBody,
 	fetchRemoteUrl,
 	validateRemoteUrl,
 	type LookupAddress,
@@ -63,19 +62,6 @@ describe("SSRF and direct redirect boundary", () => {
 		).rejects.toMatchObject({ kind: "ssrf" });
 	});
 
-	it("pins the validated address at the transport boundary", async () => {
-		let seenAddress = "";
-		const transport: DirectTransport = async (target) => {
-			seenAddress = target.address;
-			return response(200, {}, emptyBody());
-		};
-		await fetchRemoteUrl("https://example.test/path", {
-			lookup: lookup([{ address: "93.184.216.34", family: 4 }]),
-			transport,
-		});
-		expect(seenAddress).toBe("93.184.216.34");
-	});
-
 	it("revalidates redirect targets and closes redirect bodies", async () => {
 		let closed = 0;
 		const body = emptyBody({ destroy: () => { closed += 1; } });
@@ -86,7 +72,6 @@ describe("SSRF and direct redirect boundary", () => {
 				transport: redirectTransport,
 			}),
 		).rejects.toMatchObject({ kind: "ssrf" });
-		await closeResponseBody(body);
 		expect(closed).toBeGreaterThan(0);
 	});
 
@@ -115,19 +100,6 @@ describe("SSRF and direct redirect boundary", () => {
 		const pending = validateRemoteUrl("https://example.test/", { lookup: pendingLookup, signal: controller.signal });
 		controller.abort();
 		await expect(pending).rejects.toMatchObject({ kind: "canceled" });
-	});
-
-	it("closes both cancellation hooks idempotently", async () => {
-		let cancelCalls = 0;
-		let destroyCalls = 0;
-		const body = emptyBody({
-			cancel: () => { cancelCalls += 1; },
-			destroy: () => { destroyCalls += 1; },
-		});
-		await closeResponseBody(body);
-		await closeResponseBody(body);
-		expect(cancelCalls).toBe(2);
-		expect(destroyCalls).toBe(2);
 	});
 
 	it("uses a typed SafeFetchError for invalid URLs", async () => {

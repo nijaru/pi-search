@@ -54,7 +54,7 @@ function candidates(options: ModelSelectionOptions): ProviderModel[] {
 export async function selectModelExecution(options: ModelSelectionOptions): Promise<ModelExecution> {
 	const registry = options.context.modelRegistry;
 	if (registry === undefined) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
+		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: "Pi model authentication is unavailable", retryable: false });
 	}
 	const available = candidates(options);
 	const requested = options.request.executionModel;
@@ -104,10 +104,10 @@ async function authenticate(model: ProviderModel, registry: NonNullable<Provider
 	try {
 		auth = await registry.getApiKeyAndHeaders(model);
 	} catch (error) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
+		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 	}
 	if (!auth.ok) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
+		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
 	}
 	// A provider-resolved endpoint wins over the catalog base URL, matching
 	// `ModelRegistry.stream()`; adapters build their request URL from this model.

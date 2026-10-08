@@ -10,6 +10,7 @@ import { Type, type Static, type TUnsafe } from "typebox";
 import { SEARCH_PROVIDER_HINT_IDS, type FetchedContent, type Provider, type ProviderContext, type ProviderModel, type SearchProviderHintId, type SearchProviderSelection, type SearchRequest, type SearchResponse } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import { fetchContent, type FetcherOptions } from "./fetcher";
+import { toolUsage } from "./grounding";
 import { SearchToolError, toSearchToolError } from "./errors";
 import { compactText } from "./render-text";
 import { normalizeSearchUrl, searchUrlIdentity } from "./search-cleanup";
@@ -111,7 +112,7 @@ export const WebSearchParameters = Type.Object({
 });
 
 export type WebSearchParams = Static<typeof WebSearchParameters>;
-export type WebSearchDetails = SearchResponse;
+export type WebSearchDetails = SearchResponse | undefined;
 
 /** Full tool schema for a given set of dispatchable provider hints. */
 function webSearchParametersFor(hints: readonly SearchProviderHintId[]) {
@@ -406,6 +407,18 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		...(response.latencyMs === undefined ? {} : { latencyMs: response.latencyMs }),
 		...(boundedUsage(response.usage) === undefined ? {} : { usage: boundedUsage(response.usage) }),
 	};
+	const reconcileSources = (): void => {
+		const urls = new Set(bounded.results.map(result => result.url));
+		if (bounded.answer !== undefined) {
+			const citations = bounded.answer.citations.filter(citation => urls.has(citation.url));
+			// The answer may cite removed sources in its text as well as metadata.
+			bounded = { ...bounded, answer: citations.length === bounded.answer.citations.length ? bounded.answer : undefined };
+		}
+		if (bounded.sourceContents !== undefined) {
+			const pages = new Set(bounded.results.map(result => result.sourcePageUrl ?? result.url));
+			bounded = { ...bounded, sourceContents: bounded.sourceContents.filter(page => pages.has(page.url)) };
+		}
+	};
 	const byteLength = (): number => boundedResponseByteLength(bounded);
 	while (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS && (bounded.sourceContents?.length ?? 0) > 0) {
 		truncated = true;
@@ -414,10 +427,11 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	while (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS && bounded.results.length > 0) {
 		truncated = true;
 		bounded = { ...bounded, results: bounded.results.slice(0, -1) };
+		reconcileSources();
 	}
 	if (byteLength() > MAX_SEARCH_JSON_CHARS - SEARCH_WARNING_BUDGET_CHARS) {
 		truncated = true;
-		bounded = { ...bounded, results: [] };
+		bounded = { ...bounded, results: [], answer: undefined, sourceContents: undefined };
 	}
 	if (!truncated) return bounded;
 	bounded = {
@@ -427,7 +441,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	while (byteLength() > MAX_SEARCH_JSON_CHARS && bounded.warnings.length > 1) {
 		bounded = { ...bounded, warnings: bounded.warnings.slice(1) };
 	}
-	if (byteLength() > MAX_SEARCH_JSON_CHARS) bounded = { ...bounded, query: bounded.query.slice(0, 500), results: [] };
+	if (byteLength() > MAX_SEARCH_JSON_CHARS) bounded = { ...bounded, query: bounded.query.slice(0, 500), results: [], answer: undefined, sourceContents: undefined };
 	return bounded;
 }
 
@@ -508,7 +522,8 @@ export function createWebSearchTool(
 			const deadlineController = new AbortController();
 			const onAbort = () => deadlineController.abort(callerSignal.reason);
 			const timeoutId = setTimeout(() => deadlineController.abort(new DOMException("Search deadline exceeded", "TimeoutError")), totalTimeoutMs);
-			callerSignal.addEventListener("abort", onAbort, { once: true });
+			if (callerSignal.aborted) onAbort();
+			else callerSignal.addEventListener("abort", onAbort, { once: true });
 			try {
 				const request = requestFromParams(params);
 				selectedProvider = resolveProvider(provider, request, context);
@@ -523,12 +538,17 @@ export function createWebSearchTool(
 				return {
 					content: [{ type: "text", text: `${SEARCH_UNTRUSTED_PREFIX}${renderSearchResponse(bounded)}` }],
 					details: bounded,
+					usage: toolUsage(bounded.usage),
 				};
 			} catch (error) {
 				if (!(error instanceof SearchToolError) && deadlineController.signal.aborted) {
 					throw new SearchToolError(callerSignal.aborted ? "WEB_SEARCH_CANCELED" : "WEB_SEARCH_TIMEOUT", callerSignal.aborted ? "Search canceled during source enrichment" : "Search timed out during source enrichment");
 				}
-				throw toSearchToolError(error, selectedProvider?.provider.id ?? "router");
+				const failure = toSearchToolError(error, selectedProvider?.provider.id ?? "router");
+				if (failure.usage !== undefined) {
+					return { content: [{ type: "text", text: failure.message }], details: undefined, isError: true, usage: toolUsage(failure.usage) };
+				}
+				throw failure;
 			} finally {
 				clearTimeout(timeoutId);
 				callerSignal.removeEventListener("abort", onAbort);

@@ -99,7 +99,7 @@ function endpointFor(model: ProviderModel, override?: string): string {
 
 function authHeaders(execution: ModelExecution, provider: "xai" | "xai-x"): Readonly<Record<string, string>> {
 	const headers = modelAuthHeaders(execution);
-	if (!headers.has("authorization")) throw createProviderError({ provider, kind: "auth", message: "xAI authentication returned no authorization header", retryable: false });
+	if (!headers.has("authorization")) throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "xAI authentication returned no authorization header", retryable: false });
 	return Object.fromEntries(headers.entries());
 }
 

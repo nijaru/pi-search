@@ -420,7 +420,7 @@ function searchModelCandidates(
 async function selectSearchExecution(active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<SearchExecution> {
 	const provider = "openai" as const;
 	if (registry === undefined) {
-		throw createProviderError({ provider, kind: "auth", message: "Pi model authentication is unavailable", retryable: false });
+		throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication is unavailable", retryable: false });
 	}
 	const candidates = searchModelCandidates(active, registry, request.executionModel);
 	const selectedCandidates = request.executionModel === undefined
@@ -442,19 +442,19 @@ async function selectSearchExecution(active: ProviderModel | undefined, registry
 		try {
 			auth = await registry.getApiKeyAndHeaders(selected);
 		} catch (error) {
-			throw createProviderError({ provider, kind: "auth", message: "Pi model authentication could not be resolved", retryable: false, cause: error });
+			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 		}
 		// A provider-resolved endpoint wins over the catalog base URL; the adapter
 		// builds its request URL from this model. Mirrors selectModelExecution().
 		if (auth.ok) return { model: auth.baseUrl ? { ...selected, baseUrl: auth.baseUrl } : selected, auth };
 		if (request.executionModel !== undefined) {
-			throw createProviderError({ provider, kind: "auth", message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
+			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
 		}
 	}
 
 	throw createProviderError({
 		provider,
-		kind: "auth",
+		kind: "auth", fallbackSafe: true,
 		message: `No authenticated ${provider} Responses model is available for native search`,
 		retryable: false,
 	});
@@ -767,7 +767,7 @@ export class OpenAIProvider implements Provider {
 			headers.set("Authorization", `Bearer ${execution.auth.apiKey}`);
 		}
 		if (!headers.has("authorization")) {
-			throw createProviderError({ provider: this.id, kind: "auth", message: "Pi model authentication returned no authorization header", retryable: false });
+			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: "Pi model authentication returned no authorization header", retryable: false });
 		}
 		// Pi's direct ChatGPT sign-in uses a non-sk bearer on the OpenAI API.
 		// That auth path rejects max_output_tokens; API keys and proxies do not.
@@ -808,7 +808,7 @@ export class OpenAIProvider implements Provider {
 		const responseRateLimits = parseProviderRateLimits(response.headers);
 		if (response.status === 401 || response.status === 403) {
 			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: false });
+			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: false });
 		}
 		if (response.status === 429) {
 			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);

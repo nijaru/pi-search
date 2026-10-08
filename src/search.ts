@@ -372,7 +372,8 @@ function canUseAutomaticFallback(error: unknown): boolean {
 	// A successful provider request can be billed before a network, timeout, or
 	// 5xx error reaches us. Only failures that are known to have been rejected
 	// or prevented from dispatching may consume the bounded alternative.
-	return error.kind === "auth" || error.kind === "rateLimit" || error.kind === "unavailable";
+	if (error.usage !== undefined) return false;
+	return error.fallbackSafe || ((error.kind === "auth" || error.kind === "rateLimit") && (error.status === 401 || error.status === 403 || error.status === 429));
 }
 
 /** Execute an automatic selection with at most one visible alternative. */

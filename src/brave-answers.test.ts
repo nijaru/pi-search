@@ -66,13 +66,20 @@ describe("BraveAnswersProvider", () => {
 		expect(result.usage).toMatchObject({ inputTokens: 1234, outputTokens: 300, searchQueries: 2, costUsd: 0.01567 });
 	});
 
-	it("buffers citation tags that split across SSE deltas", () => {
-		const a = "Answer.<citation>{\"url\": \"https://example.com/";
-		const b = "page\", \"start_index\": 0, \"end_index\": 6}</citation>tail";
-		const joined = extractTaggedAnswer(a + b);
-		expect(joined.text).toBe("Answer.tail");
-		expect(joined.citations).toHaveLength(1);
-		expect(joined.citations[0]).toMatchObject({ url: "https://example.com/page", startIndex: 0, endIndex: 6 });
+	it("buffers fragmented SSE bytes and citation tags across deltas", async () => {
+		const body = sseBody([
+			{ choices: [{ delta: { content: 'Answer.<citation>{"url": "https://example.com/' } }] },
+			{ choices: [{ delta: { content: 'page", "start_index": 0, "end_index": 6}</citation>tail' } }] },
+		]);
+		const configured = provider({ fetchImpl: async () => new Response(new ReadableStream({
+			start(controller) {
+				for (let i = 0; i < body.length; i += 7) controller.enqueue(new TextEncoder().encode(body.slice(i, i + 7)));
+				controller.close();
+			},
+		})) });
+		const result = await configured.search({ query: "q" }, new AbortController().signal, {});
+		expect(result.answer?.text).toBe("Answer.tail");
+		expect(result.answer?.citations).toEqual([{ url: "https://example.com/page", startIndex: 0, endIndex: 6 }]);
 	});
 
 	it("drops malformed citation JSON without losing surrounding text", () => {

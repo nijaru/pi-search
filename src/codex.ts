@@ -252,17 +252,17 @@ function normalizeCodexResponse(payload: unknown, request: SearchRequest): Searc
 
 function codexHeaders(execution: ModelExecution): Readonly<Record<string, string>> {
 	const headers = modelAuthHeaders(execution);
-	if (execution.auth.apiKey === undefined || execution.auth.apiKey.trim().length === 0) {
-		throw createProviderError({ provider: "openai-codex", kind: "auth", message: "Codex authentication returned no token", retryable: false });
+	if (!headers.get("authorization")?.trim()) {
+		throw createProviderError({ provider: "openai-codex", kind: "auth", fallbackSafe: true, message: "Codex authentication returned no token", retryable: false });
 	}
-	const parts = execution.auth.apiKey.split(".");
+	const parts = headers.get("authorization")!.replace(/^Bearer\s+/i, "").split(".");
 	if (parts.length === 3 && parts[1] !== undefined) {
 		try {
 			const decoded = JSON.parse(Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[1].length / 4) * 4, "="), "base64").toString("utf8")) as Record<string, unknown>;
 			const auth = decoded["https://api.openai.com/auth"];
 			if (auth !== null && typeof auth === "object" && !Array.isArray(auth)) {
 				const accountId = optionalString((auth as Record<string, unknown>).chatgpt_account_id, 500);
-				if (accountId !== undefined) headers.set("chatgpt-account-id", accountId);
+				if (accountId !== undefined && !headers.has("chatgpt-account-id")) headers.set("chatgpt-account-id", accountId);
 			}
 		} catch {
 			// The backend may authenticate non-JWT tokens through headers alone.

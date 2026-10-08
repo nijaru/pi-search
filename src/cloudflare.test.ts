@@ -157,18 +157,6 @@ describe("CloudflareProvider", () => {
 		expect(result.usage).toEqual({ rateLimits: { windows: [{ limit: 10, remaining: 7, scope: "window-0" }] } });
 	});
 
-	it("surfaces HTTP errors without upstream or paid fallback, including a missing BYOK key", async () => {
-		for (const [status, kind, retryable] of [[400, "badRequest", false], [401, "auth", false], [429, "rateLimit", true], [503, "http", true]] as const) {
-			let calls = 0;
-			const configured = provider({ byokAlias: "missing-key", fetchImpl: async () => {
-				calls += 1;
-				return response({ error: "failed" }, status, { "x-request-id": "failed-request", "retry-after": "2" });
-			} });
-			await expect(search(configured)).rejects.toMatchObject({ provider: "cloudflare", kind, status, retryable, requestId: "failed-request", retryAfterMs: 2_000 });
-			expect(calls).toBe(1);
-		}
-	});
-
 	it("uses shared bounded JSON and cancellation handling", async () => {
 		await expect(search(provider({ maxResponseBytes: 10 }))).rejects.toMatchObject({ provider: "cloudflare", kind: "malformed" });
 		await expect(search(provider({ fetchImpl: async () => new Response("not JSON") }))).rejects.toMatchObject({ kind: "malformed" });

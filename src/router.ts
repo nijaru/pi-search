@@ -48,6 +48,7 @@ function canServe(provider: Provider, request: SearchRequest): boolean {
 	// must report that limitation in their response; hard constraints and
 	// explicit model-mediated options must not be silently dropped.
 	if ((request.domains?.include?.length || request.domains?.exclude?.length) && provider.capabilities.domainFilter !== true) return false;
+	if (request.domains?.include?.length && request.domains?.exclude?.length && provider.capabilities.combinedDomainFilters === false) return false;
 	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return false;
 	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return false;
 	if (request.social !== undefined) {

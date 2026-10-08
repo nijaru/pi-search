@@ -133,7 +133,7 @@ export async function postJson(options: JsonRequestOptions): Promise<JsonRespons
 	const metadata = requestMetadata(response);
 	if (response.status === 401 || response.status === 403) {
 		await cancelResponseBody(response);
-		throw createProviderError({ provider: options.provider, kind: "auth", message: `${options.provider} search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false, ...metadata, rateLimits: options.rateLimits ?? metadata.rateLimits });
+		throw createProviderError({ provider: options.provider, kind: "auth", fallbackSafe: true, message: `${options.provider} search authentication failed (HTTP ${response.status})`, status: response.status, retryable: false, ...metadata, rateLimits: options.rateLimits ?? metadata.rateLimits });
 	}
 	if (response.status === 429) {
 		await cancelResponseBody(response);
@@ -177,7 +177,7 @@ export function getJson(options: Omit<JsonRequestOptions, "body" | "method">): P
 
 export function requireApiKey(provider: ProviderId, apiKey: string | undefined): string {
 	if (apiKey === undefined || apiKey.trim().length === 0) {
-		throw createProviderError({ provider, kind: "auth", message: `${provider} API key is not configured`, retryable: false });
+		throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: `${provider} API key is not configured`, retryable: false });
 	}
 	return apiKey;
 }

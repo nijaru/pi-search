@@ -1,3 +1,4 @@
+import type { Usage } from "@earendil-works/pi-ai";
 import type {
 	ProviderContext,
 	ProviderId,
@@ -52,6 +53,19 @@ export function tokenUsage(
 	};
 }
 
+/** Report known nested usage to Pi; unknown token/cost categories stay zero. */
+export function toolUsage(usage: ProviderUsage | undefined): Usage | undefined {
+	if (usage === undefined || (usage.inputTokens === undefined && usage.outputTokens === undefined && usage.totalTokens === undefined && usage.costUsd === undefined)) return undefined;
+	return {
+		input: usage.inputTokens ?? 0,
+		output: usage.outputTokens ?? 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: usage.costUsd ?? 0 },
+	};
+}
+
 /** Merge provider-reported usage with observed transport rate limits. */
 export function usageWithRateLimits(
 	usage: ProviderUsage | undefined,
@@ -85,7 +99,7 @@ export function assertHttpEndpoint(candidate: string, provider: ProviderId, labe
 export function bearerAuthHeaders(execution: ModelExecution, provider: ProviderId): Readonly<Record<string, string>> {
 	const headers = modelAuthHeaders(execution);
 	if (!headers.has("authorization")) {
-		throw createProviderError({ provider, kind: "auth", message: "Model authentication returned no authorization header", retryable: false });
+		throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Model authentication returned no authorization header", retryable: false });
 	}
 	return Object.fromEntries(headers.entries());
 }

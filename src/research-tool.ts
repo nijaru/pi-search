@@ -9,6 +9,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static, type TUnsafe } from "typebox";
 import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchProviderSelection, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
+import { toolUsage } from "./grounding";
 import { SearchToolError } from "./errors";
 import { fetchContent, MAX_FETCH_LENGTH, type FetcherOptions } from "./fetcher";
 import { executeSearch } from "./search";
@@ -276,6 +277,33 @@ export async function executeResearch(
 	const warnings: SearchWarning[] = [];
 	const seenResultUrls = new Set<string>();
 	const seenUrls = new Set<string>();
+	const recordUsage = (usage: ProviderUsage | undefined, estimatedCost: number): void => {
+		costUsd += (usage?.costUsd ?? estimatedCost) - estimatedCost;
+		if (usage?.inputTokens !== undefined) {
+			inputTokens += usage.inputTokens;
+			hasInputTokens = true;
+		}
+		if (usage?.outputTokens !== undefined) {
+			outputTokens += usage.outputTokens;
+			hasOutputTokens = true;
+		}
+		if (usage?.totalTokens !== undefined) {
+			totalTokens += usage.totalTokens;
+			hasTotalTokens = true;
+		}
+		if (usage?.billedUnits !== undefined) {
+			const currentUnit = usage.billedUnit ?? "billed units";
+			if (billedUnit !== undefined && billedUnit !== currentUnit) {
+				billedUnitsConsistent = false;
+				warnings.push(warning("Research provider reported mixed billing units; aggregate billed units were omitted"));
+			} else {
+				billedUnit = currentUnit;
+				billedUnits += usage.billedUnits;
+			}
+		}
+		if (usage?.searchQueries !== undefined) searchQueries += usage.searchQueries;
+		if (usage?.rateLimits !== undefined) latestRateLimits = usage.rateLimits;
+	};
 	const currentUsage = (): ProviderUsage => ({
 		...(costUsd > 0 ? { costUsd } : {}),
 		...(hasInputTokens ? { inputTokens } : {}),
@@ -344,38 +372,15 @@ export async function executeResearch(
 				if (response.executionModel !== undefined) executionModel = response.executionModel;
 				if (response.upstreamProvider !== undefined) upstreamProvider = response.upstreamProvider;
 				const responseUsage = response.usage;
-				costUsd += (responseUsage?.costUsd ?? estimatedCost) - estimatedCost;
-				if (responseUsage?.inputTokens !== undefined) {
-					inputTokens += responseUsage.inputTokens;
-					hasInputTokens = true;
-				}
-				if (responseUsage?.outputTokens !== undefined) {
-					outputTokens += responseUsage.outputTokens;
-					hasOutputTokens = true;
-				}
-				if (responseUsage?.totalTokens !== undefined) {
-					totalTokens += responseUsage.totalTokens;
-					hasTotalTokens = true;
-				}
-				if (responseUsage?.billedUnits !== undefined) {
-					const currentUnit = responseUsage.billedUnit ?? "billed units";
-					if (billedUnit !== undefined && billedUnit !== currentUnit) {
-						billedUnitsConsistent = false;
-						warnings.push(warning("Research provider reported mixed billing units; aggregate billed units were omitted"));
-					} else {
-						billedUnit = currentUnit;
-						billedUnits += responseUsage.billedUnits;
-					}
-				}
-				if (responseUsage?.searchQueries !== undefined) searchQueries += responseUsage.searchQueries;
-				if (responseUsage?.rateLimits !== undefined) latestRateLimits = responseUsage.rateLimits;
+				recordUsage(responseUsage, estimatedCost);
 				if (normalized.budget.maxCostUsd !== undefined && costUsd > normalized.budget.maxCostUsd) {
 					warnings.push(warning("Research stopped after reported provider usage exceeded maxCostUsd"));
 					stopReason = "budget";
 					break;
 				}
 			} catch (error) {
-				if (estimatedCost > 0) warnings.push(warning("Research retained the failed call's estimated cost reservation; actual billing is unconfirmed"));
+				if (error instanceof SearchToolError && error.usage !== undefined) recordUsage(error.usage, estimatedCost);
+				else if (estimatedCost > 0) warnings.push(warning("Research retained the failed call's estimated cost reservation; actual billing is unconfirmed"));
 				if (deadlineController.signal.aborted || signal?.aborted) {
 					stopReason = signal?.aborted ? "canceled" : "deadline";
 					warnings.push(warning(`Research search failed for query ${JSON.stringify(query)}: ${error instanceof Error ? error.message : String(error)}`));
@@ -471,6 +476,7 @@ export function createWebResearchTool(
 				return {
 					content: [{ type: "text", text: `${RESEARCH_UNTRUSTED_PREFIX}${renderResearchResponse(response, Math.max(1, params.budget.maxOutputChars - prefixBytes))}` }],
 					details: response,
+					usage: toolUsage(response.usage),
 				};
 			} catch (error) {
 				if (error instanceof SearchToolError) throw error;

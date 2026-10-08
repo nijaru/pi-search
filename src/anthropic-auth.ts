@@ -103,6 +103,6 @@ export class AnthropicSearchAuth {
 	}
 
 	private missingAuth(): Error {
-		return createProviderError({ provider: "anthropic", kind: "auth", message: "Anthropic authentication returned no API key, bearer header, or workload identity configuration", retryable: false });
+		return createProviderError({ provider: "anthropic", kind: "auth", fallbackSafe: true, message: "Anthropic authentication returned no API key, bearer header, or workload identity configuration", retryable: false });
 	}
 }

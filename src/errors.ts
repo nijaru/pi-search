@@ -1,4 +1,4 @@
-import type { ProviderError, ProviderId, ProviderRateLimitInfo, RequestId } from "./contracts";
+import type { ProviderError, ProviderId, ProviderRateLimitInfo, ProviderUsage, RequestId } from "./contracts";
 
 export interface ProviderErrorOptions {
 	readonly provider: ProviderId;
@@ -9,6 +9,8 @@ export interface ProviderErrorOptions {
 	readonly requestId?: RequestId;
 	readonly retryAfterMs?: number;
 	readonly rateLimits?: ProviderRateLimitInfo;
+	readonly fallbackSafe?: boolean;
+	readonly usage?: ProviderUsage;
 	readonly cause?: unknown;
 }
 
@@ -21,6 +23,8 @@ export class SearchProviderError extends Error implements ProviderError {
 	readonly requestId?: RequestId;
 	readonly retryAfterMs?: number;
 	readonly rateLimits?: ProviderRateLimitInfo;
+	readonly fallbackSafe: boolean;
+	readonly usage?: ProviderUsage;
 
 	constructor(options: ProviderErrorOptions) {
 		super(options.message, { cause: options.cause });
@@ -32,6 +36,8 @@ export class SearchProviderError extends Error implements ProviderError {
 		this.requestId = options.requestId;
 		this.retryAfterMs = options.retryAfterMs;
 		this.rateLimits = options.rateLimits;
+		this.fallbackSafe = options.fallbackSafe === true;
+		this.usage = options.usage;
 	}
 }
 
@@ -81,6 +87,8 @@ export class SearchToolError extends Error {
 	readonly requestId?: RequestId;
 	readonly retryAfterMs?: number;
 	readonly rateLimits?: ProviderRateLimitInfo;
+	readonly fallbackSafe: boolean;
+	readonly usage?: ProviderUsage;
 
 	constructor(
 		code: SearchToolErrorCode,
@@ -93,6 +101,8 @@ export class SearchToolError extends Error {
 			readonly requestId?: RequestId;
 			readonly retryAfterMs?: number;
 			readonly rateLimits?: ProviderRateLimitInfo;
+			readonly fallbackSafe?: boolean;
+			readonly usage?: ProviderUsage;
 		} = {},
 	) {
 		super(`${code}: ${message}`);
@@ -105,6 +115,8 @@ export class SearchToolError extends Error {
 		this.requestId = options.requestId;
 		this.retryAfterMs = options.retryAfterMs;
 		this.rateLimits = options.rateLimits;
+		this.fallbackSafe = options.fallbackSafe === true;
+		this.usage = options.usage;
 	}
 }
 
@@ -154,6 +166,8 @@ export function toSearchToolError(error: unknown, provider: ProviderId): SearchT
 			requestId: error.requestId,
 			retryAfterMs: error.retryAfterMs,
 			rateLimits: error.rateLimits,
+			fallbackSafe: error.fallbackSafe,
+			usage: error.usage,
 		});
 	}
 	const message = error instanceof Error ? error.message : "Unknown search failure";

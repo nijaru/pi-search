@@ -165,6 +165,7 @@ function usageFromPayload(root: Record<string, unknown>): ProviderUsage | undefi
 export function normalizeParallelResponsesPayload(payload: unknown, request: SearchRequest): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "parallel-responses");
+	if (root.status !== "completed" || root.error != null) malformed("response did not complete successfully");
 	const { text, citations: rawCitations } = answerFromPayload(root);
 	if (text.trim().length === 0) malformed("answer text is empty");
 	const limitedText = text.slice(0, MAX_ANSWER_LENGTH);

@@ -97,7 +97,7 @@ function authHeaders(execution: ModelExecution): Readonly<Record<string, string>
 		headers.set("x-goog-api-key", execution.auth.apiKey);
 	}
 	if (!headers.has("x-goog-api-key")) {
-		throw createProviderError({ provider: "gemini", kind: "auth", message: "Gemini authentication returned no API key", retryable: false });
+		throw createProviderError({ provider: "gemini", kind: "auth", fallbackSafe: true, message: "Gemini authentication returned no API key", retryable: false });
 	}
 	return Object.fromEntries(headers.entries());
 }

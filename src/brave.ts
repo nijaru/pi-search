@@ -363,6 +363,7 @@ export class BraveProvider implements Provider {
 			throw createProviderError({
 				provider: this.id,
 				kind: "rateLimit",
+				fallbackSafe: true,
 				message: "Brave quota window is exhausted",
 				retryable: true,
 				rateLimits: observed,
@@ -379,6 +380,7 @@ export class BraveProvider implements Provider {
 				throw createProviderError({
 					provider: this.id,
 					kind: "rateLimit",
+					fallbackSafe: true,
 					message: "Brave quota window is exhausted",
 					retryable: true,
 					rateLimits: latest,
@@ -388,16 +390,17 @@ export class BraveProvider implements Provider {
 		}
 		const apiKey = this.apiKey;
 		if (apiKey === undefined || apiKey.trim().length === 0) {
-			throw createProviderError({ provider: this.id, kind: "auth", message: "Brave API key is not configured", retryable: false });
+			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: "Brave API key is not configured", retryable: false });
 		}
 
 		let response: Response;
 		try {
 			response = await this.fetchImpl(plan.url, {
-			method: "GET",
-			headers: { accept: "application/json", "x-subscription-token": apiKey },
-			signal,
-		});
+				method: "GET",
+				redirect: "error",
+				headers: { accept: "application/json", "x-subscription-token": apiKey },
+				signal,
+			});
 		} catch (error) {
 			if (signal.aborted) {
 				throw createProviderError({ provider: this.id, kind: "canceled", message: "Search canceled", retryable: false, cause: error });
@@ -411,7 +414,7 @@ export class BraveProvider implements Provider {
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-brave-request-id") ?? undefined;
 		if (response.status === 401 || response.status === 403) {
 			await cancelResponseBody(response);
-			throw createProviderError({ provider: this.id, kind: "auth", message: `Brave rejected the API key (HTTP ${response.status})`, status: response.status, retryable: false, requestId, rateLimits });
+			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: `Brave rejected the API key (HTTP ${response.status})`, status: response.status, retryable: false, requestId, rateLimits });
 		}
 		if (response.status === 429) {
 			await cancelResponseBody(response);

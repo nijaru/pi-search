@@ -152,6 +152,8 @@ export interface ProviderCapabilities {
 	readonly excerpts?: boolean;
 	/** Supports domain include/exclude filters. */
 	readonly domainFilter?: boolean;
+	/** False when includes and excludes are individually supported but cannot be combined. */
+	readonly combinedDomainFilters?: boolean;
 	/** Supports provider-enforced date ranges. */
 	readonly dateFilter?: boolean;
 	/** Searches social sources such as X. */
@@ -621,6 +623,10 @@ export interface ProviderError extends Error {
 	readonly retryAfterMs?: number;
 	/** Provider-reported quota metadata. */
 	readonly rateLimits?: ProviderRateLimitInfo;
+	/** Usage already reported even when a dispatched call fails. */
+	readonly usage?: ProviderUsage;
+	/** Explicit proof that another provider cannot compound uncertain billing. */
+	readonly fallbackSafe?: boolean;
 	/** Whether retrying the same provider could help. */
 	readonly retryable: boolean;
 }

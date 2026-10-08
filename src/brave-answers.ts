@@ -248,11 +248,13 @@ async function readSseChunks(response: Response, provider: "brave-answers", sign
 	const text = await readBoundedResponseText(response, maxBytes, signal);
 	const events: Record<string, unknown>[] = [];
 	let dataLines: string[] = [];
+	let completed = false;
 	const flush = (): void => {
 		if (dataLines.length === 0) return;
 		const data = dataLines.join("\n").trim();
 		dataLines = [];
-		if (data.length === 0 || data === "[DONE]") return;
+		if (data === "[DONE]") { completed = true; return; }
+		if (data.length === 0) return;
 		try {
 			const parsed = JSON.parse(data) as unknown;
 			if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) events.push(parsed as Record<string, unknown>);
@@ -271,6 +273,10 @@ async function readSseChunks(response: Response, provider: "brave-answers", sign
 		if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
 	}
 	flush();
+	if (!completed) malformed("stream ended before completion");
+	if (events.some(event => event.error != null)) {
+		throw createProviderError({ provider, kind: "http", message: "Brave answer stream reported an error", retryable: false });
+	}
 	return events;
 }
 
@@ -303,6 +309,7 @@ export class BraveAnswersProvider implements Provider {
 		try {
 			response = await this.fetchImpl(this.endpoint, {
 				method: "POST",
+				redirect: "error",
 				headers: {
 					"x-subscription-token": requireApiKey(this.id, this.apiKey),
 					accept: "text/event-stream",
@@ -324,7 +331,7 @@ export class BraveAnswersProvider implements Provider {
 		};
 		if (response.status === 401 || response.status === 403) {
 			const message = await statusMessage();
-			throw createProviderError({ provider: this.id, kind: "auth", message, status: response.status, retryable: false, ...(requestId === undefined ? {} : { requestId }) });
+			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message, status: response.status, retryable: false, ...(requestId === undefined ? {} : { requestId }) });
 		}
 		if (response.status === 429) {
 			const message = await statusMessage();

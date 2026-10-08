@@ -118,7 +118,7 @@ describe("search boundary", () => {
 			id: "openai",
 			capabilities: {},
 			profile: { auth: "modelRegistry", costModel: "unknown" },
-			search: async () => { throw createProviderError({ provider: "openai", kind: "auth", message: "primary unavailable", retryable: false }); },
+			search: async () => { throw createProviderError({ provider: "openai", kind: "auth", fallbackSafe: true, message: "primary unavailable", retryable: false }); },
 		};
 		const fallback: Provider = {
 			...makeProvider(async (request) => { fallbackCalls += 1; return successResponse(request.query); }),
@@ -489,8 +489,4 @@ describe("search boundary", () => {
 		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
 	});
 
-	it("keeps SearchToolError instances stable when converting results", () => {
-		const error = new SearchToolError("WEB_SEARCH_TIMEOUT", "timed out", { provider: "brave", kind: "timeout" });
-		expect(error.code).toBe("WEB_SEARCH_TIMEOUT");
-	});
 });

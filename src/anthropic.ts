@@ -40,6 +40,7 @@ const capabilities: ProviderCapabilities = {
 	semantic: true,
 	excerpts: true,
 	domainFilter: true,
+	combinedDomainFilters: false,
 	nativeGrounding: true,
 	userLocation: true,
 };
@@ -140,9 +141,8 @@ function candidateFromUrl(url: unknown, title: unknown): AnthropicCandidate | un
 
 function throwResultError(code: unknown): never {
 	const errorCode = optionalString(code, 100) ?? "unknown";
-	// Errored searches are not billed, so retry/fallback is safe. The router
-	// treats `unavailable` like auth/rate-limit failures and may consume its
-	// single bounded automatic fallback.
+	// Search errors can still follow billed model tokens or successful searches.
+	// Retryability is not evidence that a paid fallback is safe.
 	const retryable = errorCode === "too_many_requests" || errorCode === "unavailable";
 	throw createProviderError({
 		provider: "anthropic",
@@ -152,8 +152,35 @@ function throwResultError(code: unknown): never {
 	});
 }
 
-/** Normalize a Messages API payload into evidence-first results. */
+function reportedUsage(root: Record<string, unknown>, searchQueries = 0) {
+	const usageRecord = root.usage !== null && typeof root.usage === "object" && !Array.isArray(root.usage)
+		? root.usage as Record<string, unknown>
+		: undefined;
+	const serverToolUse = usageRecord?.server_tool_use !== null && typeof usageRecord?.server_tool_use === "object" && !Array.isArray(usageRecord?.server_tool_use)
+		? usageRecord.server_tool_use as Record<string, unknown>
+		: undefined;
+	const reportedQueries = typeof serverToolUse?.web_search_requests === "number" && Number.isFinite(serverToolUse.web_search_requests) && serverToolUse.web_search_requests >= 0
+		? Math.floor(serverToolUse.web_search_requests)
+		: undefined;
+	const usage = tokenUsage(usageRecord?.input_tokens, usageRecord?.output_tokens, undefined);
+	const usageDetails = usage === undefined && (reportedQueries ?? searchQueries) === 0
+		? undefined
+		: { ...usage, ...((reportedQueries ?? searchQueries) === 0 ? {} : { searchQueries: reportedQueries ?? searchQueries }) };
+	return usageDetails;
+}
+
+/** Preserve known usage even when normalization rejects a billed response. */
 export function normalizeAnthropicResponse(payload: unknown, request: SearchRequest): SearchResponse {
+	try {
+		return normalizeEvidence(payload, request);
+	} catch (error) {
+		if (!isProviderError(error)) throw error;
+		const root = objectValue(payload, "response", "anthropic");
+		throw createProviderError({ ...error, message: error.message, usage: reportedUsage(root), fallbackSafe: false, cause: error });
+	}
+}
+
+function normalizeEvidence(payload: unknown, request: SearchRequest): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "anthropic");
 	if (!Array.isArray(root.content)) {
@@ -270,19 +297,7 @@ export function normalizeAnthropicResponse(payload: unknown, request: SearchRequ
 	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && citations.length > 0
 		? { text: answerText, contentTrust: "untrusted" as const, provider: "anthropic" as const, citations }
 		: undefined;
-	const usageRecord = root.usage !== null && typeof root.usage === "object" && !Array.isArray(root.usage)
-		? root.usage as Record<string, unknown>
-		: undefined;
-	const serverToolUse = usageRecord?.server_tool_use !== null && typeof usageRecord?.server_tool_use === "object" && !Array.isArray(usageRecord?.server_tool_use)
-		? usageRecord.server_tool_use as Record<string, unknown>
-		: undefined;
-	const reportedQueries = typeof serverToolUse?.web_search_requests === "number" && Number.isFinite(serverToolUse.web_search_requests) && serverToolUse.web_search_requests >= 0
-		? Math.floor(serverToolUse.web_search_requests)
-		: undefined;
-	const usage = tokenUsage(usageRecord?.input_tokens, usageRecord?.output_tokens, undefined);
-	const usageDetails = usage === undefined && (reportedQueries ?? searchQueries) === 0
-		? undefined
-		: { ...usage, ...((reportedQueries ?? searchQueries) === 0 ? {} : { searchQueries: reportedQueries ?? searchQueries }) };
+	const usageDetails = reportedUsage(root, searchQueries);
 	const warnings: SearchWarning[] = discarded > 0
 		? [{ code: "partial-results", message: `Anthropic discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` }]
 		: [];
