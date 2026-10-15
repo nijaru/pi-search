@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, jest, spyOn } from "bun:test";
+import { getEventListeners } from "node:events";
 import {
 	BRAVE_MAX_RESULTS,
 	BraveQuotaTracker,
@@ -109,19 +110,90 @@ describe("BraveProvider", () => {
 		expect(tracker.canAttempt()).toBe(true);
 	});
 
-	it("serializes free-mode request starts and honors cancellation while waiting", async () => {
-		const tracker = new BraveQuotaTracker({ minimumIntervalMs: 25 });
-		const starts: number[] = [];
-		await tracker.waitForTurn(new AbortController().signal);
-		starts.push(Date.now());
-		await tracker.waitForTurn(new AbortController().signal);
-		starts.push(Date.now());
-		expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(20);
+	it("removes canceled reservations without delaying surviving FIFO admissions", async () => {
+		jest.useFakeTimers();
+		try {
+			const tracker = new BraveQuotaTracker({ minimumIntervalMs: 100 });
+			expect(await tracker.waitForTurn(signal)).toBe(true);
+			const batch = new AbortController();
+			const canceled = Array.from({ length: 5 }, () => tracker.waitForTurn(batch.signal));
+			const admissions: string[] = [];
+			const first = tracker.waitForTurn(signal).then(ok => { if (ok) admissions.push("first"); });
+			const second = tracker.waitForTurn(signal).then(ok => { if (ok) admissions.push("second"); });
+			batch.abort();
+			expect(await Promise.all(canceled)).toEqual([false, false, false, false, false]);
+			jest.advanceTimersByTime(99);
+			await Promise.resolve();
+			expect(admissions).toEqual([]);
+			jest.advanceTimersByTime(1);
+			await Promise.resolve();
+			expect(admissions).toEqual(["first"]);
+			jest.advanceTimersByTime(100);
+			await Promise.resolve();
+			expect(admissions).toEqual(["first", "second"]);
+			await Promise.all([first, second]);
+		} finally {
+			jest.useRealTimers();
+		}
+	});
 
+	it("leaves only the last actual admission's spacing after an entire queue is canceled", async () => {
+		jest.useFakeTimers();
+		try {
+			const tracker = new BraveQuotaTracker({ minimumIntervalMs: 100 });
+			await tracker.waitForTurn(signal);
+			const controller = new AbortController();
+			const pending = tracker.waitForTurn(controller.signal);
+			expect(getEventListeners(controller.signal, "abort")).toHaveLength(1);
+			jest.advanceTimersByTime(50);
+			controller.abort();
+			expect(await pending).toBe(false);
+			expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+			let admitted = false;
+			const next = tracker.waitForTurn(signal).then(ok => { admitted = ok; });
+			jest.advanceTimersByTime(49);
+			await Promise.resolve();
+			expect(admitted).toBe(false);
+			jest.advanceTimersByTime(1);
+			await Promise.resolve();
+			expect(admitted).toBe(true);
+			await next;
+			expect(getEventListeners(signal, "abort")).toHaveLength(0);
+		} finally {
+			jest.useRealTimers();
+		}
+	});
+
+	it("paces from actual admissions even when a timer runs late", async () => {
+		jest.useFakeTimers();
+		let now = 1_000;
+		const clock = spyOn(Date, "now").mockImplementation(() => now);
+		try {
+			const tracker = new BraveQuotaTracker({ minimumIntervalMs: 100 });
+			await tracker.waitForTurn(signal);
+			const starts: number[] = [];
+			const pending = [1, 2].map(() => tracker.waitForTurn(signal).then(() => { starts.push(now); }));
+			// Simulate a stalled event loop: due callbacks see a much later wall clock.
+			now = 2_000;
+			jest.advanceTimersByTime(500);
+			await Promise.resolve();
+			expect(starts).toEqual([2_000]);
+			now = 2_100;
+			jest.advanceTimersByTime(100);
+			await Promise.all(pending);
+			expect(starts).toEqual([2_000, 2_100]);
+		} finally {
+			clock.mockRestore();
+			jest.useRealTimers();
+		}
+	});
+
+	it("admits zero-interval calls immediately but rejects already canceled calls", async () => {
+		const tracker = new BraveQuotaTracker();
 		const controller = new AbortController();
-		const pending = tracker.waitForTurn(controller.signal);
 		controller.abort();
-		expect(await pending).toBe(false);
+		expect(await tracker.waitForTurn(controller.signal)).toBe(false);
+		expect(await Promise.all(Array.from({ length: 5 }, () => tracker.waitForTurn(signal)))).toEqual([true, true, true, true, true]);
 	});
 
 	it("does not call the network without a key or after known quota exhaustion", async () => {

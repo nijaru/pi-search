@@ -25,7 +25,7 @@ export type BraveFetch = (input: string | URL | Request, init?: RequestInit) => 
 export interface BraveCapacityTracker {
 	/** True when no known finite quota window currently blocks a call. */
 	readonly canAttempt: () => boolean;
-	/** Reserve a local request slot, returning false when the caller canceled. */
+	/** Wait for local admission, returning false when the caller canceled. */
 	readonly waitForTurn?: (signal: AbortSignal) => Promise<boolean>;
 	/** Record provider observations without inventing or persisting counters. */
 	readonly observe: (info: ProviderRateLimitInfo | undefined) => void;
@@ -48,6 +48,8 @@ export class BraveQuotaTracker implements BraveCapacityTracker {
 	private observedAtMs = 0;
 	private readonly minimumIntervalMs: number;
 	private nextRequestAtMs = 0;
+	private readonly waiting = new Set<{ signal: AbortSignal; finish: (admitted: boolean) => void }>();
+	private admissionTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(options: BraveQuotaTrackerOptions = {}) {
 		const minimumIntervalMs = options.minimumIntervalMs ?? 0;
@@ -57,28 +59,46 @@ export class BraveQuotaTracker implements BraveCapacityTracker {
 		this.minimumIntervalMs = minimumIntervalMs;
 	}
 
-	async waitForTurn(signal: AbortSignal): Promise<boolean> {
-		if (signal.aborted) return false;
-		const now = Date.now();
-		const startAt = Math.max(now, this.nextRequestAtMs);
-		this.nextRequestAtMs = startAt + this.minimumIntervalMs;
-		const delayMs = startAt - now;
-		if (delayMs <= 0) return true;
+	waitForTurn(signal: AbortSignal): Promise<boolean> {
+		if (signal.aborted) return Promise.resolve(false);
+		if (this.minimumIntervalMs === 0) return Promise.resolve(true);
 		return new Promise<boolean>((resolve) => {
-			let settled = false;
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			const finish = (admitted: boolean): void => {
-				if (settled) return;
-				settled = true;
-				if (timer !== undefined) clearTimeout(timer);
-				signal.removeEventListener("abort", onAbort);
-				resolve(admitted);
+			const waiter = {
+				signal,
+				finish: (admitted: boolean): void => {
+					if (!this.waiting.delete(waiter)) return;
+					signal.removeEventListener("abort", onAbort);
+					if (this.waiting.size === 0 && this.admissionTimer !== undefined) {
+						clearTimeout(this.admissionTimer);
+						this.admissionTimer = undefined;
+					}
+					resolve(admitted);
+				},
 			};
-			const onAbort = (): void => finish(false);
-			timer = setTimeout(() => finish(true), delayMs);
+			const onAbort = (): void => { waiter.finish(false); };
+			this.waiting.add(waiter);
 			signal.addEventListener("abort", onAbort, { once: true });
 			if (signal.aborted) onAbort();
+			this.admitNext();
 		});
+	}
+
+	private admitNext(): void {
+		if (this.admissionTimer !== undefined) return;
+		for (const waiter of this.waiting) {
+			if (waiter.signal.aborted) { waiter.finish(false); continue; }
+			const now = Date.now(), delayMs = this.nextRequestAtMs - now;
+			if (delayMs > 0) {
+				this.admissionTimer = setTimeout(() => {
+					this.admissionTimer = undefined;
+					this.admitNext();
+				}, delayMs);
+				return;
+			}
+			// Only actual admissions consume spacing. Late timers cannot release a burst.
+			this.nextRequestAtMs = now + this.minimumIntervalMs;
+			waiter.finish(true);
+		}
 	}
 
 	canAttempt(): boolean {
