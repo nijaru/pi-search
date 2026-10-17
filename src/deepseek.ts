@@ -61,8 +61,9 @@ function acceptRequestOptions(request: SearchRequest): void {
 	if (request.searchContentTypes !== undefined) unsupported("DeepSeek search does not expose content-type selection");
 }
 
-function datePart(value: string): string {
-	return value.slice(0, 10);
+/** The UTC calendar day for an ISO-8601 date or instant; operators are day-based. */
+function utcDatePart(value: string): string {
+	return new Date(Date.parse(value)).toISOString().slice(0, 10);
 }
 
 /** Shift a YYYY-MM-DD date in UTC. */
@@ -84,11 +85,11 @@ function dateOperators(request: SearchRequest): { readonly operators: string[]; 
 	const to = request.dateRange?.to;
 	if (from !== undefined) {
 		if (from.includes("T")) widened = true;
-		operators.push(`after:${shiftDate(datePart(from), -1)}`);
+		operators.push(`after:${shiftDate(utcDatePart(from), -1)}`);
 	}
 	if (to !== undefined) {
 		if (to.includes("T")) widened = true;
-		operators.push(`before:${shiftDate(datePart(to), 1)}`);
+		operators.push(`before:${shiftDate(utcDatePart(to), 1)}`);
 	}
 	return { operators, widened };
 }

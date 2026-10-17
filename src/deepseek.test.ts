@@ -89,6 +89,12 @@ describe("DeepSeekProvider", () => {
 		expect(plan.appliedOptions).toContain("dateRange");
 	});
 
+	it("derives operator days from UTC instants", () => {
+		// Both instants are 2026-01-02T04:00Z, so the provider window must cover Jan 2 even though the written date is Jan 1.
+		const plan = buildDeepSeekRequest({ query: "q", dateRange: { from: "2026-01-01T23:00:00-05:00", to: "2026-01-01T23:00:00-05:00" } });
+		expect(plan.body.query).toBe("q after:2026-01-01 before:2026-01-03");
+	});
+
 	it("names the image-result control before the generic content-type rejection", async () => {
 		await expect(provider().search({ query: "q", searchContentTypes: ["image"], imageSettings: { caption: true } }, new AbortController().signal, {})).rejects.toThrow(/image result settings/);
 	});
