@@ -8,6 +8,10 @@ A standalone, provider-neutral web search and fetching extension for Pi.
 pi install npm:@nijaru/pi-search
 ```
 
+To upgrade an existing install, reinstall an explicit published version
+(`pi install npm:@nijaru/pi-search@<version>`) and restart Pi. Pi leaves an
+exact version pin in its extension settings unchanged during `pi update`.
+
 ## Status
 
 The cost-controlled core is implemented. The extension exposes exactly three
