@@ -1,6 +1,7 @@
 import { createAnthropicProvider } from "../src/anthropic";
 import { BraveQuotaTracker, createBraveProvider } from "../src/brave";
 import { createBraveAnswersProvider } from "../src/brave-answers";
+import { createDeepSeekProvider } from "../src/deepseek";
 import { createExaProvider } from "../src/exa";
 import { createCloudflareProvider, type CloudflareUpstream } from "../src/cloudflare";
 import { createGeminiProvider } from "../src/gemini";
@@ -18,7 +19,7 @@ const LIVE_QUERY = "IANA protocol parameters";
 const LIVE_DOMAIN = "iana.org";
 const LIVE_MAX_RESULTS = 3;
 const LIVE_TIMEOUT_MS = 30_000;
-const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "brave-answers", "exa", "cloudflare", "parallel", "parallel-responses"] as const;
+const PROVIDERS = ["openai", "openai-codex", "gemini", "xai", "xai-x", "anthropic", "meta", "x", "brave", "brave-answers", "exa", "deepseek", "cloudflare", "parallel", "parallel-responses"] as const;
 type SmokeProvider = (typeof PROVIDERS)[number];
 
 function env(name: string): string | undefined {
@@ -120,6 +121,10 @@ function providerFor(id: SmokeProvider): { readonly provider: Provider; readonly
 			const key = required("PI_SEARCH_LIVE_EXA_API_KEY");
 			return { provider: createExaProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_EXA_API_KEY"] };
 		}
+		case "deepseek": {
+			const key = required("PI_SEARCH_LIVE_DEEPSEEK_API_KEY");
+			return { provider: createDeepSeekProvider({ apiKey: key }), context: {}, secret: key, requiredEnv: ["PI_SEARCH_LIVE_DEEPSEEK_API_KEY"] };
+		}
 		case "cloudflare": {
 			const token = required("PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN");
 			return { provider: createCloudflareProvider({
@@ -165,7 +170,7 @@ function assertEvidence(response: SearchResponse, provider: SmokeProvider): void
 		if (result.url.length > 8_192 || result.searchQuery !== LIVE_QUERY || result.domain !== url.hostname.toLowerCase().replace(/\.$/, "")) {
 			throw new Error("provider returned unbounded or inconsistent normalized evidence");
 		}
-		if (["openai", "openai-codex", "xai", "brave", "exa"].includes(provider) && !domainMatches(url.hostname, LIVE_DOMAIN)) {
+		if (["openai", "openai-codex", "xai", "brave", "exa", "deepseek"].includes(provider) && !domainMatches(url.hostname, LIVE_DOMAIN)) {
 			throw new Error(`${provider} returned a result outside the requested ${LIVE_DOMAIN} domain`);
 		}
 	}
@@ -188,7 +193,7 @@ function printDryRun(provider: SmokeProvider): void {
 		required: Object.fromEntries(requiredEnv.map((name) => [name, env(name) !== undefined])),
 		query: LIVE_QUERY,
 		maxResults: LIVE_MAX_RESULTS,
-		domainFilter: ["openai", "openai-codex", "xai", "brave", "exa"].includes(provider),
+		domainFilter: ["openai", "openai-codex", "xai", "brave", "exa", "deepseek"].includes(provider),
 	}, null, 2));
 }
 
@@ -204,7 +209,7 @@ async function main(): Promise<void> {
 	const request: SearchRequest = {
 		query: LIVE_QUERY,
 		maxResults: LIVE_MAX_RESULTS,
-		...( ["openai", "openai-codex", "xai", "brave", "exa"].includes(providerId) ? { domains: { include: [LIVE_DOMAIN] } } : {}),
+		...( ["openai", "openai-codex", "xai", "brave", "exa", "deepseek"].includes(providerId) ? { domains: { include: [LIVE_DOMAIN] } } : {}),
 	};
 	const response = await executeSearch(selected.provider, request, { timeoutMs: LIVE_TIMEOUT_MS, context: selected.context });
 	assertEvidence(response, providerId);
@@ -229,6 +234,7 @@ function secretFor(provider: string): string {
 					: provider === "x" ? "PI_SEARCH_LIVE_X_API_BEARER_TOKEN"
 						: provider === "brave" ? "PI_SEARCH_LIVE_BRAVE_API_KEY"
 						: provider === "exa" ? "PI_SEARCH_LIVE_EXA_API_KEY"
+							: provider === "deepseek" ? "PI_SEARCH_LIVE_DEEPSEEK_API_KEY"
 							: provider === "parallel" ? "PI_SEARCH_LIVE_PARALLEL_API_KEY" : "";
 	return env(name) ?? "";
 }

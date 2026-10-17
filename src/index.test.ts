@@ -32,4 +32,23 @@ describe("extension registration", () => {
 			});
 		}
 	});
+
+	it("exposes DeepSeek only when its key is present", () => {
+		const previous = process.env.DEEPSEEK_API_KEY;
+		try {
+			for (const value of [undefined, "   ", "test-key"] as const) {
+				if (value === undefined) delete process.env.DEEPSEEK_API_KEY;
+				else process.env.DEEPSEEK_API_KEY = value;
+				const enums: string[][] = [];
+				extension({ registerTool(tool: { name: string; parameters: { properties: { provider?: { enum: string[] } } } }) {
+					if (tool.name !== "web_fetch") enums.push(tool.parameters.properties.provider!.enum);
+				} } as never);
+				expect(enums).toHaveLength(2);
+				for (const values of enums) expect(values.includes("deepseek")).toBe(value === "test-key");
+			}
+		} finally {
+			if (previous === undefined) delete process.env.DEEPSEEK_API_KEY;
+			else process.env.DEEPSEEK_API_KEY = previous;
+		}
+	});
 });

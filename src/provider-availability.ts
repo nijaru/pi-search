@@ -13,6 +13,7 @@ export interface ProviderHintAvailability {
 	readonly brave?: boolean;
 	readonly braveAnswers?: boolean;
 	readonly exa?: boolean;
+	readonly deepseek?: boolean;
 	readonly cloudflare?: boolean;
 	readonly parallel?: boolean;
 	readonly parallelResponses?: boolean;
@@ -30,6 +31,7 @@ export function availableProviderHints(availability: ProviderHintAvailability): 
 		|| (id === "brave" && availability.brave === true)
 		|| (id === "brave-answers" && availability.braveAnswers === true)
 		|| (id === "exa" && availability.exa === true)
+		|| (id === "deepseek" && availability.deepseek === true)
 		|| (id === "cloudflare" && availability.cloudflare === true)
 		|| (id === "parallel" && availability.parallel === true)
 		|| (id === "parallel-responses" && availability.parallelResponses === true)

@@ -3,6 +3,7 @@ import { createAnthropicProvider } from "./anthropic";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
 import { createBraveAnswersProvider } from "./brave-answers";
 import { createCodexProvider } from "./codex";
+import { createDeepSeekProvider } from "./deepseek";
 import { createExaProvider } from "./exa";
 import { createCloudflareProvider, type CloudflareUpstream } from "./cloudflare";
 import { createGeminiProvider } from "./gemini";
@@ -20,9 +21,9 @@ import { registerWebSearch } from "./search-tool";
 
 /**
  * Native grounding is selected for supported active models. Exa is the
- * metered non-native default only when explicitly allowed; Brave is the paced
- * last-resort keyword path. Automatic availability failures may use one
- * visible fallback.
+ * metered non-native default only when explicitly allowed, DeepSeek is the
+ * cheaper second metered path, and Brave is the paced last-resort keyword
+ * path. Automatic availability failures may use one visible fallback.
  */
 export default function (pi: ExtensionAPI): void {
 	const braveKey = process.env.BRAVE_API_KEY;
@@ -40,9 +41,11 @@ export default function (pi: ExtensionAPI): void {
 	const anthropic = createAnthropicProvider();
 	const meta = createMetaProvider();
 	const exaKey = process.env.EXA_API_KEY;
+	const deepseekKey = process.env.DEEPSEEK_API_KEY;
 	const parallelKey = process.env.PARALLEL_API_KEY;
 	const xToken = process.env.X_API_BEARER_TOKEN;
 	const exa = createExaProvider({ apiKey: exaKey });
+	const deepseek = createDeepSeekProvider({ apiKey: deepseekKey });
 	const cloudflareUpstream = process.env.PI_SEARCH_CLOUDFLARE_PROVIDER;
 	const cloudflareAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
 	const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
@@ -79,6 +82,7 @@ export default function (pi: ExtensionAPI): void {
 		anthropic,
 		meta,
 		exa,
+		deepseek,
 		cloudflare,
 		cloudflareConfigured,
 		parallel,
@@ -88,6 +92,7 @@ export default function (pi: ExtensionAPI): void {
 		brave,
 		braveConfigured: braveKey !== undefined && braveKey.trim().length > 0,
 		exaConfigured: exaKey !== undefined && exaKey.trim().length > 0,
+		deepseekConfigured: deepseekKey !== undefined && deepseekKey.trim().length > 0,
 		parallelConfigured: parallelKey !== undefined && parallelKey.trim().length > 0,
 		parallelResponsesConfigured: parallelResponsesEnabled,
 		braveAnswersConfigured: braveAnswersEnabled,
@@ -102,6 +107,7 @@ export default function (pi: ExtensionAPI): void {
 		brave: braveKey !== undefined && braveKey.trim().length > 0,
 		braveAnswers: braveAnswersEnabled,
 		exa: exaKey !== undefined && exaKey.trim().length > 0,
+		deepseek: deepseekKey !== undefined && deepseekKey.trim().length > 0,
 		cloudflare: cloudflareConfigured,
 		parallel: parallelKey !== undefined && parallelKey.trim().length > 0,
 		parallelResponses: parallelResponsesEnabled,

@@ -54,6 +54,7 @@ hidden fan-out, or provider comparisons.
 | Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
+| DeepSeek | Cheaper second metered direct path for non-native/local models | Automatic only when metered routing is allowed; second metered candidate after Exa and preferred over Brave once metering is permitted; explicit `deepseek` hints are intentional | `DEEPSEEK_API_KEY` |
 | Cloudflare | Gateway to explicitly configured Ceramic, Exa, or Linkup | Explicit `cloudflare` only; stored BYOK or prepaid gateway credits; never automatic | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PI_SEARCH_CLOUDFLARE_PROVIDER` |
 | Parallel | Objective-oriented search and excerpts; `auto`/`keyword`/`fresh` map to the `fast`/`basic`/`advanced` tiers | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
@@ -78,7 +79,11 @@ Exa is the automatic semantic option for local and other models when the
 billing policy permits metered use because it returns useful highlights and
 source evidence. `PI_SEARCH_PREFER_FREE=1` makes admitted Brave the first
 non-native path while retaining Exa as a fallback. Free-only mode never
-silently dispatches Exa; explicit Exa hints remain user-directed. Parallel is
+silently dispatches Exa; explicit Exa hints remain user-directed. DeepSeek is
+the cheaper second metered path ($0.75 per 1K successful requests): it is
+ordered after Exa because independent quality evidence for its index is not
+collected yet, and before Brave whenever metered routing is already allowed.
+Explicit DeepSeek hints work regardless of the billing policy. Parallel is
 an objective-oriented provider whose `fast` tier is the recommended agent
 default and whose `advanced` tier suits multi-hop depth; both Exa and Parallel
 are retained because their evidence shapes are complementary (semantic
@@ -116,7 +121,8 @@ quality first, cost second, latency last.
   results bundled since March 2026 (highlights we already request are now
   included); Deep Search \$12–15 per 1K. Brave: \$5 per 1K with \$5 monthly free
   credits. Perplexity Sonar Pro is token-metered (\$3/\$15 per 1M) plus
-  per-request search fees.
+  per-request search fees. DeepSeek Search is \$0.75 per 1K successful requests
+  (verified 2026-10-17 against DeepSeek's pricing page).
 - **No local quality smoke.** Published independent evaluations measure
   quality better than a handful of local corpus calls could; a local smoke run
   cannot meaningfully measure answer quality. Live provider checks are for
@@ -150,6 +156,32 @@ contractual concern, not a legal determination. Provider-side ZDR does not
 grant user retention rights; Cloudflare's launch announcement and provider
 table also disagree on Exa's ZDR status.
 
+## DeepSeek Search posture (2026-10-17)
+
+DeepSeek exposes two distinct web capabilities. The standalone Search API
+(`POST https://api.deepseek.com/v1/tools/search`) returns structured ranked
+results with `title`, `url`, `snippet`, a 600–800 character `summary`, an
+optional publication `date`, `authority`, and a 0–3 `rerank_score`. It accepts
+`count` 1–50, `need_content`, `ori_question`, `localization`, and documented
+operators: `site:`, `-site:`, `lang:`, `after:`, `before:`, quoted phrases, and
+term exclusions. Queries are capped at 128 characters, including operators.
+Pricing is $0.75 per 1K successful requests; the Fetch API is priced the same
+but is not integrated because local `web_fetch` already covers bounded
+extraction without a per-request fee. Server-side tool calls made through
+DeepSeek Harness, Claude Code, or Codex are free until 2026-11-01, after which
+the same per-request rate applies.
+
+The Responses API also supports a server-side `web_search` tool, but only for
+`deepseek-v4-pro`. Pi's model catalog exposes DeepSeek solely as
+`openai-completions`, so `selectModelExecution` cannot resolve a
+`deepseek`/`openai-responses` execution model. Registering a model-mediated
+adapter anyway would mean sending a Responses request from a chat-completions
+model record, which the routing contracts exist to prevent. The direct Search
+API also fits this package's evidence-first contract better: it returns
+structured sources rather than an answer whose citations would have to become
+results. Native DeepSeek grounding can be added later if Pi's catalog exposes
+a Responses-API DeepSeek model.
+
 ## Search constraints
 
 Unsupported hard constraints are rejected or surfaced:
@@ -174,6 +206,12 @@ Unsupported hard constraints are rejected or surfaced:
   adapter sends for `auto`), `basic`, and `advanced`.
 - Exa applies domain and published-date filters; Brave applies domain filters
   and returns normalized evidence.
+- DeepSeek accepts domain and publication-date constraints only as documented
+  query operators (`site:`, `-site:`, `after:`, `before:`). The adapter widens
+  day-granularity bounds by one day so the requested inclusive range is
+  contained, and warns when time-of-day precision is lost. Social, media,
+  location, context-size, token-budget, and live-access controls are rejected,
+  and a composed query over 128 characters is rejected before dispatch.
 - Official X recent search maps bounded date ranges and handle operators; it
   does not provide provider-side image/video understanding.
 

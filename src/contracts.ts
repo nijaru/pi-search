@@ -566,6 +566,7 @@ export type ProviderId =
 	| "gemini"
 	| "brave"
 	| "exa"
+	| "deepseek"
 	| "cloudflare"
 	| "parallel"
 	| "parallel-responses"
@@ -584,6 +585,7 @@ export const SEARCH_PROVIDER_HINT_IDS = [
 	"gemini",
 	"brave",
 	"exa",
+	"deepseek",
 	"cloudflare",
 	"parallel",
 	"parallel-responses",

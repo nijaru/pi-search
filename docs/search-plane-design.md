@@ -36,7 +36,9 @@ not only on the active model:
    a compatible registry model through `executionModel` without changing the
    active model;
 5. configured Exa is the automatic direct path for other models only when
-   metered search is allowed; an explicit Exa hint is always intentional;
+   metered search is allowed; an explicit Exa hint is always intentional.
+   Configured DeepSeek is the cheaper second metered path, ordered after Exa
+   and before Brave;
 6. configured Brave is the automatic direct path in free-only mode, or the
    preferred path under `PI_SEARCH_PREFER_FREE=1`, when its free-mode admission
    policy allows it;

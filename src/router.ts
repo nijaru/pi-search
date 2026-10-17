@@ -17,6 +17,7 @@ export interface SearchRouterOptions {
 	readonly meta?: Provider;
 	readonly brave?: Provider;
 	readonly exa?: Provider;
+	readonly deepseek?: Provider;
 	readonly cloudflare?: Provider;
 	readonly parallel?: Provider;
 	readonly parallelResponses?: Provider;
@@ -25,6 +26,7 @@ export interface SearchRouterOptions {
 	/** Credential presence is supplied by the construction boundary. */
 	readonly braveConfigured?: boolean;
 	readonly exaConfigured?: boolean;
+	readonly deepseekConfigured?: boolean;
 	readonly cloudflareConfigured?: boolean;
 	readonly parallelConfigured?: boolean;
 	readonly parallelResponsesConfigured?: boolean;
@@ -129,16 +131,41 @@ function selection(provider: Provider, automatic: boolean, fallbacks: readonly P
 	return { provider, automatic, fallbacks: fallbacks.slice(0, 1) };
 }
 
+/**
+ * Metered direct providers in selection order, gated by the billing policy.
+ * Exa comes first because it has current independent quality evidence;
+ * DeepSeek is the cheaper second candidate.
+ */
+function meteredCandidates(request: SearchRequest, options: SearchRouterOptions, policy: SearchBillingPolicy): readonly Provider[] {
+	if (policy === "free-only") return [];
+	const candidates: Provider[] = [];
+	if (options.exaConfigured === true && options.exa !== undefined && canServe(options.exa, request)) candidates.push(options.exa);
+	if (options.deepseekConfigured === true && options.deepseek !== undefined && canServe(options.deepseek, request)) candidates.push(options.deepseek);
+	return candidates;
+}
+
+/** A Brave path this request and policy permit, ignoring any quota window. */
+function braveCandidate(request: SearchRequest, options: SearchRouterOptions, policy: SearchBillingPolicy): Provider | undefined {
+	const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
+	if (options.braveConfigured !== true || options.brave === undefined || !braveAllowed) return undefined;
+	return canServe(options.brave, request) ? options.brave : undefined;
+}
+
+function directCandidates(request: SearchRequest, options: SearchRouterOptions, policy: SearchBillingPolicy): readonly Provider[] {
+	const brave = braveCandidate(request, options, policy);
+	return [
+		...meteredCandidates(request, options, policy),
+		...(brave !== undefined && options.braveCapacity?.canAttempt() !== false ? [brave] : []),
+	];
+}
+
 function directFallback(
 	primary: Provider,
 	request: SearchRequest,
 	options: SearchRouterOptions,
 	policy: SearchBillingPolicy,
 ): readonly Provider[] {
-	if (policy !== "free-only" && primary.id !== "exa" && options.exaConfigured === true && options.exa !== undefined && canServe(options.exa, request)) return [options.exa];
-	const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
-	if (primary.id !== "brave" && options.braveConfigured === true && options.brave !== undefined && braveAllowed && options.braveCapacity?.canAttempt() !== false && canServe(options.brave, request)) return [options.brave];
-	return [];
+	return directCandidates(request, options, policy).filter((provider) => provider.id !== primary.id).slice(0, 1);
 }
 
 function checkBraveCapacity(options: SearchRouterOptions): void {
@@ -190,6 +217,11 @@ function explicitProvider(
 		if (options.exa === undefined || options.exaConfigured !== true) return unavailable("Exa search is not configured", provider);
 		if (!canServe(options.exa, request)) return unavailable("Exa cannot satisfy the requested search constraints", provider);
 		return selection(options.exa, false);
+	}
+	if (provider === "deepseek") {
+		if (options.deepseek === undefined || options.deepseekConfigured !== true) return unavailable("DeepSeek search is not configured", provider);
+		if (!canServe(options.deepseek, request)) return unavailable("DeepSeek cannot satisfy the requested search constraints", provider);
+		return selection(options.deepseek, false);
 	}
 	if (provider === "cloudflare") {
 		if (options.cloudflare === undefined || options.cloudflareConfigured !== true) return unavailable("Cloudflare search is not configured; set its account ID, API token, and explicit upstream", provider);
@@ -277,28 +309,35 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		}
 
 		const exaConfigured = options.exaConfigured === true;
-		const exaAllowed = policy !== "free-only";
-		const exaCanMatchMode = exaAllowed && options.exa !== undefined && canServe(options.exa, normalized);
-
-		const braveCanMatchMode = options.brave !== undefined && canServe(options.brave, normalized);
+		const meteredAllowed = policy !== "free-only";
+		const deepseekConfigured = options.deepseekConfigured === true;
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
-		// prefer-free chooses the admitted Brave path before a metered Exa call.
-		if (policy === "prefer-free" && braveCanMatchMode && braveConfigured && braveAllowed && options.braveCapacity?.canAttempt() !== false) {
+		const brave = braveCandidate(normalized, options, policy);
+		// prefer-free chooses the admitted Brave path before any metered call.
+		if (policy === "prefer-free" && brave !== undefined && options.braveCapacity?.canAttempt() !== false) {
 			checkBraveCapacity(options);
-			return selection(options.brave!, true);
+			return selection(brave, true);
 		}
-		if (exaConfigured && exaCanMatchMode) return selection(options.exa!, true, directFallback(options.exa!, normalized, options, policy));
-		if (braveCanMatchMode && braveConfigured && braveAllowed) {
+		const metered = meteredCandidates(normalized, options, policy);
+		if (metered[0] !== undefined) {
+			const fallback = metered[1] ?? (brave !== undefined && options.braveCapacity?.canAttempt() !== false ? brave : undefined);
+			return selection(metered[0], true, fallback === undefined ? [] : [fallback]);
+		}
+		if (brave !== undefined) {
 			checkBraveCapacity(options);
-			return selection(options.brave!, true);
+			return selection(brave, true);
 		}
 		// No direct provider was eligible; name the hard constraints the
 		// configured providers could not honor instead of blaming the retrieval
 		// mode, which never blocks selection on its own.
-		if (exaAllowed && exaConfigured && options.exa !== undefined) {
+		if (meteredAllowed && exaConfigured && options.exa !== undefined) {
 			const unmet = unmetConstraintNames(normalized);
 			return unavailable(`Exa cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "exa");
+		}
+		if (meteredAllowed && deepseekConfigured && options.deepseek !== undefined) {
+			const unmet = unmetConstraintNames(normalized);
+			return unavailable(`DeepSeek cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "deepseek");
 		}
 		if (braveConfigured && !braveAllowed) return unavailable("Brave is configured but free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "router");
 		if (braveConfigured && options.brave !== undefined) {

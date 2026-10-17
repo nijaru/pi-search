@@ -6,7 +6,8 @@ Standalone Pi extension for provider-neutral web search and content fetching.
 
 The cost-controlled core is implemented. `src/index.ts` registers the three
 public tools: `web_search`, `web_fetch`, and `web_research`. Shipped search
-adapters cover OpenAI/Codex, Gemini, xAI web/X, Brave, Exa, and Parallel.
+adapters cover OpenAI/Codex, Gemini, xAI web/X, Brave, Exa, DeepSeek, and
+Parallel.
 Direct fetching includes bounded HTTP, SSRF/redirect protection, local HTML
 extraction, PDF text, and YouTube captions.
 

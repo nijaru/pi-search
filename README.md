@@ -32,6 +32,9 @@ Pi tools:
   automatically.
 - Other/local models use configured Exa automatically only when metered search
   is allowed; Exa returns semantic results with excerpts and reported usage.
+  Configured DeepSeek is the cheaper second metered path (structured dates and
+  excerpts through `site:`/`after:`/`before:` operators), selected after Exa
+  under metered routing.
 - In free-only mode, configured Brave is the conservative paced keyword/fresh
   path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered Exa.
   Parallel, Cloudflare Web Search, and the official X API remain explicit providers.
@@ -55,11 +58,13 @@ registered only when their key is present at construction, an unset
 variable simply leaves that provider disabled.
 
 ```bash
-# Optional metered semantic search for non-native/local models
+# Optional metered search for non-native/local models
 export EXA_API_KEY=...
-# Allow Exa (and deliberate metered fallback) in automatic routing:
+# Cheaper second metered path; selected after Exa when metered routing is allowed.
+export DEEPSEEK_API_KEY=...            # $0.75 per 1K successful requests
+# Allow metered providers (Exa, DeepSeek) in automatic routing:
 # export PI_SEARCH_ALLOW_METERED=1
-# Prefer admitted free-mode Brave before Exa, but allow Exa if Brave is absent:
+# Prefer admitted free-mode Brave before metered providers:
 # export PI_SEARCH_PREFER_FREE=1
 
 # Optional last-resort keyword/fresh search
@@ -70,7 +75,7 @@ export BRAVE_API_KEY=...
 # metered Brave with the opt-in below.
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
-# Explicit `provider: "exa"` remains an intentional per-call opt-in.
+# Explicit `provider: "exa"` or `"deepseek"` remains an intentional per-call opt-in.
 
 # Explicit secondary providers
 export PARALLEL_API_KEY=...
@@ -99,9 +104,11 @@ model alias rather than full Flash/Pro or legacy model IDs. Explicit
 compatible registry model with `executionModel` even when another model is
 active; this makes model and billing choice visible. Pi's `/login xai` subscription flow is supported by the
 registry for Grok web/X search. A provider hint such as `provider: "exa"`,
-`"parallel"`, or `"x"` is strict and never falls through to another provider.
+`"deepseek"`, `"parallel"`, or `"x"` is strict and never falls through to
+another provider.
 Without a hint, the router selects available native search first, then Exa,
-then Brave when the corresponding credentials and hard constraints permit it.
+then DeepSeek, then Brave when the corresponding credentials and hard
+constraints permit it.
 Set `includeContent: true` on `web_search` only when bounded excerpts from
 selected source pages are needed; this reuses the safe local fetch path. For
 `web_research`, use `executionModel` with an explicit model-mediated `provider`
@@ -140,6 +147,19 @@ restrict result retention and extractability in ways that appear incompatible
 with saved/exportable Pi transcripts unless contractually permitted. Clarify
 those rights before using Ceramic. Zero Data Retention describes provider
 handling, not permission to retain results yourself.
+
+### DeepSeek Search
+
+DeepSeek Search is a direct metered provider (`provider: "deepseek"`). The
+adapter composes domain and inclusive publication-date filters into DeepSeek's
+documented `site:`, `-site:`, `after:`, and `before:` query operators, and
+requests the model-oriented summary rather than full page content; readable
+pages remain `web_fetch`'s job. DeepSeek caps queries at 128 characters
+including those operators, so a long filtered query is rejected before
+dispatch instead of being truncated. Requests that need social, media,
+location, context-size, token-budget, or live-access controls are rejected
+rather than degraded. Date operators have day granularity, so time-of-day
+components are widened to whole days and reported as a warning.
 
 ### Local and virtual models
 

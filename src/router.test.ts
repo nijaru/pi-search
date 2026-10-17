@@ -31,6 +31,7 @@ describe("search provider router", () => {
 	const nativeGemini = provider("gemini", { freshness: true, semantic: true }, "modelRegistry");
 	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true }, "modelRegistry");
 	const exa = provider("exa", { keyword: true, freshness: true, semantic: true, domainFilter: true, dateFilter: true });
+	const deepseek = provider("deepseek", { keyword: true, freshness: true, excerpts: true, domainFilter: true, dateFilter: true });
 	const parallel = provider("parallel", { keyword: true, freshness: true, semantic: true });
 	const x = provider("x", { keyword: true, freshness: true, excerpts: true, social: true });
 	const brave = provider("brave", { keyword: true, freshness: true, domainFilter: true });
@@ -64,6 +65,38 @@ describe("search provider router", () => {
 	it("does not automatically spend configured Exa in free-only mode", () => {
 		const route = createSearchRouter({ exa, exaConfigured: true });
 		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/No eligible search provider/);
+	});
+
+	it("uses DeepSeek as the automatic metered path when it is the only configured direct provider", () => {
+		const route = createSearchRouter({ deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
+		const selected = route({ query: "q", mode: "keyword" }, context("anthropic"));
+		expect(selected.provider.id).toBe("deepseek");
+		expect(selected.automatic).toBe(true);
+		const fallback = createSearchRouter({ deepseek, deepseekConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(fallback({ query: "q" }, context("anthropic")).fallbacks.map((item) => item.id)).toEqual(["brave"]);
+	});
+
+	it("keeps Exa ahead of DeepSeek and uses DeepSeek as the bounded fallback", () => {
+		const route = createSearchRouter({ exa, exaConfigured: true, deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
+		const selected = route({ query: "q" }, context("anthropic"));
+		expect(selected.provider.id).toBe("exa");
+		expect(selected.fallbacks.map((item) => item.id)).toEqual(["deepseek"]);
+	});
+
+	it("does not automatically spend configured DeepSeek in free-only mode", () => {
+		const route = createSearchRouter({ deepseek, deepseekConfigured: true });
+		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/No eligible search provider/);
+	});
+
+	it("dispatches explicit DeepSeek hints without a billing gate and rejects unconfigured ones", () => {
+		const route = createSearchRouter({ deepseek, deepseekConfigured: true });
+		expect(route({ query: "q", providerHint: "deepseek" }, context("anthropic"))).toEqual({ provider: deepseek, automatic: false, fallbacks: [] });
+		expect(() => createSearchRouter({ deepseek })({ query: "q", providerHint: "deepseek" }, context("anthropic"))).toThrow(/DeepSeek search is not configured/);
+	});
+
+	it("names DeepSeek's unsatisfiable constraints when it is the only direct provider", () => {
+		const route = createSearchRouter({ deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
+		expect(() => route({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/DeepSeek cannot satisfy the requested social\/X constraints/);
 	});
 
 	it("prefers admitted Brave over metered Exa", () => {

@@ -33,6 +33,7 @@ Shipped search adapters:
 | Anthropic grounding | Active Anthropic Messages model | `anthropic` plus optional `executionModel` | Allowed or blocked domains (not both), user location; tool-result errors surface |
 | Meta grounding | Active Meta Responses model | `meta` plus optional `executionModel` | Responses-compatible web_search; domain/date/social/context controls unverified and rejected |
 | Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
+| DeepSeek | Other/local model when metered routing is allowed, after Exa and before Brave | `deepseek` | Keyword/fresh web index with dates, excerpts, and domain/date query operators; social/media/context controls rejected |
 | Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
 | Parallel | — | `parallel` with configured key | Search objective/excerpts on the GA tiers (`auto`→`fast`, `keyword`→`basic`, `fresh`→`advanced`); include/exclude domain policies and lower date bound |
 | Parallel Responses | — | `parallel-responses` behind `PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1` | Grounded answer with `url_citation` spans; `searchContextSize` selects the low/medium/high reasoning tier; no hard filters |
@@ -63,11 +64,15 @@ at most one visible fallback:
 4. Exa for other models when `EXA_API_KEY` exists, metered search is allowed,
    and its hard constraints are supported. Exa supplies semantic retrieval,
    highlights, and reported cost. An explicit Exa hint is always intentional.
+   DeepSeek is the cheaper second metered path, used when Exa is absent or
+   after a safe Exa failure; it supplies structured dates and summaries
+   through documented query operators. An explicit DeepSeek hint is always
+   intentional.
 5. In free-only mode, Brave is the automatic direct path when
    `BRAVE_API_KEY` exists. It uses conservative free-mode admission by default
    (1 RPS local pacing plus observed quota windows). `PI_SEARCH_PREFER_FREE=1`
-   prefers Brave before metered Exa; `PI_SEARCH_ALLOW_METERED=1` permits
-   automatic Exa and deliberately metered Brave.
+   prefers Brave before metered providers; `PI_SEARCH_ALLOW_METERED=1` permits
+   automatic Exa, DeepSeek, and deliberately metered Brave.
 6. Parallel and official X API remain explicit until their quality/role
    evaluation justifies default routing.
 

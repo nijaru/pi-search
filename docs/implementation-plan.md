@@ -17,7 +17,8 @@ This is the tracked source of truth for implementation order.
   when another model is active.
 - Exa is the automatic non-native path only when metered search is allowed;
   `PI_SEARCH_PREFER_FREE=1` prefers admitted Brave before Exa, while free-only
-  mode keeps Exa explicit and Brave paced.
+  mode keeps Exa explicit and Brave paced. DeepSeek is the cheaper second
+  metered path, ordered after Exa and before Brave.
 - Automatic routing permits one visible fallback only after an authentication,
   rate-limit, or unavailable failure known not to have produced a billable
   result; explicit provider hints never fall through.
@@ -45,6 +46,7 @@ Shipped routing now covers:
 - xAI web grounding and explicit X grounding, including bounded X handle/date/
   media constraints and registry model selection;
 - Exa for configured non-native semantic search;
+- DeepSeek for cheap metered keyword/fresh search with structured dates;
 - Brave for free-capacity or explicitly metered last-resort keyword search; and
 - explicit, metered Parallel and official X adapters.
 
@@ -76,6 +78,7 @@ The OpenAI and Codex paths are hardened with:
 ## 6. Additional providers — complete for the current release
 
 - Exa semantic search with highlights, domains, request IDs, and reported cost.
+- DeepSeek Search with `site:`/date operator mapping, model-oriented summaries, dates, and per-request cost estimates.
 - Parallel Search API objective/excerpt normalization with explicit domain
   limitation.
 - Gemini grounding source extraction through Pi model-registry auth.
@@ -168,7 +171,7 @@ The required workflow classification is recorded in
 `ai/research/required-workflows.md`. The shared hard-constraint, metadata,
 trust-fence, and Codex smoke fixes are complete. Offline fixtures cover every
 required row; a fresh Pi Codex call and installed registration passed. Gemini,
-xAI, Brave, Exa, Parallel, and official X API live rows are marked skipped
+xAI, Brave, Exa, DeepSeek, Parallel, and official X API live rows are marked skipped
 because dedicated credentials are not available, not because their behavior
 was guessed.
 

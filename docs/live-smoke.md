@@ -23,8 +23,8 @@ command line.
 
 Use `--provider=<id>` instead of `PI_SEARCH_LIVE_PROVIDER` when preferred. The
 supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`,
-`anthropic`, `meta`, `x`, `brave`, `brave-answers`, `exa`, `cloudflare`,
-`parallel`, and `parallel-responses`.
+`anthropic`, `meta`, `x`, `brave`, `brave-answers`, `exa`, `deepseek`,
+`cloudflare`, `parallel`, and `parallel-responses`.
 
 ## Credentials
 
@@ -39,6 +39,7 @@ supported IDs are `openai`, `openai-codex`, `gemini`, `xai`, `xai-x`,
 | `x` | `PI_SEARCH_LIVE_X_API_BEARER_TOKEN` |
 | `brave` | `PI_SEARCH_LIVE_BRAVE_API_KEY` |
 | `exa` | `PI_SEARCH_LIVE_EXA_API_KEY` |
+| `deepseek` | `PI_SEARCH_LIVE_DEEPSEEK_API_KEY` |
 | `parallel`, `parallel-responses` | `PI_SEARCH_LIVE_PARALLEL_API_KEY` |
 | `brave-answers` | `PI_SEARCH_LIVE_BRAVE_API_KEY` |
 | `cloudflare` | `PI_SEARCH_LIVE_CLOUDFLARE_API_TOKEN`, `PI_SEARCH_LIVE_CLOUDFLARE_ACCOUNT_ID`, `PI_SEARCH_LIVE_CLOUDFLARE_PROVIDER` |

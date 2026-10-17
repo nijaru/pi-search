@@ -23,6 +23,12 @@ describe("provider hint availability", () => {
 		expect(hints).not.toContain("brave-answers");
 	});
 
+	it("exposes DeepSeek only when it is configured", () => {
+		expect(availableProviderHints({ deepseek: true })).toContain("deepseek");
+		expect(availableProviderHints({})).not.toContain("deepseek");
+		expect(availableProviderHints({ exa: true })).not.toContain("deepseek");
+	});
+
 	it("keeps the full provider enum when no availability is supplied", () => {
 		const provider: Provider = {
 			id: "brave",
