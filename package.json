@@ -1,6 +1,6 @@
 {
   "name": "@nijaru/pi-search",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Provider-neutral web search and fetching tools for Pi",
   "type": "module",
   "license": "MIT",
