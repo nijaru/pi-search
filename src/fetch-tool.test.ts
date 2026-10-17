@@ -66,13 +66,27 @@ describe("web_fetch tool", () => {
 		expect(whitespaceRendered).not.toContain("Preview truncated; full content is in tool output.");
 	});
 
-	it("shortens long fetch URLs explicitly while retaining bounded output", async () => {
+	it("keeps long fetch URLs complete for the model and shortens only display", async () => {
 		const tool = createWebFetchTool({ lookup, transport });
 		const result = await tool.execute("call-1", { url: "https://example.test/" }, undefined, undefined, {} as never);
 		const longUrl = `https://example.test/${"a".repeat(3_000)}`;
 		const rendered = renderFetchedContent({ ...result.details!, url: longUrl });
-		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
-		expect(rendered).not.toContain(longUrl);
+		expect(rendered).toContain(longUrl);
+		expect(rendered).not.toContain("[URL shortened");
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const tui = renderFetchedResult({ ...result.details!, url: longUrl }, true, theme);
+		expect(tui).toContain("[URL shortened]");
+		expect(tui).not.toContain(longUrl);
+	});
+
+	it("strips terminal controls from fetched titles and previews", async () => {
+		const tool = createWebFetchTool({ lookup, transport });
+		const result = await tool.execute("call-1", { url: "https://example.test/" }, undefined, undefined, {} as never);
+		const details = { ...result.details!, title: "safe\u001b[2Jwiped", content: "body\u001b]8;;https://evil.test\u0007x\u001b]8;;\u001b\\" };
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const rendered = renderFetchedResult(details, true, theme);
+		expect(rendered).not.toContain("\u001b");
+		expect(rendered).not.toContain("evil.test");
 	});
 
 	it("keeps the complete model-visible result within the output bound", async () => {

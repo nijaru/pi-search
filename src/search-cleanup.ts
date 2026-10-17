@@ -6,7 +6,7 @@ export const MAX_SEARCH_EXCERPT_LENGTH = 4_000;
 export const MAX_SEARCH_DOMAIN_LENGTH = 253;
 export const MAX_SEARCH_SOURCE_ID_LENGTH = 500;
 export const MAX_SEARCH_QUERY_LENGTH = 2_000;
-const MAX_SEARCH_ANSWER_LENGTH = 8_000;
+export const MAX_SEARCH_ANSWER_LENGTH = 8_000;
 const MAX_SEARCH_CITATIONS = 20;
 // A run this deep is almost always an accidentally nested URL encoding. Keep
 // one safe path prefix rather than surfacing or fetching the encoded tail.
@@ -121,11 +121,12 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	};
 }
 
-function normalizeAnswer(answer: SearchAnswer | undefined, provider: ProviderId, results: readonly SearchResult[], request: SearchRequest): SearchAnswer | undefined {
+function normalizeAnswer(answer: SearchAnswer | undefined, provider: ProviderId, results: readonly SearchResult[], request: SearchRequest, onTruncated?: () => void): SearchAnswer | undefined {
 	if (answer === undefined || request.answerMode === "evidence") return undefined;
 	// Citation offsets address the exact provider text, including whitespace.
 	if (typeof answer.text !== "string" || answer.text.trim().length === 0) return undefined;
 	const text = answer.text.slice(0, MAX_SEARCH_ANSWER_LENGTH);
+	if (text.length < answer.text.length) onTruncated?.();
 	const resultUrls = new Set(results.map((result) => result.url));
 	const citations: SearchCitation[] = [];
 	for (const citationValue of Array.isArray(answer.citations) ? answer.citations : []) {
@@ -206,7 +207,12 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 	if ((request.domains?.include?.length ?? 0) > 0 || (request.domains?.exclude?.length ?? 0) > 0) {
 		if (!appliedOptions.includes("domains")) appliedOptions.push("domains");
 	}
-	const answer = normalizeAnswer(response.answer, provider, normalizedResults, request);
+	const answer = normalizeAnswer(response.answer, provider, normalizedResults, request, () => {
+		warnings.push({
+			code: "partial-results",
+			message: `Provider answer was truncated to ${MAX_SEARCH_ANSWER_LENGTH} characters`,
+		});
+	});
 	const { answer: _ignoredAnswer, ...responseWithoutAnswer } = response;
 	return {
 		...responseWithoutAnswer,

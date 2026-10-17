@@ -77,6 +77,14 @@ describe("CodexProvider", () => {
 		expect(result.results.map((item) => item.url)).toEqual(["https://example.com/docs", "https://example.org/path/"]);
 	});
 
+	it("keeps balanced parentheses in answer-text URLs", async () => {
+		const provider = new CodexProvider({
+			fetchImpl: async () => response({ output: "See https://en.wikipedia.org/wiki/K2_(mountain).", results: [] }),
+		});
+		const result = await provider.search({ query: "q", maxResults: 4 }, new AbortController().signal, context());
+		expect(result.results.map((item) => item.url)).toEqual(["https://en.wikipedia.org/wiki/K2_(mountain)"]);
+	});
+
 	it("rejects unsupported hard constraints before network access", async () => {
 		let calls = 0;
 		const provider = new CodexProvider({ fetchImpl: async () => { calls += 1; return response({}); } });

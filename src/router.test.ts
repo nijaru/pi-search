@@ -42,6 +42,17 @@ describe("search provider router", () => {
 		expect(route({ query: "q" }, context("openai-codex")).provider.id).toBe("openai-codex");
 	});
 
+	it("keeps a date range on web search instead of switching to X", () => {
+		const route = createSearchRouter({
+			xai: nativeXAI,
+			xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry"),
+			exa,
+			exaConfigured: true,
+			billingPolicy: "allow-configured-metered",
+		});
+		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("xai", "openai-responses")).provider.id).toBe("exa");
+	});
+
 	it("uses an authenticated registry OpenAI model before direct search", () => {
 		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		const selected = route({ query: "q" }, context("openrouter", "openai-completions", [availableModel("openai", "openai-responses")]));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { SearchResponse } from "./contracts";
-import { cleanupSearchResponse, searchUrlIdentity } from "./search-cleanup";
+import { cleanupSearchResponse, MAX_SEARCH_ANSWER_LENGTH, searchUrlIdentity } from "./search-cleanup";
 import { validateSearchRequest } from "./search";
 
 describe("search result cleanup", () => {
@@ -150,5 +150,23 @@ describe("search result cleanup", () => {
 		expect(searchUrlIdentity("https://EXAMPLE.com:443/page#part")).toBe("https://example.com/page");
 		expect(searchUrlIdentity("https://example.com/page")).toBe("https://example.com/page");
 		expect(searchUrlIdentity("file:///tmp/private")).toBeUndefined();
+	});
+
+	it("warns when a provider answer is truncated", () => {
+		const result = cleanupSearchResponse({
+			query: "q",
+			provider: "brave",
+			results: [{ url: "https://example.com/", provider: "brave", searchQuery: "q" }],
+			appliedOptions: [],
+			warnings: [],
+			answer: {
+				text: "a".repeat(MAX_SEARCH_ANSWER_LENGTH + 1),
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [{ url: "https://example.com/" }],
+			},
+		}, validateSearchRequest({ query: "q" }), "brave");
+		expect(result.answer?.text).toHaveLength(MAX_SEARCH_ANSWER_LENGTH);
+		expect(result.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("truncated") }));
 	});
 });

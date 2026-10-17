@@ -129,7 +129,7 @@ export async function fetchContent(
 				: await extractPdfContent(bytes, normalized, controller.signal, options.pdfCommand, options.pdfMaxOutputBytes)
 			: documentCandidate
 				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
-				: await extractWithDeadline(decodeUtf8(bytes), mimeType, normalized, controller.signal);
+				: await extractWithDeadline(decodeText(bytes, contentType, mimeType), mimeType, normalized, controller.signal);
 		const sliced = sliceOutput(extracted.content, normalized.offset, normalized.maxLength);
 		const warnings = [
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
@@ -152,7 +152,7 @@ export async function fetchContent(
 			redirectCount,
 			bytesRead: bytes.byteLength,
 			truncated: sliced.truncated,
-			offset: normalized.offset,
+			offset: sliced.offset,
 			...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
 			totalCharacters: extracted.content.length,
 			warnings,
@@ -391,23 +391,42 @@ async function readBoundedBody(body: ResponseBody | null, maxBytes: number, sign
 	return result;
 }
 
-function sliceOutput(content: string, offset: number, maxLength: number): { content: string; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
-	if (offset >= content.length) return { content: "", truncated: false };
+function isHighSurrogate(code: number): boolean {
+	return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(code: number): boolean {
+	return code >= 0xdc00 && code <= 0xdfff;
+}
+
+/** Keep a slice boundary out of the middle of a UTF-16 surrogate pair. */
+function safeSliceEnd(value: string, end: number): number {
+	return end > 0 && end < value.length && isHighSurrogate(value.charCodeAt(end - 1)) ? end - 1 : end;
+}
+
+function sliceOutput(content: string, requestedOffset: number, maxLength: number): { content: string; offset: number; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
+	// A caller-selected offset may land inside a surrogate pair; skip the low
+	// half so a page never starts with an unpaired code unit.
+	const offset = requestedOffset > 0 && requestedOffset < content.length && isLowSurrogate(content.charCodeAt(requestedOffset))
+		? requestedOffset + 1
+		: requestedOffset;
+	if (offset >= content.length) return { content: "", offset, truncated: false };
 	const requestedEnd = Math.min(content.length, offset + maxLength, MAX_FETCH_OFFSET);
-	const candidate = content.slice(offset, requestedEnd);
+	const candidate = content.slice(offset, safeSliceEnd(content, requestedEnd));
 	const bounded = boundUtf8(candidate, MAX_OUTPUT_BYTES);
 	const consumed = offset + bounded.length;
 	const truncated = consumed < content.length;
 	const pagingLimitReached = truncated && consumed >= MAX_FETCH_OFFSET;
 	return {
 		content: bounded,
+		offset,
 		truncated,
 		...(truncated && !pagingLimitReached ? { nextOffset: consumed } : {}),
 		...(pagingLimitReached ? { pagingLimitReached: true } : {}),
 	};
 }
 
-function boundUtf8(value: string, maxBytes: number): string {
+export function boundUtf8(value: string, maxBytes: number): string {
 	if (new TextEncoder().encode(value).byteLength <= maxBytes) return value;
 	let low = 0;
 	let high = value.length;
@@ -416,14 +435,37 @@ function boundUtf8(value: string, maxBytes: number): string {
 		if (new TextEncoder().encode(value.slice(0, middle)).byteLength <= maxBytes) low = middle;
 		else high = middle - 1;
 	}
-	return value.slice(0, low);
+	return value.slice(0, safeSliceEnd(value, low));
 }
 
 function boundText(value: string, maxLength: number): string {
 	return value.length <= maxLength ? value : value.slice(0, maxLength);
 }
 
-function decodeUtf8(bytes: Uint8Array): string {
+function charsetFromContentType(contentType: string): string | undefined {
+	const match = /(?:^|;)\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType);
+	const label = match?.[1]?.trim().toLowerCase();
+	return label ? label : undefined;
+}
+
+/** Honor an HTML meta charset when the response header omits one. */
+function charsetFromHtml(bytes: Uint8Array): string | undefined {
+	const head = new TextDecoder("latin1" as ConstructorParameters<typeof TextDecoder>[0]).decode(bytes.subarray(0, 2_048));
+	const match = /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head);
+	const label = match?.[1]?.trim().toLowerCase();
+	return label ? label : undefined;
+}
+
+function decodeText(bytes: Uint8Array, contentType: string, mimeType: string): string {
+	const declared = charsetFromContentType(contentType)
+		?? (mimeType === "text/html" || mimeType === "application/xhtml+xml" ? charsetFromHtml(bytes) : undefined);
+	if (declared !== undefined && declared !== "utf-8" && declared !== "utf8") {
+		try {
+			return new TextDecoder(declared as ConstructorParameters<typeof TextDecoder>[0], { fatal: false }).decode(bytes);
+		} catch {
+			// Unknown labels fall back to UTF-8 rather than failing the fetch.
+		}
+	}
 	return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 

@@ -199,6 +199,44 @@ describe("direct content fetch", () => {
 		expect(result.warnings[0]?.code).toBe("truncated");
 	});
 
+	it("honors a non-UTF-8 charset declared by the response", async () => {
+		const latin1 = Uint8Array.from([0x63, 0x61, 0x66, 0xe9]);
+		const result = await fetchContent(
+			{ ...baseRequest, format: "text" },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor("", "text/plain; charset=iso-8859-1", { body: body([latin1]) }) },
+		);
+		expect(result.content).toBe("café");
+	});
+
+	it("never splits a surrogate pair across pages", async () => {
+		const content = "A🙂B🙂C";
+		const first = await fetchContent(
+			{ ...baseRequest, format: "text", maxLength: 2 },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor(content, "text/plain") },
+		);
+		expect(first.content).toBe("A");
+		expect(first.nextOffset).toBe(1);
+		const second = await fetchContent(
+			{ ...baseRequest, format: "text", offset: first.nextOffset!, maxLength: 2 },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor(content, "text/plain") },
+		);
+		expect(second.content).toBe("🙂");
+		expect(`${first.content}${second.content}`).toBe("A🙂");
+	});
+
+	it("advances a caller offset that lands inside a surrogate pair", async () => {
+		const result = await fetchContent(
+			{ ...baseRequest, format: "text", offset: 2, maxLength: 2 },
+			undefined,
+			{ lookup: publicLookup, transport: transportFor("A🙂B", "text/plain") },
+		);
+		expect(result.content).toBe("B");
+		expect(result.offset).toBe(3);
+	});
+
 	it("distinguishes timeout and caller cancellation", async () => {
 		const waiting: DirectTransport = async (_target, init) => new Promise((_resolve, reject) => {
 			init.signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "aborted" })), { once: true });

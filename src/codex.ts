@@ -16,6 +16,7 @@ import { executeGroundedSearch } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
+import { trimUrlPunctuation } from "./url-text";
 
 export const CODEX_SEARCH_ENDPOINT = "https://chatgpt.com/backend-api/codex/alpha/search";
 export const DEFAULT_CODEX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -183,24 +184,10 @@ function sourceFromRecord(value: unknown, query: string): SearchResult | undefin
 	};
 }
 
-function trimExtractedUrl(value: string): string {
-	let candidate = value;
-	while (candidate.length > 0) {
-		const trailing = candidate.match(/[)\]}>.,;:!?\u0027"`]+\/$/);
-		if (trailing !== null) {
-			candidate = candidate.slice(0, -trailing[0].length);
-			continue;
-		}
-		const stripped = candidate.replace(/[)\]}>.,;:!?\u0027"`]+$/, "");
-		if (stripped === candidate) break;
-		candidate = stripped;
-	}
-	return candidate;
-}
 
 function urlsFromText(text: string): readonly string[] {
 	return [...text.matchAll(/https?:\/\/[^\s<>\]]+/gi)]
-		.map((match) => trimExtractedUrl(match[0]!))
+		.map((match) => trimUrlPunctuation(match[0]!))
 		.filter((url) => url.length > 0)
 		.slice(0, 20);
 }

@@ -271,6 +271,18 @@ describe("search boundary", () => {
 		await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
 	});
 
+	it("keeps completed results when source enrichment hits the search deadline", async () => {
+		const tool = createWebSearchTool(makeProvider(async (request) => successResponse(request.query)), {
+			timeoutMs: 30,
+			fetcher: async (_request, signal) => await new Promise<FetchedContent>((_resolve, reject) => {
+				signal?.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
+			}),
+		});
+		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		expect(result.details?.results.length).toBeGreaterThan(0);
+		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("deadline") }));
+	});
+
 	it("classifies the tool deadline as timeout rather than cancellation", async () => {
 		const tool = createWebSearchTool(makeProvider(async (_request, signal) => await new Promise<SearchResponse>((_resolve, reject) => {
 			signal.addEventListener("abort", () => reject(new Error("deadline")), { once: true });
@@ -351,14 +363,14 @@ describe("search boundary", () => {
 		expect(expanded).toContain("Readable source preview");
 	});
 
-	it("bounds rendered source URLs without presenting a shortened URL as exact", () => {
+	it("keeps long source URLs complete for the model and shortens only display", () => {
 		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
 		const rendered = renderSearchResponse({
 			...successResponse(),
 			results: [{ ...successResponse().results[0]!, url: longUrl }],
 		});
-		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
-		expect(rendered).not.toContain(longUrl);
+		expect(rendered).toContain(longUrl);
+		expect(rendered).not.toContain("[URL shortened");
 	});
 
 	it("marks answer links that are not listed search sources", () => {
@@ -387,8 +399,65 @@ describe("search boundary", () => {
 				citations: [{ url: longUrl }],
 			},
 		}, false, theme);
-		expect(collapsed).toContain("[source URL shortened; full URL is in structured details]");
+		expect(collapsed).toContain("[URL shortened]");
 		expect(collapsed).not.toContain("[unlisted source omitted]");
+	});
+
+	it("strips terminal controls from untrusted search evidence", () => {
+		const response = successResponse();
+		const rendered = renderSearchResponse({
+			...response,
+			results: [{ ...response.results[0]!, title: "safe\u001b[2Jwiped", excerpt: "body\u001b]8;;https://evil.test\u0007link\u001b]8;;\u001b\\" }],
+			answer: {
+				text: "answer \u001b[2J",
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [{ url: response.results[0]!.url }],
+			},
+		});
+		expect(rendered).not.toContain("\u001b");
+		expect(rendered).not.toContain("evil.test");
+	});
+
+	it("keeps URLs with balanced parentheses in answers", () => {
+		const url = "https://en.wikipedia.org/wiki/K2_(mountain)";
+		const base = successResponse();
+		const rendered = renderSearchResponse({
+			...base,
+			results: [{ ...base.results[0]!, url }],
+			answer: {
+				text: `See [K2](${url}) for details.`,
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [{ url }],
+			},
+		});
+		expect(rendered).toContain("K2](https://en.wikipedia.org/wiki/K2_(mountain))");
+		expect(rendered).not.toContain("[unlisted source omitted]");
+	});
+
+	it("surfaces source truncation and continuation offsets to the model", () => {
+		const base = successResponse();
+		const rendered = renderSearchResponse({
+			...base,
+			sourceContents: [{
+				url: base.results[0]!.url,
+				title: "Page",
+				content: "x".repeat(100),
+				contentTrust: "untrusted",
+				outputFormat: "text",
+				extraction: "plain-text",
+				fetchedAt: "2026-01-01T00:00:00.000Z",
+				status: 200,
+				redirectCount: 0,
+				bytesRead: 100,
+				truncated: true,
+				offset: 0,
+				nextOffset: 100,
+				warnings: [],
+			}],
+		});
+		expect(rendered).toContain("content truncated; continue at offset 100");
 	});
 
 	it("renders compact readable evidence while preserving metadata", () => {

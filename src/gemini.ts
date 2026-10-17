@@ -131,6 +131,25 @@ async function resolveGroundingUrl(url: string, signal: AbortSignal, fetchImpl: 
 	}
 }
 
+async function resolveGroundingUrls(
+	urls: readonly string[],
+	signal: AbortSignal,
+	fetchImpl: SearchHttpFetch,
+	concurrency = 4,
+): Promise<Map<string, string>> {
+	const unique = [...new Set(urls)];
+	const resolved = new Map<string, string>();
+	let next = 0;
+	await Promise.all(Array.from({ length: Math.min(concurrency, unique.length) }, async () => {
+		while (next < unique.length) {
+			if (signal.aborted) throw createProviderError({ provider: "gemini", kind: "canceled", message: "Search canceled", retryable: false });
+			const url = unique[next++]!;
+			resolved.set(url, await resolveGroundingUrl(url, signal, fetchImpl));
+		}
+	}));
+	return resolved;
+}
+
 async function normalizeGeminiResponse(payload: unknown, request: SearchRequest, signal: AbortSignal, fetchImpl: SearchHttpFetch): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "gemini");
@@ -176,26 +195,39 @@ async function normalizeGeminiResponse(payload: unknown, request: SearchRequest,
 			for (const query of grounding.webSearchQueries) if (typeof query === "string" && query.trim().length > 0) groundingQueries.add(query.trim());
 		}
 		if (!Array.isArray(grounding.groundingChunks)) continue;
-		const chunkUrls: Array<string | undefined> = [];
+		const planned: Array<{ source: Record<string, unknown>; parsed: { url: string; domain: string }; resolve: boolean }> = [];
 		for (const chunkValue of grounding.groundingChunks) {
 			const chunk = objectValue(chunkValue, "groundingChunks[]", "gemini");
 			const web = chunk.web;
 			if (web === undefined) {
-				chunkUrls.push(undefined);
+				planned.push({ source: {}, parsed: { url: "", domain: "" }, resolve: false });
 				continue;
 			}
 			const source = objectValue(web, "groundingChunks[].web", "gemini");
 			const parsed = httpSource(source.uri ?? source.url, "gemini");
 			if (parsed === undefined) {
 				discarded += 1;
+				planned.push({ source: {}, parsed: { url: "", domain: "" }, resolve: false });
+				continue;
+			}
+			const resolve = isGroundingRedirectUrl(parsed.url) && redirectAttempts < maxResults;
+			if (resolve) redirectAttempts += 1;
+			planned.push({ source, parsed, resolve });
+		}
+		// Redirect probes are independent; resolve them with bounded concurrency so a
+		// grounded answer cannot spend the whole search deadline on sequential HEADs.
+		const redirectTargets = await resolveGroundingUrls(
+			planned.filter((item) => item.resolve).map((item) => item.parsed.url),
+			signal,
+			fetchImpl,
+		);
+		const chunkUrls: Array<string | undefined> = [];
+		for (const item of planned) {
+			if (item.parsed.url === "") {
 				chunkUrls.push(undefined);
 				continue;
 			}
-			let canonicalUrl = parsed.url;
-			if (isGroundingRedirectUrl(parsed.url) && redirectAttempts < maxResults) {
-				redirectAttempts += 1;
-				canonicalUrl = await resolveGroundingUrl(parsed.url, signal, fetchImpl);
-			}
+			const canonicalUrl = item.resolve ? (redirectTargets.get(item.parsed.url) ?? item.parsed.url) : item.parsed.url;
 			const canonical = httpSource(canonicalUrl, "gemini");
 			if (canonical === undefined) {
 				discarded += 1;
@@ -208,8 +240,8 @@ async function normalizeGeminiResponse(payload: unknown, request: SearchRequest,
 			if (results.length < maxResults) {
 				results.push({
 					url: canonical.url,
-					...(canonical.url === parsed.url ? {} : { sourceUrl: parsed.url }),
-					title: optionalString(source.title, 500),
+					...(canonical.url === item.parsed.url ? {} : { sourceUrl: item.parsed.url }),
+					title: optionalString(item.source.title, 500),
 					domain: canonical.domain,
 					provider: "gemini",
 					searchQuery: normalized.query,

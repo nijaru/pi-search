@@ -188,7 +188,7 @@ describe("web_research", () => {
 		expect(rendered).not.toContain('"results"');
 	});
 
-	it("shortens long URLs explicitly in model and Pi research renderers", () => {
+	it("keeps long URLs complete for the model and shortens only Pi display", () => {
 		const longUrl = `https://example.com/${"a".repeat(3_000)}`;
 		const response = {
 			question: "main",
@@ -219,10 +219,96 @@ describe("web_research", () => {
 		const rendered = renderResearchResponse(response);
 		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
 		const tui = renderResearchResult(response, true, theme);
-		expect(rendered).toContain("[URL shortened; full URL is in structured details]");
-		expect(rendered).not.toContain(longUrl);
+		expect(rendered).toContain(longUrl);
+		expect(rendered).not.toContain("[URL shortened");
 		expect(tui).toContain("Long page ·");
-		expect(tui).toContain("[URL shortened; full URL is in structured details]");
+		expect(tui).toContain("[URL shortened]");
+	});
+
+	it("strips terminal controls from fetched research content", () => {
+		const rendered = renderResearchResponse({
+			question: "q",
+			provider: "openai" as const,
+			results: [],
+			fetched: [{
+				url: "https://example.com/",
+				title: "page\u001b[2J",
+				content: "body\u001b]8;;https://evil.test\u0007x\u001b]8;;\u001b\\",
+				contentTrust: "untrusted" as const,
+				outputFormat: "text" as const,
+				extraction: "plain-text" as const,
+				fetchedAt: "2026-01-01T00:00:00.000Z",
+				status: 200,
+				redirectCount: 0,
+				bytesRead: 10,
+				truncated: false,
+				offset: 0,
+				warnings: [],
+			}],
+			stepsCompleted: 1,
+			providerCalls: 1,
+			fetchesCompleted: 1,
+			fetchAttempts: 1,
+			stopReason: "completed" as const,
+			warnings: [],
+		});
+		expect(rendered).not.toContain("\u001b");
+	});
+
+	it("trims long excerpts before dropping a source that still fits", async () => {
+		const longExcerpt = "e".repeat(4_000);
+		const selected: Provider = {
+			...provider(),
+			search: async (request) => ({
+				query: request.query,
+				results: [{ url: "https://example.com/1", provider: "openai", searchQuery: request.query, excerpt: longExcerpt }],
+				provider: "openai",
+				appliedOptions: [],
+				warnings: [],
+			}),
+		};
+		const tool = createWebResearchTool(() => selected);
+		const result = await tool.execute("call-1", {
+			question: "main",
+			budget: { ...budget, maxOutputChars: 2_000 },
+		}, undefined, undefined, context());
+		expect(result.details?.results).toHaveLength(1);
+		expect(result.details?.results[0]?.excerpt?.length).toBeLessThan(longExcerpt.length);
+		const text = result.content[0];
+		if (text.type === "text") {
+			expect(text.text).toContain("https://example.com/1");
+			expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(2_000);
+		}
+	});
+
+	it("reports truncation and continuation offsets for fetched sources", () => {
+		const rendered = renderResearchResponse({
+			question: "main",
+			provider: "openai" as const,
+			results: [],
+			fetched: [{
+				url: "https://example.com/",
+				content: "short",
+				contentTrust: "untrusted" as const,
+				outputFormat: "text" as const,
+				extraction: "plain-text" as const,
+				fetchedAt: "2026-01-01T00:00:00.000Z",
+				status: 200,
+				redirectCount: 0,
+				bytesRead: 5,
+				truncated: true,
+				offset: 0,
+				nextOffset: 5,
+				warnings: [],
+			}],
+			stepsCompleted: 1,
+			providerCalls: 1,
+			fetchesCompleted: 1,
+			fetchAttempts: 1,
+			stopReason: "completed" as const,
+			warnings: [],
+		});
+		expect(rendered).toContain("content truncated; continue at offset 5");
 	});
 
 	it("keeps the complete model-visible research result within its budget", async () => {
@@ -233,9 +319,10 @@ describe("web_research", () => {
 		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(1_000);
 	});
 
-	it("bounds the serialized research response", async () => {
+	it("bounds rendered research text while keeping details available", async () => {
 		const result = await executeResearch({ question: "q".repeat(2_000), budget: { ...budget, maxOutputChars: 1_000 } }, () => provider(), context());
-		expect(new TextEncoder().encode(JSON.stringify(result, null, 2)).byteLength).toBeLessThanOrEqual(850);
+		expect(new TextEncoder().encode(renderResearchResponse(result, 1_000)).byteLength).toBeLessThanOrEqual(1_000);
+		expect(new TextEncoder().encode(JSON.stringify(result, null, 2)).byteLength).toBeLessThanOrEqual(256_000);
 	});
 
 	it("rejects a cost ceiling when the selected provider has no estimate", async () => {

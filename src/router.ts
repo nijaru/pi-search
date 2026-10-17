@@ -123,7 +123,9 @@ const REGISTRY_NATIVE_IDS = ["openai-codex", "openai"] as const;
  * the X grounding tool over web search.
  */
 function activeNativeProvider(id: (typeof ACTIVE_NATIVE_IDS)[number], request: SearchRequest, options: SearchRouterOptions): Provider | undefined {
-	if (id === "xai" && (request.social !== undefined || request.dateRange !== undefined)) return options.xaiX;
+	// A date range is not an X-specific constraint: it must not silently turn a
+	// web search into X search. Only social/X filters select the X tool.
+	if (id === "xai" && request.social !== undefined) return options.xaiX;
 	return options[NATIVE_REGISTRY[id]!.option];
 }
 
@@ -192,7 +194,7 @@ function explicitProvider(
 			if (candidate !== undefined && nativeModelCompatible(id, context.model) && canServe(candidate, request)) return selection(candidate, false);
 		}
 		if (nativeModelCompatible("xai", context.model)) {
-			const selected = request.social !== undefined || request.dateRange !== undefined ? options.xaiX : options.xai;
+			const selected = request.social !== undefined ? options.xaiX : options.xai;
 			if (selected !== undefined && canServe(selected, request)) return selection(selected, false);
 		}
 		return unavailable("Native search requires an active supported grounded model that can satisfy the requested constraints", provider);
