@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createDeepSeekProvider, DEEPSEEK_MAX_QUERY_LENGTH, type DeepSeekAdapterOptions } from "./deepseek";
+import { buildDeepSeekRequest, createDeepSeekProvider, DEEPSEEK_MAX_QUERY_LENGTH, type DeepSeekAdapterOptions } from "./deepseek";
 
 const payload = {
 	results: [{ url: "https://example.com/page", title: "Example", snippet: "Short snippet.", summary: "A model-oriented summary.", date: "2026-01-02T00:00:00+00:00", rerank_score: 2.4 }],
@@ -48,7 +48,7 @@ describe("DeepSeekProvider", () => {
 		expect(result.results[0]?.score).toBeCloseTo(0.8, 6);
 	});
 
-	it("warns when date bounds lose time-of-day precision", async () => {
+	it("warns when date operators cannot express time-of-day bounds", async () => {
 		const result = await provider({ fetchImpl: async () => response(payload) }).search(
 			{ query: "q", dateRange: { from: "2026-01-01T12:00:00Z" } },
 			new AbortController().signal,
@@ -56,8 +56,41 @@ describe("DeepSeekProvider", () => {
 		);
 		expect(result.appliedOptions).toContain("dateRange");
 		expect(result.warnings).toEqual([
-			{ code: "unsupported-option", option: "dateRange", message: "DeepSeek applies day-granularity publication bounds; time-of-day components were widened to whole days" },
+			{ code: "unsupported-option", option: "dateRange", message: "DeepSeek date operators have day granularity; time-of-day bounds are enforced locally on results that report a date" },
 		]);
+	});
+
+	it("enforces the inclusive date range on results with known dates", async () => {
+		const result = await provider({ fetchImpl: async () => response({ results: [
+			{ url: "https://example.com/before", date: "2025-12-31T23:59:59Z" },
+			{ url: "https://example.com/inside", date: "2026-01-02T23:59:59Z" },
+			{ url: "https://example.com/after", date: "2026-01-03T00:00:00Z" },
+			{ url: "https://example.com/undated" },
+		] }) }).search({ query: "q", dateRange: { from: "2026-01-01", to: "2026-01-02" } }, new AbortController().signal, {});
+		expect(result.results.map((item) => item.url)).toEqual(["https://example.com/inside", "https://example.com/undated"]);
+		expect(result.warnings).toEqual([
+			{ code: "partial-results", message: "DeepSeek removed 2 result entries outside the requested date range" },
+			{ code: "partial-results", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" },
+		]);
+	});
+
+	it("uses exact instants when the date range includes a time", async () => {
+		const result = await provider({ fetchImpl: async () => response({ results: [
+			{ url: "https://example.com/early", date: "2026-01-02T11:30:00Z" },
+			{ url: "https://example.com/late", date: "2026-01-02T12:30:00Z" },
+		] }) }).search({ query: "q", dateRange: { to: "2026-01-02T12:00:00Z" } }, new AbortController().signal, {});
+		expect(result.results.map((item) => item.url)).toEqual(["https://example.com/early"]);
+		expect(result.warnings).toContainEqual({ code: "partial-results", message: "DeepSeek removed 1 result entry outside the requested date range" });
+	});
+
+	it("maps an end-only date range without inventing a start bound", () => {
+		const plan = buildDeepSeekRequest({ query: "q", dateRange: { to: "2026-01-02" } });
+		expect(plan.body.query).toBe("q before:2026-01-03");
+		expect(plan.appliedOptions).toContain("dateRange");
+	});
+
+	it("names the image-result control before the generic content-type rejection", async () => {
+		await expect(provider().search({ query: "q", searchContentTypes: ["image"], imageSettings: { caption: true } }, new AbortController().signal, {})).rejects.toThrow(/image result settings/);
 	});
 
 	it("warns when ranking modes are not guaranteed", async () => {

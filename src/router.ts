@@ -219,7 +219,7 @@ function explicitProvider(
 		return selection(options.exa, false);
 	}
 	if (provider === "deepseek") {
-		if (options.deepseek === undefined || options.deepseekConfigured !== true) return unavailable("DeepSeek search is not configured", provider);
+		if (options.deepseek === undefined || options.deepseekConfigured !== true) return unavailable("DeepSeek search is not configured; set DEEPSEEK_API_KEY", provider);
 		if (!canServe(options.deepseek, request)) return unavailable("DeepSeek cannot satisfy the requested search constraints", provider);
 		return selection(options.deepseek, false);
 	}
@@ -314,10 +314,11 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		const braveConfigured = options.braveConfigured === true;
 		const braveAllowed = policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true;
 		const brave = braveCandidate(normalized, options, policy);
-		// prefer-free chooses the admitted Brave path before any metered call.
+		// prefer-free chooses the admitted Brave path before any metered call, but
+		// a safe Brave failure may still use the same single metered fallback.
 		if (policy === "prefer-free" && brave !== undefined && options.braveCapacity?.canAttempt() !== false) {
 			checkBraveCapacity(options);
-			return selection(brave, true);
+			return selection(brave, true, meteredCandidates(normalized, options, policy).slice(0, 1));
 		}
 		const metered = meteredCandidates(normalized, options, policy);
 		if (metered[0] !== undefined) {
@@ -338,6 +339,16 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		if (meteredAllowed && deepseekConfigured && options.deepseek !== undefined) {
 			const unmet = unmetConstraintNames(normalized);
 			return unavailable(`DeepSeek cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "deepseek");
+		}
+		if (!meteredAllowed) {
+			const eligible = [
+				exaConfigured && options.exa !== undefined && canServe(options.exa, normalized) ? "Exa" : undefined,
+				deepseekConfigured && options.deepseek !== undefined && canServe(options.deepseek, normalized) ? "DeepSeek" : undefined,
+			].filter((name): name is string => name !== undefined);
+			if (eligible.length > 0) {
+				const names = eligible.join(" and ");
+				return unavailable(`${names} ${eligible.length === 1 ? "is" : "are"} configured and could serve this request, but metered automatic routing is disabled; set PI_SEARCH_ALLOW_METERED=1 or use an explicit provider hint`, "router");
+			}
 		}
 		if (braveConfigured && !braveAllowed) return unavailable("Brave is configured but free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "router");
 		if (braveConfigured && options.brave !== undefined) {

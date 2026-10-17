@@ -40,8 +40,8 @@ not only on the active model:
    Configured DeepSeek is the cheaper second metered path, ordered after Exa
    and before Brave;
 6. configured Brave is the automatic direct path in free-only mode, or the
-   preferred path under `PI_SEARCH_PREFER_FREE=1`, when its free-mode admission
-   policy allows it;
+   preferred path under `PI_SEARCH_PREFER_FREE=1` with one metered fallback
+   after a safe Brave failure, when its free-mode admission policy allows it;
 7. Parallel and exact X search remain explicit capabilities.
 
 Cross-provider native search is an intentional use of credentials already

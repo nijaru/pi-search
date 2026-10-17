@@ -18,8 +18,6 @@ export const DEEPSEEK_SEARCH_ENDPOINT = "https://api.deepseek.com/v1/tools/searc
 export const DEFAULT_DEEPSEEK_RESPONSE_BYTES = 4 * 1024 * 1024;
 /** Current published price for one successful Search API request. */
 export const DEEPSEEK_ESTIMATED_SEARCH_COST_USD = 0.00075;
-/** DeepSeek rejects requests outside this range; pi-search already caps results at 20. */
-export const DEEPSEEK_MAX_RESULTS = 50;
 /** DeepSeek counts query characters, including any operator clauses. */
 export const DEEPSEEK_MAX_QUERY_LENGTH = 128;
 const DEEPSEEK_MAX_SCORE = 3;
@@ -59,8 +57,8 @@ function acceptRequestOptions(request: SearchRequest): void {
 	if (request.returnTokenBudget !== undefined) unsupported("DeepSeek search does not expose a returned-token budget");
 	if (request.externalWebAccess !== undefined) unsupported("DeepSeek search does not expose live/cache-only selection");
 	if (request.userLocation !== undefined) unsupported("DeepSeek search does not expose a user location contract");
-	if (request.searchContentTypes !== undefined) unsupported("DeepSeek search does not expose content-type selection");
 	if (request.imageSettings !== undefined) unsupported("DeepSeek search does not expose image result settings");
+	if (request.searchContentTypes !== undefined) unsupported("DeepSeek search does not expose content-type selection");
 }
 
 function datePart(value: string): string {
@@ -75,9 +73,9 @@ function shiftDate(day: string, deltaDays: number): string {
 
 /**
  * DeepSeek's `after:`/`before:` operators are date boundaries, while the
- * request contract uses inclusive bounds. Shift each boundary by one day so
- * the provider window contains the requested inclusive range, and report the
- * loss of any time-of-day precision instead of silently narrowing it.
+ * request contract uses inclusive bounds. Widen each boundary by one day so
+ * the provider window cannot exclude the requested boundary days; the exact
+ * inclusive range is then enforced locally for results that report a date.
  */
 function dateOperators(request: SearchRequest): { readonly operators: string[]; readonly widened: boolean } {
 	const operators: string[] = [];
@@ -130,7 +128,7 @@ export function buildDeepSeekRequest(request: SearchRequest): DeepSeekRequestPla
 
 	const dates = dateOperators(normalized);
 	if (dates.widened) {
-		warnings.push({ code: "unsupported-option", option: "dateRange", message: "DeepSeek applies day-granularity publication bounds; time-of-day components were widened to whole days" });
+		warnings.push({ code: "unsupported-option", option: "dateRange", message: "DeepSeek date operators have day granularity; time-of-day bounds are enforced locally on results that report a date" });
 	}
 
 	const query = [normalized.query, ...domainClauses(normalized), ...dates.operators].filter((part) => part.length > 0).join(" ");
@@ -149,7 +147,7 @@ export function buildDeepSeekRequest(request: SearchRequest): DeepSeekRequestPla
 	return {
 		body: {
 			query,
-			count: Math.min(normalized.maxResults ?? 10, DEEPSEEK_MAX_RESULTS),
+			count: normalized.maxResults ?? 10,
 			// DeepSeek returns a model-oriented summary regardless; full page
 			// content stays the job of the local web_fetch path.
 			need_content: false,
@@ -176,6 +174,44 @@ function excerptFromRecord(record: Record<string, unknown>): string | undefined 
 	// `summary` is the 600-800 character text DeepSeek intends models to read;
 	// `snippet` is the shorter display string.
 	return optionalString(record.summary, 4_000) ?? optionalString(record.snippet, 4_000);
+}
+
+/** Inclusive UTC day boundaries for date-only bounds; exact instants otherwise. */
+function boundaryMs(value: string, endOfDay: boolean): number | undefined {
+	const milliseconds = Date.parse(value);
+	if (!Number.isFinite(milliseconds)) return undefined;
+	return endOfDay && !value.includes("T") ? milliseconds + 86_400_000 - 1 : milliseconds;
+}
+
+/**
+ * The date operators widen the provider window to protect inclusive boundary
+ * days, so enforce the exact inclusive range on results whose date is known.
+ * Results without a date cannot be checked and remain visible with a warning.
+ */
+function filterByDateRange(
+	results: readonly SearchResult[],
+	request: SearchRequest,
+): { readonly results: readonly SearchResult[]; readonly removed: number; readonly unverified: number } {
+	const fromMs = request.dateRange?.from === undefined ? undefined : boundaryMs(request.dateRange.from, false);
+	const toMs = request.dateRange?.to === undefined ? undefined : boundaryMs(request.dateRange.to, true);
+	if (fromMs === undefined && toMs === undefined) return { results, removed: 0, unverified: 0 };
+	const kept: SearchResult[] = [];
+	let removed = 0;
+	let unverified = 0;
+	for (const result of results) {
+		const publishedMs = result.publishedAt === undefined ? Number.NaN : Date.parse(result.publishedAt);
+		if (!Number.isFinite(publishedMs)) {
+			unverified += 1;
+			kept.push(result);
+			continue;
+		}
+		if ((fromMs !== undefined && publishedMs < fromMs) || (toMs !== undefined && publishedMs > toMs)) {
+			removed += 1;
+			continue;
+		}
+		kept.push(result);
+	}
+	return { results: kept, removed, unverified };
 }
 
 export function normalizeDeepSeekResponse(
@@ -211,12 +247,23 @@ export function normalizeDeepSeekResponse(
 		});
 	}
 	if (discarded > 0 && results.length === 0) return malformed("results contained no parseable HTTP URLs");
+	const dateFiltered = filterByDateRange(results, normalized);
+	const warnings: SearchWarning[] = [];
+	if (discarded > 0) {
+		warnings.push({ code: "partial-results", message: `DeepSeek discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` });
+	}
+	if (dateFiltered.removed > 0) {
+		warnings.push({ code: "partial-results", message: `DeepSeek removed ${dateFiltered.removed} result entr${dateFiltered.removed === 1 ? "y" : "ies"} outside the requested date range` });
+	}
+	if (dateFiltered.unverified > 0) {
+		warnings.push({ code: "partial-results", message: `DeepSeek could not verify the publication date of ${dateFiltered.unverified} result entr${dateFiltered.unverified === 1 ? "y" : "ies"} against the requested date range` });
+	}
 	return {
 		query: normalized.query,
-		results: results.slice(0, normalized.maxResults ?? 10),
+		results: dateFiltered.results.slice(0, normalized.maxResults ?? 10),
 		provider: "deepseek",
 		appliedOptions: [],
-		warnings: discarded > 0 ? [{ code: "partial-results", message: `DeepSeek discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` }] : [],
+		warnings,
 		...(options.requestId === undefined ? {} : { requestId: options.requestId }),
 		...(options.rateLimits === undefined ? {} : { usage: { rateLimits: options.rateLimits } }),
 	};

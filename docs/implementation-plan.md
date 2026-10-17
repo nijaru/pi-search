@@ -78,7 +78,7 @@ The OpenAI and Codex paths are hardened with:
 ## 6. Additional providers — complete for the current release
 
 - Exa semantic search with highlights, domains, request IDs, and reported cost.
-- DeepSeek Search with `site:`/date operator mapping, model-oriented summaries, dates, and per-request cost estimates.
+- DeepSeek Search with `site:`/date operator mapping, local inclusive-date enforcement, model-oriented summaries, dates, and per-request cost estimates.
 - Parallel Search API objective/excerpt normalization with explicit domain
   limitation.
 - Gemini grounding source extraction through Pi model-registry auth.

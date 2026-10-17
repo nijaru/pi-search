@@ -36,7 +36,8 @@ Pi tools:
   excerpts through `site:`/`after:`/`before:` operators), selected after Exa
   under metered routing.
 - In free-only mode, configured Brave is the conservative paced keyword/fresh
-  path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered Exa.
+  path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered providers,
+  with one metered fallback after a safe Brave failure.
   Parallel, Cloudflare Web Search, and the official X API remain explicit providers.
 - Automatic routing permits at most one visible fallback after a safe
   authentication, rate-limit, or unavailable failure. Network, timeout, and
@@ -64,7 +65,8 @@ export EXA_API_KEY=...
 export DEEPSEEK_API_KEY=...            # $0.75 per 1K successful requests
 # Allow metered providers (Exa, DeepSeek) in automatic routing:
 # export PI_SEARCH_ALLOW_METERED=1
-# Prefer admitted free-mode Brave before metered providers:
+# Prefer admitted free-mode Brave before metered providers, with one metered
+# fallback after a safe Brave failure:
 # export PI_SEARCH_PREFER_FREE=1
 
 # Optional last-resort keyword/fresh search
@@ -158,8 +160,15 @@ pages remain `web_fetch`'s job. DeepSeek caps queries at 128 characters
 including those operators, so a long filtered query is rejected before
 dispatch instead of being truncated. Requests that need social, media,
 location, context-size, token-budget, or live-access controls are rejected
-rather than degraded. Date operators have day granularity, so time-of-day
-components are widened to whole days and reported as a warning.
+rather than degraded. Date operators have day granularity, so the provider
+window is widened to whole days and a warning is reported; time-of-day bounds
+are then enforced locally on results that report a date. Results with a known
+publication date are filtered to the requested inclusive range; undated
+results remain visible with an explicit warning.
+
+The adapter reads `DEEPSEEK_API_KEY` from the environment, like the other
+direct providers. A DeepSeek login stored only in Pi's model registry does not
+register it.
 
 ### Local and virtual models
 

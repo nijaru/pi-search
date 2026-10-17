@@ -54,7 +54,7 @@ hidden fan-out, or provider comparisons.
 | Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
 | Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
 | Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
-| DeepSeek | Cheaper second metered direct path for non-native/local models | Automatic only when metered routing is allowed; second metered candidate after Exa and preferred over Brave once metering is permitted; explicit `deepseek` hints are intentional | `DEEPSEEK_API_KEY` |
+| DeepSeek | Cheaper second metered direct path for non-native/local models | Automatic only when metered routing is allowed; second metered candidate after Exa under `PI_SEARCH_ALLOW_METERED=1`; explicit `deepseek` hints are intentional | `DEEPSEEK_API_KEY` |
 | Cloudflare | Gateway to explicitly configured Ceramic, Exa, or Linkup | Explicit `cloudflare` only; stored BYOK or prepaid gateway credits; never automatic | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PI_SEARCH_CLOUDFLARE_PROVIDER` |
 | Parallel | Objective-oriented search and excerpts; `auto`/`keyword`/`fresh` map to the `fast`/`basic`/`advanced` tiers | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
 | Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
@@ -82,8 +82,10 @@ non-native path while retaining Exa as a fallback. Free-only mode never
 silently dispatches Exa; explicit Exa hints remain user-directed. DeepSeek is
 the cheaper second metered path ($0.75 per 1K successful requests): it is
 ordered after Exa because independent quality evidence for its index is not
-collected yet, and before Brave whenever metered routing is already allowed.
-Explicit DeepSeek hints work regardless of the billing policy. Parallel is
+collected yet, and ahead of Brave under `PI_SEARCH_ALLOW_METERED=1`. Under
+`PI_SEARCH_PREFER_FREE=1`, admitted Brave stays first with one metered
+fallback. Explicit DeepSeek hints work regardless of the billing policy.
+Parallel is
 an objective-oriented provider whose `fast` tier is the recommended agent
 default and whose `advanced` tier suits multi-hop depth; both Exa and Parallel
 are retained because their evidence shapes are complementary (semantic
@@ -96,7 +98,7 @@ direct providers
 provides a reliable fixed per-call estimate for every hard research cost
 ceiling, so unsupported cost ceilings are rejected before calls.
 
-## Direct-provider quality and cost posture (2026-09)
+## Direct-provider quality and cost posture (2026-09; DeepSeek pricing 2026-10-17)
 
 This is recorded evidence, not a permanent ranking; providers change pricing
 and quality faster than this document. Priorities for provider decisions are
@@ -182,6 +184,10 @@ structured sources rather than an answer whose citations would have to become
 results. Native DeepSeek grounding can be added later if Pi's catalog exposes
 a Responses-API DeepSeek model.
 
+The adapter uses the direct-provider environment key path
+(`DEEPSEEK_API_KEY`); a DeepSeek login stored only in Pi's model registry does
+not register it.
+
 ## Search constraints
 
 Unsupported hard constraints are rejected or surfaced:
@@ -209,9 +215,11 @@ Unsupported hard constraints are rejected or surfaced:
 - DeepSeek accepts domain and publication-date constraints only as documented
   query operators (`site:`, `-site:`, `after:`, `before:`). The adapter widens
   day-granularity bounds by one day so the requested inclusive range is
-  contained, and warns when time-of-day precision is lost. Social, media,
-  location, context-size, token-budget, and live-access controls are rejected,
-  and a composed query over 128 characters is rejected before dispatch.
+  contained, warns when a time-of-day bound is present, and post-filters
+  results with a known date to the exact inclusive range; results without a
+  date are returned with a partial-results warning. Social, media, location,
+  context-size, token-budget, and live-access controls are rejected, and a
+  composed query over 128 characters is rejected before dispatch.
 - Official X recent search maps bounded date ranges and handle operators; it
   does not provide provider-side image/video understanding.
 
