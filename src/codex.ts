@@ -14,7 +14,7 @@ import type {
 import { createProviderError } from "./errors";
 import { executeGroundedSearch } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
-import { modelAuthHeaders, type ModelExecution } from "./model-selection";
+import { hasExplicitHeader, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
 import { trimUrlPunctuation } from "./url-text";
 
@@ -249,7 +249,7 @@ function codexHeaders(execution: ModelExecution): Readonly<Record<string, string
 			const auth = decoded["https://api.openai.com/auth"];
 			if (auth !== null && typeof auth === "object" && !Array.isArray(auth)) {
 				const accountId = optionalString((auth as Record<string, unknown>).chatgpt_account_id, 500);
-				if (accountId !== undefined && !headers.has("chatgpt-account-id")) headers.set("chatgpt-account-id", accountId);
+				if (accountId !== undefined && !hasExplicitHeader([execution.model.headers, execution.auth.headers], "chatgpt-account-id")) headers.set("chatgpt-account-id", accountId);
 			}
 		} catch {
 			// The backend may authenticate non-JWT tokens through headers alone.

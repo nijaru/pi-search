@@ -14,7 +14,7 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
-import { applyProviderHeaders, hasExplicitHeader } from "./model-selection";
+import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { parseProviderRateLimits, retryAfterMsFromHeaders as parseRetryAfter } from "./provider-http";
 import { validateSearchRequest } from "./search";
@@ -64,11 +64,6 @@ interface SourceCandidate {
 	readonly excerpt?: string;
 	readonly publishedAt?: string;
 	readonly sourceId?: string;
-}
-
-interface SearchExecution {
-	readonly model: ProviderModel;
-	readonly auth: Extract<ProviderAuthResult, { readonly ok: true }>;
 }
 
 const SEARCH_MODEL_EXCLUDED_SEGMENTS = new Set(["pro", "ultra"]);
@@ -417,7 +412,7 @@ function searchModelCandidates(
 	return candidates;
 }
 
-async function selectSearchExecution(active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<SearchExecution> {
+async function selectSearchExecution(active: ProviderModel | undefined, registry: ProviderContext["modelRegistry"], request: SearchRequest): Promise<ModelExecution> {
 	const provider = "openai" as const;
 	if (registry === undefined) {
 		throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication is unavailable", retryable: false });
@@ -756,16 +751,7 @@ export class OpenAIProvider implements Provider {
 		}
 
 		const endpoint = endpointFor(execution.model, this.endpoint);
-		const headers = new Headers();
-		applyProviderHeaders(headers, execution.model.headers);
-		applyProviderHeaders(headers, execution.auth.headers);
-		if (
-			execution.auth.apiKey !== undefined &&
-			execution.auth.apiKey.trim().length > 0 &&
-			!hasExplicitHeader([execution.model.headers, execution.auth.headers], "authorization")
-		) {
-			headers.set("Authorization", `Bearer ${execution.auth.apiKey}`);
-		}
+		const headers = modelAuthHeaders(execution);
 		if (!headers.has("authorization")) {
 			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: "Pi model authentication returned no authorization header", retryable: false });
 		}

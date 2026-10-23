@@ -69,6 +69,22 @@ describe("CodexProvider", () => {
 		expect(result).toMatchObject({ provider: "openai-codex", requestId: "req-codex", executionModel: "gpt-test", results: [{ url: "https://example.com/news", sourceId: "turn0search0" }], answer: { citations: [{ url: "https://example.com/news", sourceId: "turn0search0" }] } });
 	});
 
+	it.each(["explicit-account", null])("honors an explicit account identity override: %j", async (accountId) => {
+		const tokenPayload = Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "derived" } })).toString("base64url");
+		const token = `header.${tokenPayload}.signature`;
+		let seenHeaders: Headers | undefined;
+		const provider = new CodexProvider({ fetchImpl: async (_input, init) => {
+			seenHeaders = new Headers(init?.headers);
+			return response({ output: "See https://example.com/", results: [] });
+		} });
+		await provider.search({ query: "q" }, new AbortController().signal, {
+			...context(),
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "ignored", headers: { authorization: `Bearer ${token}`, "ChatGPT-Account-ID": accountId } }) },
+		});
+		expect(seenHeaders?.get("authorization")).toBe(`Bearer ${token}`);
+		expect(seenHeaders?.get("chatgpt-account-id")).toBe(accountId);
+	});
+
 	it("strips answer-text URL delimiters without damaging a trailing path slash", async () => {
 		const provider = new CodexProvider({
 			fetchImpl: async () => response({ output: "See `https://example.com/docs`, https://example.org/path/.", results: [] }),
