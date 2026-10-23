@@ -58,6 +58,7 @@ describe("search result cleanup", () => {
 			provider: "brave",
 			results: [
 				{ url: "javascript:alert(1)", provider: "brave", searchQuery: "q" },
+				{ url: "file:///tmp/private", provider: "brave", searchQuery: "q" },
 				{ url: "https://user:pass@example.com/", provider: "brave", searchQuery: "q" },
 				{ url: `https://example.com/${"x".repeat(8_200)}`, provider: "brave", searchQuery: "q" },
 			],
@@ -144,12 +145,6 @@ describe("search result cleanup", () => {
 		}]);
 		expect(searchUrlIdentity("https://example.com/%2525literal")).toBe("https://example.com/%2525literal");
 		expect(searchUrlIdentity("https://example.com/%2Freserved%3Fvalue")).toBe("https://example.com/%2Freserved%3Fvalue");
-	});
-
-	it("uses the same conservative identity for research fetch deduplication", () => {
-		expect(searchUrlIdentity("https://EXAMPLE.com:443/page#part")).toBe("https://example.com/page");
-		expect(searchUrlIdentity("https://example.com/page")).toBe("https://example.com/page");
-		expect(searchUrlIdentity("file:///tmp/private")).toBeUndefined();
 	});
 
 	it("warns when a provider answer is truncated", () => {

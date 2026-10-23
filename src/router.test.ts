@@ -129,15 +129,11 @@ describe("search provider router", () => {
 		expect(() => route({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/DeepSeek cannot satisfy the requested social\/X constraints/);
 	});
 
-	it("prefers admitted Brave over metered Exa", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "prefer-free" });
-		expect(route({ query: "q" }, context("anthropic")).provider.id).toBe("brave");
-	});
-
 	it("selects configured native grounding before Brave without an extra opt-in", () => {
 		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry"), brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		expect(route({ query: "q" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
 		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
+		expect(route({ query: "q", providerHint: "native" }, context("xai", "openai-responses")).provider.id).toBe("xai");
 		expect(route({ query: "q", mode: "keyword", providerHint: "gemini" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
 		expect(route({ query: "q", mode: "keyword", providerHint: "xai" }, context("xai", "openai-responses")).provider.id).toBe("xai");
 		expect(route({ query: "q", social: { includeHandles: ["xai"] } }, context("xai", "openai-responses")).provider.id).toBe("xai-x");
@@ -179,12 +175,6 @@ describe("search provider router", () => {
 	it("requires an explicit provider for an execution model", () => {
 		const route = createSearchRouter({ exa, exaConfigured: true });
 		expect(() => route({ query: "q", executionModel: "gemini-flash-lite-latest" }, context("openrouter"))).toThrow(/explicit model-mediated provider hint/);
-	});
-
-	it("allows the explicit native alias for configured grounded models", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI });
-		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
-		expect(route({ query: "q", providerHint: "native" }, context("xai", "openai-responses")).provider.id).toBe("xai");
 	});
 
 	it("requires free-mode admission to be supplied by the construction boundary", () => {

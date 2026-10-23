@@ -2,6 +2,22 @@ import { describe, expect, it } from "bun:test";
 import type { Provider, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
 import { createWebResearchTool, executeResearch, renderResearchResponse, renderResearchResult } from "./research-tool";
+import type { DirectTransport } from "./direct-transport";
+
+function textTransport(content: string): DirectTransport {
+	return async () => ({
+		status: 200,
+		statusText: "OK",
+		headers: new Headers({ "content-type": "text/plain" }),
+		body: {
+			async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(content); },
+			cancel() {},
+			destroy() {},
+		},
+	});
+}
+
+const publicLookup = async () => [{ address: "93.184.216.34", family: 4 as const }];
 
 function context(): never {
 	return { model: { provider: "openai", id: "gpt-test", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test" }) } } as never;
@@ -39,7 +55,11 @@ describe("web_research", () => {
 	it("enforces the 2000-character runtime query bound without provider-specific schema rewrites", async () => {
 		const accepted = await executeResearch({ question: "main", queries: ["q".repeat(2_000)], budget: { ...budget, maxProviderCalls: 1 } }, () => provider(), context());
 		expect(accepted.providerCalls).toBe(1);
-		await expect(executeResearch({ question: "main", queries: ["q".repeat(2_001)], budget }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_INVALID_REQUEST" });
+		for (const queries of [["q".repeat(2_001)], [], "query", Array(9).fill("q")] as const) {
+			let selected = false;
+			await expect(executeResearch({ question: "main", queries: queries as never, budget }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_INVALID_REQUEST" });
+			expect(selected).toBe(false);
+		}
 	});
 
 	it("propagates an explicit execution model through every research query", async () => {
@@ -100,17 +120,7 @@ describe("web_research", () => {
 				return { query: request.query, results: [{ url: "https://example.com/first", provider: "openai", searchQuery: request.query }], provider: "openai", appliedOptions: [], warnings: [] };
 			},
 		};
-		const transport = (async () => ({
-			status: 200,
-			statusText: "OK",
-			headers: new Headers({ "content-type": "text/plain" }),
-			body: {
-				async *[Symbol.asyncIterator]() { yield new TextEncoder().encode("fetched evidence"); },
-				cancel() {},
-				destroy() {},
-			},
-		})) as never;
-		const result = await executeResearch({ question: "main", queries: ["one", "two"], fetchResults: 1, budget: { ...budget, maxFetches: 1 } }, () => selected, context(), { transport, lookup: async () => [{ address: "93.184.216.34", family: 4 as const }] });
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], fetchResults: 1, budget: { ...budget, maxFetches: 1 } }, () => selected, context(), { transport: textTransport("fetched evidence"), lookup: publicLookup });
 		expect(result.stopReason).toBe("provider-error");
 		expect(result.fetchAttempts).toBe(1);
 		expect(result.fetchesCompleted).toBe(1);
@@ -122,9 +132,12 @@ describe("web_research", () => {
 		expect(result.warnings).toContainEqual({ code: "unsupported-option", option: "mode", message: "freshness is approximate" });
 	});
 
-	it("rejects invalid budgets before provider selection effects", async () => {
+	it.each([
+		{ maxSteps: 0 }, { maxProviderCalls: 0 }, { maxFetches: -1 },
+		{ timeoutMs: 0 }, { timeoutMs: Infinity }, { maxOutputChars: 0 }, { maxCostUsd: -1 },
+	])("rejects invalid budgets before provider selection: %j", async (limits) => {
 		let selected = false;
-		await expect(executeResearch({ question: "main", budget: { ...budget, maxSteps: 0 } }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
+		await expect(executeResearch({ question: "main", budget: { ...budget, ...limits } }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
 		expect(selected).toBe(false);
 	});
 
@@ -153,39 +166,33 @@ describe("web_research", () => {
 		expect(result.fetchesCompleted).toBe(0);
 	});
 
-	it("emits one warning when fetched content exceeds the research output budget", async () => {
-		const transport = (async () => ({
-			status: 200,
-			statusText: "OK",
-			headers: new Headers({ "content-type": "text/plain" }),
-			body: {
-				async *[Symbol.asyncIterator]() { yield new TextEncoder().encode("large evidence ".repeat(200)); },
-				cancel() {},
-				destroy() {},
-			},
-		})) as never;
-		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, maxOutputChars: 1_000 } }, () => provider(false), context(), { transport, lookup: async () => [{ address: "93.184.216.34", family: 4 as const }] });
-		expect(result.warnings.filter((item) => item.message.startsWith("Research output was bounded")).length).toBe(1);
+	it.each([
+		{ fetchResults: 1, maxFetches: 1, maxSteps: 2, attempts: 1, stopReason: "completed" },
+		{ fetchResults: 2, maxFetches: 1, maxSteps: 3, attempts: 1, stopReason: "budget" },
+		{ fetchResults: 1, maxFetches: 0, maxSteps: 3, attempts: 0, stopReason: "budget" },
+		{ fetchResults: 1, maxFetches: 1, maxSteps: 1, attempts: 0, stopReason: "budget" },
+		{ fetchResults: 2, maxFetches: 2, maxSteps: 3, attempts: 2, stopReason: "completed" },
+		{ fetchResults: 2, maxFetches: 1, maxSteps: 2, attempts: 1, stopReason: "completed", sharedPage: true },
+	])("distinguishes requested fetch completion from exhausted limits: %j", async ({ fetchResults, maxFetches, maxSteps, attempts, stopReason, sharedPage }) => {
+		const selected: Provider = { ...provider(), search: async (request) => ({
+			query: request.query, provider: "openai", appliedOptions: [], warnings: [],
+			results: [1, 2].map(index => ({ url: `https://example.com/${index}`, provider: "openai", searchQuery: request.query, ...(sharedPage ? { sourcePageUrl: "https://example.com/page" } : {}) })),
+		}) };
+		const result = await executeResearch({ question: "main", fetchResults, budget: { ...budget, maxFetches, maxSteps } }, () => selected, context(), { transport: textTransport("evidence"), lookup: publicLookup });
+		expect(result).toMatchObject({ stopReason, fetchAttempts: attempts, fetchesCompleted: attempts });
+		if (sharedPage) expect(result.fetched[0]?.url).toBe("https://example.com/page");
 	});
 
-	it("renders readable evidence instead of raw JSON", () => {
-		const response = {
-			question: "main",
-			provider: "openai" as const,
-			results: [{ url: "https://example.com/1", title: "Example", excerpt: "A useful source", provider: "openai", searchQuery: "main" }],
-			fetched: [],
-			stepsCompleted: 1,
-			providerCalls: 1,
-			fetchesCompleted: 0,
-			fetchAttempts: 0,
-			stopReason: "completed" as const,
-			warnings: [],
-		};
-		const rendered = renderResearchResponse(response);
-		expect(rendered).toContain("Question: main");
-		expect(rendered).toContain("Search evidence:");
-		expect(rendered).toContain("URL: https://example.com/1");
-		expect(rendered).not.toContain('"results"');
+	it("deduplicates query plans and canonical result URLs without extra calls or fetches", async () => {
+		const result = await executeResearch({ question: "main", queries: [" one ", "one", "two"], fetchResults: 2, budget: { ...budget, maxFetches: 2 } }, () => provider(false, undefined, ["https://EXAMPLE.com:443/page#part", "https://example.com/page"]), context(), { transport: textTransport("evidence"), lookup: publicLookup });
+		expect(result).toMatchObject({ providerCalls: 2, fetchAttempts: 1, fetchesCompleted: 1, stopReason: "completed" });
+		expect(result.results).toHaveLength(1);
+		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", sourceUrl: "https://EXAMPLE.com:443/page#part", searchQuery: "one" });
+	});
+
+	it("emits one warning when fetched content exceeds the research output budget", async () => {
+		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, maxOutputChars: 1_000 } }, () => provider(false), context(), { transport: textTransport("large evidence ".repeat(200)), lookup: publicLookup });
+		expect(result.warnings.filter((item) => item.message.startsWith("Research output was bounded")).length).toBe(1);
 	});
 
 	it("keeps long URLs complete for the model and shortens only Pi display", () => {
@@ -219,7 +226,10 @@ describe("web_research", () => {
 		const rendered = renderResearchResponse(response);
 		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
 		const tui = renderResearchResult(response, true, theme);
-		expect(rendered).toContain(longUrl);
+		expect(rendered).toContain(`URL: ${longUrl}`);
+		expect(rendered).toContain("Question: main");
+		expect(rendered).toContain("Search evidence:");
+		expect(rendered).not.toContain('"results"');
 		expect(rendered).not.toContain("[URL shortened");
 		expect(tui).toContain("Long page ·");
 		expect(tui).toContain("[URL shortened]");
@@ -317,12 +327,7 @@ describe("web_research", () => {
 		const text = result.content[0];
 		expect(text.type).toBe("text");
 		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(1_000);
-	});
-
-	it("bounds rendered research text while keeping details available", async () => {
-		const result = await executeResearch({ question: "q".repeat(2_000), budget: { ...budget, maxOutputChars: 1_000 } }, () => provider(), context());
-		expect(new TextEncoder().encode(renderResearchResponse(result, 1_000)).byteLength).toBeLessThanOrEqual(1_000);
-		expect(new TextEncoder().encode(JSON.stringify(result, null, 2)).byteLength).toBeLessThanOrEqual(256_000);
+		expect(new TextEncoder().encode(JSON.stringify(result.details, null, 2)).byteLength).toBeLessThanOrEqual(256_000);
 	});
 
 	it("rejects a cost ceiling when the selected provider has no estimate", async () => {

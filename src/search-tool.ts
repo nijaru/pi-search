@@ -290,14 +290,6 @@ export function renderSearchResponse(response: SearchResponse): string {
 	return lines.join("\n").trim();
 }
 
-function searchResultPreview(result: SearchResponse["results"][number]): string {
-	const title = compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), 180);
-	const excerpt = result.excerpt === undefined ? undefined : compactText(result.excerpt, 240);
-	const lines = [`${title}`, `  ${renderSafeUrl(result.url)}`];
-	if (excerpt !== undefined && excerpt.length > 0) lines.push(`  ${excerpt}`);
-	return lines.join("\n");
-}
-
 /** Render the compact/expanded result shown in Pi's TUI. */
 export function renderSearchResult(response: SearchResponse, expanded: boolean, theme: Parameters<NonNullable<ToolDefinition["renderResult"]>>[2]): string {
 	const count = response.results.length;
@@ -312,7 +304,7 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	if (sourceContents.length > 0) text += theme.fg("muted", ` · ${sourceContents.length} source page${sourceContents.length === 1 ? "" : "s"} fetched`);
 	const limit = expanded ? count : Math.min(count, 3);
 	for (const result of response.results.slice(0, limit)) {
-		text += `\n${theme.fg("accent", searchResultPreview(result).split("\n")[0]!)}`;
+		text += `\n${theme.fg("accent", compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), 180))}`;
 		text += `\n${theme.fg("dim", `  ${renderSafeUrl(result.url)}`)}`;
 		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${result.domain}`)}`;
 		if (expanded && result.sourcePageUrl !== undefined) text += `\n${theme.fg("muted", `  Source page: ${renderSafeUrl(result.sourcePageUrl)}`)}`;
@@ -376,6 +368,7 @@ function boundedResponseByteLength(response: SearchResponse): number {
 
 function boundedSearchResponse(response: SearchResponse): SearchResponse {
 	let truncated = false;
+	const usage = boundedUsage(response.usage);
 	let bounded: SearchResponse = {
 		query: response.query.slice(0, MAX_QUERY_LENGTH),
 		...(response.answer === undefined ? {} : {
@@ -416,7 +409,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		warnings: response.warnings.slice(0, 8).map((item) => ({ ...item, message: item.message.slice(0, 1_000) })),
 		...(response.requestId === undefined ? {} : { requestId: response.requestId.slice(0, 500) }),
 		...(response.latencyMs === undefined ? {} : { latencyMs: response.latencyMs }),
-		...(boundedUsage(response.usage) === undefined ? {} : { usage: boundedUsage(response.usage) }),
+		...(usage === undefined ? {} : { usage }),
 	};
 	const reconcileSources = (): void => {
 		const urls = new Set(bounded.results.map(result => result.url));
@@ -463,7 +456,7 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 	const warnings = [...response.warnings];
 	let attempts = 0;
 	for (const result of response.results) {
-		if (attempts >= (request.contentResults ?? 2)) break;
+		if (attempts >= (request.contentResults ?? DEFAULT_CONTENT_RESULTS)) break;
 		// Image results point at binary media while sourcePageUrl identifies the
 		// readable page that should be enriched.
 		const fetchUrl = result.sourcePageUrl ?? result.url;
@@ -472,7 +465,7 @@ async function enrichSearchResponse(response: SearchResponse, request: SearchReq
 		seen.add(identity);
 		attempts += 1;
 		try {
-			const page = await fetcher({ url: fetchUrl, maxLength: request.contentMaxLength ?? 4_000, readable: true }, signal, { ...fetcherOptions, timeoutMs });
+			const page = await fetcher({ url: fetchUrl, maxLength: request.contentMaxLength ?? DEFAULT_CONTENT_MAX_LENGTH, readable: true }, signal, { ...fetcherOptions, timeoutMs });
 			pages.push(page);
 			const boundedCandidate = boundedSearchResponse({ ...response, sourceContents: pages, warnings });
 			if ((boundedCandidate.sourceContents?.length ?? 0) < pages.length) {
@@ -533,6 +526,7 @@ export function createWebSearchTool(
 		parameters,
 		async execute(_toolCallId, params, signal, _onUpdate, context) {
 			let selectedProvider: SearchProviderSelection | undefined;
+			let completedUsage: SearchResponse["usage"];
 			const callerSignal = signal ?? new AbortController().signal;
 			const totalTimeoutMs = options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
 			const deadline = Date.now() + totalTimeoutMs;
@@ -550,6 +544,7 @@ export function createWebSearchTool(
 					timeoutMs: perAttemptTimeoutMs,
 					context: providerContextFromPi(context),
 				});
+				completedUsage = response.usage;
 				const enriched = await enrichSearchResponse(response, request, deadlineController.signal, callerSignal, Math.max(1_000, deadline - Date.now()), options.fetcher ?? fetchContent, options.fetcherOptions);
 				const bounded = boundedSearchResponse(enriched);
 				return {
@@ -558,12 +553,14 @@ export function createWebSearchTool(
 					usage: toolUsage(bounded.usage),
 				};
 			} catch (error) {
-				if (!(error instanceof SearchToolError) && deadlineController.signal.aborted) {
-					throw new SearchToolError(callerSignal.aborted ? "WEB_SEARCH_CANCELED" : "WEB_SEARCH_TIMEOUT", callerSignal.aborted ? "Search canceled during source enrichment" : "Search timed out during source enrichment");
-				}
-				const failure = toSearchToolError(error, selectedProvider?.provider.id ?? "router");
-				if (failure.usage !== undefined) {
-					return { content: [{ type: "text", text: failure.message }], details: undefined, isError: true, usage: toolUsage(failure.usage) };
+				const failure = !(error instanceof SearchToolError) && deadlineController.signal.aborted
+					? new SearchToolError(callerSignal.aborted ? "WEB_SEARCH_CANCELED" : "WEB_SEARCH_TIMEOUT", callerSignal.aborted ? "Search canceled during source enrichment" : "Search timed out during source enrichment")
+					: toSearchToolError(error, selectedProvider?.provider.id ?? "router");
+				// Enrichment can fail or be canceled after a billed search succeeded.
+				// Pi records usage only on returned results, not thrown errors.
+				const usage = failure.usage ?? completedUsage;
+				if (usage !== undefined) {
+					return { content: [{ type: "text", text: failure.message }], details: undefined, isError: true, usage: toolUsage(usage) };
 				}
 				throw failure;
 			} finally {

@@ -263,15 +263,17 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		query,
 		mode,
 		maxResults,
-		...(executionModel === undefined ? {} : { executionModel }),
-		...(dateRange === undefined ? {} : { dateRange }),
-		...(social === undefined ? {} : { social }),
-		...(userLocation === undefined ? {} : { userLocation }),
-		...(searchContentTypes === undefined ? {} : { searchContentTypes }),
-		...(imageSettings === undefined ? {} : { imageSettings }),
-		...(searchContextSize === undefined ? {} : { searchContextSize }),
-		...(returnTokenBudget === undefined ? {} : { returnTokenBudget }),
-		...(externalWebAccess === undefined ? {} : { externalWebAccess }),
+		executionModel,
+		// Overwrite the raw fields even when normalization removes an empty
+		// constraint; otherwise routing still sees the original object.
+		dateRange,
+		social,
+		userLocation,
+		searchContentTypes,
+		imageSettings,
+		searchContextSize,
+		returnTokenBudget,
+		externalWebAccess,
 		answerMode,
 		includeContent,
 		contentResults,
@@ -412,6 +414,7 @@ export async function executeSearchSelection(
 					requestId: toolError.requestId,
 					retryAfterMs: toolError.retryAfterMs,
 					rateLimits: toolError.rateLimits,
+					usage: toolError.usage,
 				});
 			}
 			throw toolError;

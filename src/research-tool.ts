@@ -93,11 +93,13 @@ function validateResearchRequest(request: ResearchRequest): ResearchRequest {
 	} catch (error) {
 		throw budgetError(error instanceof Error ? error.message : "Invalid research budget");
 	}
-	const queries = request.queries === undefined ? undefined : [...request.queries].map((query) => {
+	if (request.queries !== undefined && (!Array.isArray(request.queries) || request.queries.length < 1 || request.queries.length > 8)) {
+		throw invalid("Research queries must be an array of 1-8 strings");
+	}
+	const queries = request.queries?.map((query) => {
 		if (typeof query !== "string" || query.trim().length === 0 || query.trim().length > 2_000) throw invalid("Research queries must be non-empty strings of at most 2000 characters");
 		return query.trim();
 	});
-	if (queries !== undefined && queries.length === 0) throw invalid("Research queries must not be empty");
 	if (request.budget.maxOutputChars > MAX_RESEARCH_OUTPUT_CHARS) throw budgetError(`maxOutputChars must be at most ${MAX_RESEARCH_OUTPUT_CHARS}`);
 	if (request.executionModel !== undefined && typeof request.executionModel !== "string") throw invalid("executionModel must be a string");
 	const executionModel = request.executionModel === undefined ? undefined : request.executionModel.trim();
@@ -287,7 +289,6 @@ export async function executeResearch(
 	const normalized = validateResearchRequest(request);
 	if (signal?.aborted) throw new SearchToolError("WEB_RESEARCH_CANCELED", "Research canceled");
 	const queries = queriesFor(normalized);
-	if (queries.length === 0) throw invalid("Research has no queries to execute");
 	const firstRequest: SearchRequest = {
 		query: queries[0]!,
 		...(normalized.provider === undefined ? {} : { providerHint: normalized.provider }),
@@ -455,18 +456,21 @@ export async function executeResearch(
 		}
 		if (stopReason === "completed" && hadRecoverableSearchFailure) stopReason = "partial";
 
-		const fetchLimit = Math.min(normalized.fetchResults ?? 0, normalized.budget.maxFetches);
+		const requestedFetches = normalized.fetchResults ?? 0;
 		// Search and fetch have independent budgets. Preserve useful results from
 		// completed searches even when later search work hit its budget or failed.
-		if (stopReason !== "deadline" && stopReason !== "canceled" && fetchLimit > 0) {
+		if (stopReason !== "deadline" && stopReason !== "canceled" && requestedFetches > 0) {
 			for (const result of results) {
-				if (fetchAttempts >= fetchLimit || stepsCompleted >= normalized.budget.maxSteps || fetchesCompleted >= fetchLimit) {
-					if ((stopReason === "completed" || stopReason === "budget") && (fetchAttempts < fetchLimit || stepsCompleted >= normalized.budget.maxSteps)) stopReason = "budget";
-					break;
-				}
+				// Exhausting a limit is a budget stop only if requested work on
+				// another distinct page remains; the last allowed step can finish it.
+				if (fetchAttempts >= requestedFetches) break;
 				const fetchUrl = result.sourcePageUrl ?? result.url;
 				const fetchIdentity = searchUrlIdentity(fetchUrl);
 				if (fetchIdentity === undefined || seenUrls.has(fetchIdentity)) continue;
+				if (fetchAttempts >= normalized.budget.maxFetches || stepsCompleted >= normalized.budget.maxSteps) {
+					if (stopReason === "completed") stopReason = "budget";
+					break;
+				}
 				seenUrls.add(fetchIdentity);
 				if (deadlineController.signal.aborted || remaining(deadline) <= 1) {
 					stopReason = "deadline";

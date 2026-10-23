@@ -1,11 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./contracts";
-import { createProviderError, SearchToolError } from "./errors";
+import type { FetchedContent, Provider, SearchResponse } from "./contracts";
+import { createProviderError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
-import { createWebSearchTool, registerWebSearch, renderSearchResponse, renderSearchResult } from "./search-tool";
+import { createWebSearchTool, renderSearchResponse, renderSearchResult } from "./search-tool";
 import { createSearchRouter } from "./router";
 import { executeSearch, executeSearchSelection, validateSearchRequest } from "./search";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 function makeProvider(search: Provider["search"]): Provider {
 	return {
@@ -61,6 +60,36 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "q", dateRange: { from: "2026-01-01T12:00" } })).toThrow("ISO-8601");
 		expect(() => validateSearchRequest({ query: "q", social: { includeHandles: ["xai"], excludeHandles: ["@xai"] } })).toThrow("both included and excluded");
 		expect(() => validateSearchRequest({ query: "q", imageSettings: { caption: true } })).toThrow("requires searchContentTypes to include image");
+	});
+
+	it("removes empty optional constraints before routing and dispatch", async () => {
+		const request = { query: "q", dateRange: {}, social: {}, imageSettings: {} };
+		const normalized = validateSearchRequest(request);
+		expect(normalized.dateRange).toBeUndefined();
+		expect(normalized.social).toBeUndefined();
+		expect(normalized.imageSettings).toBeUndefined();
+		expect(validateSearchRequest(normalized)).toEqual(normalized);
+		const provider = makeProvider(async (received) => {
+			expect(received.dateRange).toBeUndefined();
+			expect(received.social).toBeUndefined();
+			return successResponse();
+		});
+		const route = createSearchRouter({ brave: provider, braveConfigured: true, braveFreeCapacityConfigured: true });
+		await executeSearchSelection(route(request, {} as never), request);
+	});
+
+	it("retains billed fallback failures in the Pi tool result", async () => {
+		const usage = { inputTokens: 10, outputTokens: 2, totalTokens: 12, costUsd: 0.1 };
+		const primary = makeProvider(async () => {
+			throw createProviderError({ provider: "brave", kind: "auth", message: "no credentials", retryable: false, fallbackSafe: true });
+		});
+		const fallback: Provider = { ...primary, id: "exa", search: async () => {
+			throw createProviderError({ provider: "exa", kind: "malformed", message: "no sources", retryable: false, requestId: "billed", usage });
+		} };
+		const selection = { provider: primary, fallbacks: [fallback], automatic: true };
+		await expect(executeSearchSelection(selection, { query: "q" })).rejects.toMatchObject({ provider: "exa", requestId: "billed", usage });
+		const result = await createWebSearchTool(() => selection).execute("call", { query: "q" }, undefined, undefined, {} as never);
+		expect(result).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } } });
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {
@@ -257,9 +286,12 @@ describe("search boundary", () => {
 		expect(new TextEncoder().encode(JSON.stringify(bounded.details)).byteLength).toBeLessThanOrEqual(45_000);
 	});
 
-	it("maps cancellation during source enrichment to a stable search error", async () => {
+	it.each([false, true])("preserves cancellation and known billing during source enrichment (billed: %j)", async (billed) => {
 		const controller = new AbortController();
-		const tool = createWebSearchTool(makeProvider(async (request) => successResponse(request.query)), {
+		const tool = createWebSearchTool(makeProvider(async (request) => ({
+			...successResponse(request.query),
+			...(billed ? { usage: { inputTokens: 10, outputTokens: 2, costUsd: 0.1 } } : {}),
+		})), {
 			fetcher: async (_request, signal) => await new Promise<FetchedContent>((_resolve, reject) => {
 				if (signal === undefined) return reject(new Error("missing signal"));
 				signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
@@ -268,7 +300,11 @@ describe("search boundary", () => {
 		const pending = tool.execute("call-1", { query: "q", includeContent: true }, controller.signal, undefined, {} as never);
 		await Bun.sleep(1);
 		controller.abort();
-		await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
+		if (billed) {
+			expect(await pending).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } } });
+		} else {
+			await expect(pending).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
+		}
 	});
 
 	it("keeps completed results when source enrichment hits the search deadline", async () => {
@@ -290,19 +326,8 @@ describe("search boundary", () => {
 		await expect(tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)).rejects.toMatchObject({ code: "WEB_SEARCH_TIMEOUT" });
 	});
 
-	it("registers web_search and returns structured evidence", async () => {
+	it("returns structured evidence and untrusted model-visible text", async () => {
 		const provider = makeProvider(async (request) => successResponse(request.query));
-		const registered: Array<{ name: string }> = [];
-		registerWebSearch(
-			{
-				registerTool(tool: { name: string }) {
-					registered.push({ name: tool.name });
-				},
-			} as unknown as ExtensionAPI,
-			provider,
-		);
-		expect(registered).toEqual([{ name: "web_search" }]);
-
 		const tool = createWebSearchTool(provider);
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
 		expect((result as { isError?: boolean }).isError).toBeUndefined();
