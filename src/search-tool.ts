@@ -44,7 +44,14 @@ function providerSchemaFor(hints: readonly SearchProviderHintId[]): TUnsafe<"nat
 	const ids = ["native", ...hints] as const;
 	return StringEnum(ids as unknown as readonly string[], { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
 }
-const SearchDateRangeSchema = Type.Object(
+export const SearchDomainsSchema = Type.Object(
+	{
+		include: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT, description: "Only search these domains" })),
+		exclude: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT, description: "Exclude these domains" })),
+	},
+	{ description: "Optional domain filters" },
+);
+export const SearchDateRangeSchema = Type.Object(
 	{
 		from: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DATE_LENGTH, description: "Inclusive start date, YYYY-MM-DD" })),
 		to: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DATE_LENGTH, description: "Inclusive end date, YYYY-MM-DD" })),
@@ -86,15 +93,7 @@ export const WebSearchParameters = Type.Object({
 		Type.Integer({ minimum: 1, maximum: MAX_RESULTS, default: DEFAULT_MAX_RESULTS, description: `Maximum results to return (1-${MAX_RESULTS})` }),
 	),
 	mode: Type.Optional(SearchModeSchema),
-	domains: Type.Optional(
-		Type.Object(
-			{
-				include: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT, description: "Only search these domains" })),
-				exclude: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_SEARCH_DOMAIN_LENGTH }), { maxItems: MAX_SEARCH_DOMAIN_COUNT, description: "Exclude these domains" })),
-			},
-			{ description: "Optional domain filters" },
-		),
-	),
+	domains: Type.Optional(SearchDomainsSchema),
 	dateRange: Type.Optional(SearchDateRangeSchema),
 	social: Type.Optional(SocialSearchSchema),
 	executionModel: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_EXECUTION_MODEL_LENGTH, description: "Model id when deliberately selecting a model-mediated provider" })),
@@ -538,14 +537,13 @@ export function createWebSearchTool(
 			try {
 				const request = requestFromParams(params);
 				selectedProvider = resolveProvider(provider, request, context);
-				const perAttemptTimeoutMs = selectedProvider.fallbacks.length > 0 ? Math.max(1_000, Math.floor(totalTimeoutMs / 2)) : totalTimeoutMs;
 				const response = await executeSearchSelection(selectedProvider, request, {
 					signal: deadlineController.signal,
-					timeoutMs: perAttemptTimeoutMs,
+					deadline,
 					context: providerContextFromPi(context),
 				});
 				completedUsage = response.usage;
-				const enriched = await enrichSearchResponse(response, request, deadlineController.signal, callerSignal, Math.max(1_000, deadline - Date.now()), options.fetcher ?? fetchContent, options.fetcherOptions);
+				const enriched = await enrichSearchResponse(response, request, deadlineController.signal, callerSignal, Math.max(1, deadline - Date.now()), options.fetcher ?? fetchContent, options.fetcherOptions);
 				const bounded = boundedSearchResponse(enriched);
 				return {
 					content: [{ type: "text", text: `${SEARCH_UNTRUSTED_PREFIX}${renderSearchResponse(bounded)}` }],

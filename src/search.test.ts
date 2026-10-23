@@ -173,6 +173,65 @@ describe("search boundary", () => {
 		expect(fallbackCalls).toBe(0);
 	});
 
+	it("does not fallback after a timeout with an ambiguous outcome", async () => {
+		let fallbackCalls = 0;
+		const primary: Provider = {
+			id: "openai",
+			capabilities: {},
+			profile: { auth: "modelRegistry", costModel: "unknown" },
+			search: async (_request, signal) => await new Promise<SearchResponse>((_resolve, reject) => {
+				signal.addEventListener("abort", () => reject(new Error("deadline")), { once: true });
+			}),
+		};
+		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
+		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 100 });
+		await expect(tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)).rejects.toMatchObject({ code: "WEB_SEARCH_TIMEOUT" });
+		expect(fallbackCalls).toBe(0);
+	});
+
+	it("gives a primary the full deadline instead of halving it for an unused fallback", async () => {
+		let fallbackCalls = 0;
+		const primary: Provider = {
+			id: "openai",
+			capabilities: {},
+			profile: { auth: "modelRegistry", costModel: "unknown" },
+			search: async () => {
+				await Bun.sleep(1_300);
+				return successResponse();
+			},
+		};
+		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
+		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 2_400 });
+		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
+		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
+		expect(fallbackCalls).toBe(0);
+	});
+
+	it("gives a safe fallback only the time remaining after primary latency", async () => {
+		let fallbackCalls = 0;
+		const primary: Provider = {
+			id: "openai",
+			capabilities: {},
+			profile: { auth: "modelRegistry", costModel: "unknown" },
+			search: async () => {
+				await Bun.sleep(1_400);
+				throw createProviderError({ provider: "openai", kind: "auth", fallbackSafe: true, message: "primary unavailable", retryable: false });
+			},
+		};
+		const fallback: Provider = {
+			...makeProvider(async (request) => {
+				fallbackCalls += 1;
+				await Bun.sleep(200);
+				return successResponse(request.query);
+			}),
+			id: "exa",
+		};
+		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 2_600 });
+		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
+		expect(fallbackCalls).toBe(1);
+		expect(result.details).toMatchObject({ provider: "exa", attemptedProviders: ["openai", "exa"] });
+	});
+
 	it("canonicalizes nested percent-encoded source URLs before rendering and enrichment", async () => {
 		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
 		const canonical = "https://help.openai.com/en/articles/20001106-codex-rate-card";

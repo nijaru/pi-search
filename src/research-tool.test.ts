@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { Provider, SearchResponse } from "./contracts";
+import type { Provider, SearchRequest, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
+import { SafeFetchError } from "./fetch-errors";
 import { createWebResearchTool, executeResearch, renderResearchResponse, renderResearchResult } from "./research-tool";
+import { createSearchRouter } from "./router";
 import type { DirectTransport } from "./direct-transport";
 
 function textTransport(content: string): DirectTransport {
@@ -160,10 +162,102 @@ describe("web_research", () => {
 		expect(result).toMatchObject({ providerCalls: 1, stepsCompleted: 1, stopReason: "budget" });
 	});
 
-	it("counts fetch attempts separately from successful fetches", async () => {
+	it("counts failed fetch attempts and reports partial coverage", async () => {
 		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["http://127.0.0.1/blocked", "http://127.0.0.1/blocked-2"]), context());
-		expect(result.fetchAttempts).toBe(1);
-		expect(result.fetchesCompleted).toBe(0);
+		expect(result).toMatchObject({ stopReason: "partial", fetchAttempts: 1, fetchesCompleted: 0 });
+		expect(result.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("fetch failed") }));
+	});
+
+	it("keeps a budget stop when a failed fetch leaves another requested source unfetched", async () => {
+		const selected: Provider = { ...provider(), search: async (request) => ({
+			query: request.query,
+			provider: "openai",
+			appliedOptions: [],
+			warnings: [],
+			results: [1, 2].map(index => ({ url: `http://127.0.0.1/blocked-${index}`, provider: "openai", searchQuery: request.query })),
+		}) };
+		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => selected, context());
+		expect(result).toMatchObject({ stopReason: "budget", fetchAttempts: 1, fetchesCompleted: 0 });
+	});
+
+	it("keeps deadline precedence over a failed requested fetch", async () => {
+		const hanging: DirectTransport = (_target, init) => new Promise((_resolve, reject) => {
+			init.signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
+		});
+		const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, timeoutMs: 100 } }, () => provider(false, undefined, ["https://example.com/1"]), context(), { transport: hanging, lookup: publicLookup });
+		expect(result).toMatchObject({ stopReason: "deadline", fetchAttempts: 1, fetchesCompleted: 0 });
+	});
+
+	it("keeps cancellation precedence over a failed requested fetch", async () => {
+		const hanging: DirectTransport = (_target, init) => new Promise((_resolve, reject) => {
+			init.signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
+		});
+		const controller = new AbortController();
+		const pending = executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1 } }, () => provider(false, undefined, ["https://example.com/1"]), context(), { transport: hanging, lookup: publicLookup }, controller.signal);
+		await Bun.sleep(10);
+		controller.abort();
+		expect(await pending).toMatchObject({ stopReason: "canceled", fetchAttempts: 1, fetchesCompleted: 0 });
+	});
+
+	it("keeps provider-error precedence over a failed requested fetch", async () => {
+		let calls = 0;
+		const selected: Provider = {
+			...provider(),
+			search: async (request) => {
+				calls += 1;
+				if (calls === 2) throw new SearchToolError("WEB_SEARCH_RATE_LIMIT", "later search failed");
+				return { query: request.query, results: [{ url: "http://127.0.0.1/blocked", provider: "openai", searchQuery: request.query }], provider: "openai", appliedOptions: [], warnings: [] };
+			},
+		};
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], fetchResults: 1, budget: { ...budget, maxFetches: 1 } }, () => selected, context());
+		expect(result).toMatchObject({ stopReason: "provider-error", fetchAttempts: 1, fetchesCompleted: 0 });
+	});
+
+	it("applies normalized domain and date constraints to provider selection and every query", async () => {
+		const seen: SearchRequest[] = [];
+		const exa: Provider = {
+			id: "exa",
+			capabilities: { domainFilter: true, dateFilter: true },
+			profile: { auth: "environment", costModel: "per-request", estimatedCostUsd: 0.007 },
+			search: async (request) => {
+				seen.push(request);
+				return {
+					query: request.query,
+					results: [{ url: `https://example.com/${seen.length}`, domain: "example.com", provider: "exa", searchQuery: request.query }],
+					provider: "exa",
+					appliedOptions: ["maxResults", "domains", "dateRange"],
+					warnings: [],
+				};
+			},
+		};
+		const route = createSearchRouter({ exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
+		const result = await executeResearch({
+			question: "main",
+			queries: ["one", "two"],
+			domains: { include: ["Example.COM"] },
+			dateRange: { from: "2026-01-01", to: "2026-01-02" },
+			budget: { ...budget, maxCostUsd: 0.02 },
+		}, route, context());
+		expect(result.provider).toBe("exa");
+		expect(seen).toHaveLength(2);
+		for (const request of seen) {
+			expect(request).toMatchObject({ domains: { include: ["example.com"] }, dateRange: { from: "2026-01-01", to: "2026-01-02" } });
+		}
+		expect(result.usage).toMatchObject({ costUsd: 0.014 });
+	});
+
+	it("rejects invalid research filters before provider selection", async () => {
+		let selected = false;
+		for (const filters of [{ domains: { include: ["https://example.com"] } }, { dateRange: { from: "2026-02-30" } }]) {
+			await expect(executeResearch({ question: "main", ...filters, budget }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_INVALID_REQUEST" });
+		}
+		expect(selected).toBe(false);
+	});
+
+	it("rejects hard research filters the selected route cannot enforce", async () => {
+		const brave: Provider = { id: "brave", capabilities: { domainFilter: true }, profile: { auth: "environment", costModel: "per-request" }, search: async () => { throw new Error("must not dispatch"); } };
+		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		await expect(executeResearch({ question: "main", dateRange: { from: "2026-01-01" }, budget }, route, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_PROVIDER", message: expect.stringContaining("date range") });
 	});
 
 	it.each([

@@ -1,4 +1,4 @@
-import type { Provider, ProviderContext, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
+import type { Provider, ProviderContext, ProviderId, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
 import { cleanupSearchResponse, MAX_SEARCH_DOMAIN_LENGTH } from "./search-cleanup";
 
@@ -187,6 +187,37 @@ function normalizeSocial(value: SearchRequest["social"]): SearchRequest["social"
 	};
 }
 
+/** Hard constraints shared by the search and research request boundaries. */
+export interface NormalizedSearchFilters {
+	readonly domains?: SearchRequest["domains"];
+	readonly dateRange?: SearchRequest["dateRange"];
+}
+
+/** Validate and normalize domain and date constraints before routing or dispatch. */
+export function normalizeSearchFilters(domains: SearchRequest["domains"], dateRange: SearchRequest["dateRange"]): NormalizedSearchFilters {
+	if (
+		domains !== undefined &&
+		(typeof domains !== "object" || domains === null || Array.isArray(domains))
+	) {
+		throw invalidRequest("Search domains must be an object");
+	}
+	const include = normalizeDomainList(domains?.include, "domains.include");
+	const exclude = normalizeDomainList(domains?.exclude, "domains.exclude");
+	if (include !== undefined && exclude !== undefined) {
+		const excluded = new Set(exclude);
+		const overlap = include.find((domain) => excluded.has(domain));
+		if (overlap !== undefined) {
+			throw invalidRequest(`Search domain cannot be both included and excluded: ${overlap}`);
+		}
+	}
+	return {
+		...(include === undefined && exclude === undefined
+			? { domains }
+			: { domains: { ...(include === undefined ? {} : { include }), ...(exclude === undefined ? {} : { exclude }) } }),
+		dateRange: normalizeDateRange(dateRange),
+	};
+}
+
 /** Validate and normalize the public search request before any provider call. */
 export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (request === null || typeof request !== "object") {
@@ -216,7 +247,7 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 	if (mode !== "auto" && mode !== "keyword" && mode !== "fresh") {
 		throw invalidRequest("Search mode must be auto, keyword, or fresh");
 	}
-	const dateRange = normalizeDateRange(request.dateRange);
+	const filters = normalizeSearchFilters(request.domains, request.dateRange);
 	const social = normalizeSocial(request.social);
 	const userLocation = normalizeLocation(request.userLocation);
 	const searchContentTypes = normalizeContentTypes(request.searchContentTypes);
@@ -243,21 +274,6 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		throw invalidRequest(`Search contentMaxLength must be an integer between 1 and ${MAX_CONTENT_MAX_LENGTH}`);
 	}
 
-	if (
-		request.domains !== undefined &&
-		(typeof request.domains !== "object" || request.domains === null || Array.isArray(request.domains))
-	) {
-		throw invalidRequest("Search domains must be an object");
-	}
-	const include = normalizeDomainList(request.domains?.include, "domains.include");
-	const exclude = normalizeDomainList(request.domains?.exclude, "domains.exclude");
-	if (include !== undefined && exclude !== undefined) {
-		const excluded = new Set(exclude);
-		const overlap = include.find((domain) => excluded.has(domain));
-		if (overlap !== undefined) {
-			throw invalidRequest(`Search domain cannot be both included and excluded: ${overlap}`);
-		}
-	}
 	return {
 		...request,
 		query,
@@ -266,7 +282,7 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		executionModel,
 		// Overwrite the raw fields even when normalization removes an empty
 		// constraint; otherwise routing still sees the original object.
-		dateRange,
+		dateRange: filters.dateRange,
 		social,
 		userLocation,
 		searchContentTypes,
@@ -278,16 +294,38 @@ export function validateSearchRequest(request: SearchRequest): SearchRequest {
 		includeContent,
 		contentResults,
 		contentMaxLength,
-		...(include === undefined && exclude === undefined
-			? { domains: request.domains }
-			: { domains: { ...(include === undefined ? {} : { include }), ...(exclude === undefined ? {} : { exclude }) } }),
+		domains: filters.domains,
 	};
 }
 
 export interface ExecuteSearchOptions {
 	readonly signal?: AbortSignal;
 	readonly timeoutMs?: number;
+	/** Absolute epoch deadline shared by every automatic attempt and fallback. */
+	readonly deadline?: number;
 	readonly context?: ProviderContext;
+}
+
+function searchTimeoutMs(provider: ProviderId, options: ExecuteSearchOptions): number {
+	const remainingMs = options.deadline === undefined ? undefined : options.deadline - Date.now();
+	if (remainingMs !== undefined && remainingMs <= 0) {
+		throw toSearchToolError(
+			createProviderError({
+				provider,
+				kind: "timeout",
+				message: "Search deadline exceeded",
+				retryable: true,
+			}),
+			provider,
+		);
+	}
+	const timeoutMs = options.timeoutMs === undefined
+		? remainingMs ?? DEFAULT_SEARCH_TIMEOUT_MS
+		: remainingMs === undefined ? options.timeoutMs : Math.min(options.timeoutMs, remainingMs);
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+		throw invalidRequest("Search timeoutMs must be positive");
+	}
+	return timeoutMs;
 }
 
 /** Execute one provider call with caller cancellation and a hard deadline. */
@@ -297,10 +335,7 @@ export async function executeSearch(
 	options: ExecuteSearchOptions = {},
 ): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
-	const timeoutMs = options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
-	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-		throw invalidRequest("Search timeoutMs must be positive");
-	}
+	const timeoutMs = searchTimeoutMs(provider.id, options);
 	if (options.signal?.aborted) {
 		throw toSearchToolError(
 			createProviderError({
@@ -378,19 +413,21 @@ function canUseAutomaticFallback(error: unknown): boolean {
 	return error.fallbackSafe || ((error.kind === "auth" || error.kind === "rateLimit") && (error.status === 401 || error.status === 403 || error.status === 429));
 }
 
-/** Execute an automatic selection with at most one visible alternative. */
+/** Execute an automatic selection with one shared deadline and at most one visible alternative. */
 export async function executeSearchSelection(
 	selection: SearchProviderSelection,
 	request: SearchRequest,
 	options: ExecuteSearchOptions = {},
 ): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
+	const deadline = options.deadline ?? (options.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs);
+	const attemptOptions: ExecuteSearchOptions = deadline === undefined ? options : { ...options, deadline };
 	const candidates = [selection.provider, ...(selection.automatic ? selection.fallbacks.slice(0, 1) : [])];
 	let firstError: SearchToolError | undefined;
 	for (let index = 0; index < candidates.length; index += 1) {
 		const candidate = candidates[index]!;
 		try {
-			const response = await executeSearch(candidate, normalized, options);
+			const response = await executeSearch(candidate, normalized, attemptOptions);
 			const attemptedProviders = candidates.slice(0, index + 1).map((provider) => provider.id);
 			if (index === 0) return { ...response, attemptedProviders };
 			return {

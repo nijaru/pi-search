@@ -413,6 +413,10 @@ export interface ResearchRequest {
 	/** The caller supplies the query plan; defaults to [question]. */
 	readonly queries?: readonly string[];
 	readonly budget: ResearchBudget;
+	/** Hard domain constraints applied to every query and provider selection. */
+	readonly domains?: DomainFilter;
+	/** Hard publication date constraints applied to every query and provider selection. */
+	readonly dateRange?: SearchDateRange;
 	/** Select one provider strictly for the whole invocation. */
 	readonly provider?: "native" | SearchProviderHintId;
 	/** Explicit model id for a model-mediated provider. */
