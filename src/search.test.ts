@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setSystemTime } from "bun:test";
 import type { FetchedContent, Provider, SearchResponse } from "./contracts";
 import { createProviderError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
@@ -207,7 +207,7 @@ describe("search boundary", () => {
 		expect(fallbackCalls).toBe(0);
 	});
 
-	it("gives a safe fallback only the time remaining after primary latency", async () => {
+	it("can safely fall back after the primary exceeds half the overall budget", async () => {
 		let fallbackCalls = 0;
 		const primary: Provider = {
 			id: "openai",
@@ -230,6 +230,23 @@ describe("search boundary", () => {
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
 		expect(fallbackCalls).toBe(1);
 		expect(result.details).toMatchObject({ provider: "exa", attemptedProviders: ["openai", "exa"] });
+	});
+
+	it("does not dispatch a safe fallback after the shared deadline expires", async () => {
+		const started = Date.now();
+		let fallbackCalls = 0;
+		const primary: Provider = {
+			...makeProvider(async () => {
+				setSystemTime(started + 2_001);
+				throw createProviderError({ provider: "brave", kind: "auth", fallbackSafe: true, message: "rejected", retryable: false });
+			}),
+		};
+		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls++; return successResponse(); }), id: "exa" };
+		try {
+			setSystemTime(started);
+			await expect(executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" }, { timeoutMs: 2_000 })).rejects.toMatchObject({ kind: "timeout" });
+			expect(fallbackCalls).toBe(0);
+		} finally { setSystemTime(); }
 	});
 
 	it("canonicalizes nested percent-encoded source URLs before rendering and enrichment", async () => {
