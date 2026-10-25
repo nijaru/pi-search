@@ -141,8 +141,11 @@ cancellation, and local extraction. Fetched content is always untrusted data.
 this same fetcher. X URLs are the disclosed exception to direct-only fetching:
 free FxTwitter is the public default, with no per-request approval. A persistent
 `/search-x direct` policy disables this path. An explicitly authorized,
-extension-owned browser profile takes priority; authenticated failures never
-fall back to public extraction. See README's X section for usage and boundaries.
+existing-browser connection takes priority; only an owned temporary tab is
+instrumented. Authenticated failures never fall back to public extraction.
+Browser extraction uses target-local controls, not the direct transport's DNS
+pinning; browser-wide network settings and existing tabs remain unchanged.
+See README's X section for usage and boundaries.
 
 - PDF URLs are fetched safely, validated by magic header, and passed to pinned
   local `@firecrawl/anydoc`/`pdf-inspector` conversion for structured Markdown.

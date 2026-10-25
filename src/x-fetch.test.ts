@@ -97,17 +97,23 @@ describe("X fetch routing and bounds", () => {
 
 	it("extracts full server-rendered Articles even inside hidden streaming containers", async () => {
 		const articleUrl = "https://x.com/i/article/456";
-		const html = '<html><head><title>Full article</title></head><body><div hidden id="S:0"><h1>Title</h1><div class="x-article-body"><h2>Heading</h2><p>Article evidence</p><pre><code>const answer = 42;</code></pre></div></div></body></html>';
+		const documents = [
+			'<html><head><title>Full article</title></head><body><div hidden id="S:0"><h1>Title</h1><div class="x-article-body"><h2>Heading</h2><p>Article evidence</p><pre><code>const answer = 42;</code></pre></div></div></body></html>',
+			'<html><body><h1>Unrelated heading</h1><div data-testid="twitter-article-title">Title</div><div data-testid="twitterArticleRichTextView"><h2><div><span>Heading</span></div></h2><p>Article evidence</p><pre><code>const answer = 42;</code></pre></div></body></html>',
+		];
+		let html = documents[0]!;
 		const calls: string[] = [];
 		const source: DirectTransport = async (target) => {
 			calls.push(target.url.href);
 			return { status: 200, statusText: "OK", headers: new Headers({ "content-type": "text/html" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(html); } } };
 		};
-		const result = await fetchContent({ url: articleUrl }, undefined, { lookup, transport: source });
-		expect(calls).toEqual([articleUrl]);
-		expect(result).toMatchObject({ extraction: "x-article", title: "Title", truncated: false });
-		expect(result.content).toContain("## Heading");
-		expect(result.content).toContain("```\nconst answer = 42;\n```");
+		for (html of documents) {
+			const result = await fetchContent({ url: articleUrl }, undefined, { lookup, transport: source });
+			expect(result).toMatchObject({ extraction: "x-article", title: "Title", truncated: false });
+			expect(result.content).toContain("## Heading");
+			expect(result.content).toContain("```\nconst answer = 42;\n```");
+		}
+		expect(calls).toEqual([articleUrl, articleUrl]);
 		const loginPage: DirectTransport = async () => ({ status: 200, statusText: "OK", headers: new Headers({ "content-type": "text/html" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode("<html><body><h1>Log in to X</h1><p>Not the Article body.</p></body></html>"); } } });
 		for (const xMode of [undefined, "direct"] as const) {
 			await expect(fetchContent({ url: articleUrl, xMode }, undefined, { lookup, transport: loginPage })).rejects.toMatchObject({ kind: "extraction" });

@@ -3,6 +3,9 @@ export function extractXDom(document, target, maxCharacters = 1_000_000) {
 	const clean = (element) => {
 		const clone = element.cloneNode(true);
 		clone.querySelectorAll("script,style,iframe,object,embed,form,button,video,audio").forEach((el) => el.remove());
+		// X's rich-text headings contain layout divs; preserve inline markup without
+		// turning a heading into an empty Markdown heading followed by a paragraph.
+		for (const block of clone.querySelectorAll('h1 div,h1 p,h2 div,h2 p,h3 div,h3 p,h4 div,h4 p,h5 div,h5 p,h6 div,h6 p')) block.replaceWith(...block.childNodes);
 		for (const el of [clone, ...clone.querySelectorAll("*")]) {
 			for (const attr of [...el.attributes]) {
 				if (!['href', 'src', 'alt', 'title', 'class'].includes(attr.name)) el.removeAttribute(attr.name);
@@ -23,7 +26,7 @@ export function extractXDom(document, target, maxCharacters = 1_000_000) {
 	if (/\/article\//.test(new URL(target.url).pathname) && bodies.length === 1 && bodies[0].textContent.trim()) {
 		const html = clean(bodies[0]);
 		if (html.length > maxCharacters) throw new Error('X article exceeds the extraction limit');
-		return { html, title: document.querySelector('h1')?.textContent?.trim() || document.title || 'X Article', postCount: 1 };
+		return { html, title: ((document.querySelector('[data-testid="twitter-article-title"]') || document.querySelector('h1'))?.textContent?.trim() || document.title || 'X Article').slice(0, 512), postCount: 1 };
 	}
 	if (!target.postId) return null;
 	const posts = [];

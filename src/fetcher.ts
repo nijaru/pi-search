@@ -190,17 +190,19 @@ async function fetchXContent(
 	signal: AbortSignal, options: FetcherOptions, maxBytes: number,
 ): Promise<FetchedContent> {
 	if (mode === "auto" || mode === "browser") {
-		const browser = await options.xBrowser?.read(target, signal, maxBytes);
+		// A signed-in X page loads application bundles as well as source content.
+		// Keep explicit caller limits, but allow the existing 20 MiB hard cap by default.
+		const browser = await options.xBrowser?.read(target, signal, options.maxResponseBytes ?? MAX_FETCH_RESPONSE_BYTES, options.lookup);
 		if (browser) {
 			const extracted = await extractWithDeadline(`<html><head><title></title></head><body><article>${browser.html}</article></body></html>`, "text/html", { ...request, readable: false }, signal);
 			return finishContent({ ...extracted, title: browser.title, extraction: "x-browser" }, request, {
 				url: target.url, status: 200, redirectCount: 0, bytesRead: browser.bytesRead, contentType: "text/html",
 			}, options.now, [
-				{ code: "authenticated", message: "Read using your authorized X browser profile; content may not be public and was not sent to FxTwitter" },
+				{ code: "authenticated", message: "Read in your authorized browser using its existing session; content may not be public and was not sent to FxTwitter" },
 				...(target.kind === "post" ? [{ code: "partial" as const, message: "Only loaded author posts are included; thread completeness is unknown" }] : []),
 			]);
 		}
-		if (mode === "browser") throw new SafeFetchError({ kind: "extraction", message: "X browser is not authorized. Run /search-x login once, or use public mode for free FxTwitter reads" });
+		if (mode === "browser") throw new SafeFetchError({ kind: "extraction", message: "X browser is not authorized. Run /search-x connect once, or use public mode for free FxTwitter reads" });
 	}
 	let bytesRead = 0;
 	let redirects = 0;
@@ -232,7 +234,7 @@ async function fetchXContent(
 		// guessed publishing post or a search that could return unrelated evidence.
 		const page = await read(target.url);
 		const extracted = await extractWithDeadline(new TextDecoder().decode(page.bytes), "text/html", request, signal);
-		if (extracted.extraction !== "x-article") throw new SafeFetchError({ kind: "extraction", message: "X Article body is unavailable. Provide its /handle/article/POSTID or publishing post URL, or authorize the browser with /search-x login" });
+		if (extracted.extraction !== "x-article") throw new SafeFetchError({ kind: "extraction", message: "X Article body is unavailable. Provide its /handle/article/POSTID or publishing post URL, or authorize the browser with /search-x connect" });
 		return finishContent(extracted, request, { url: page.url, contentType: "text/html", status: page.status, bytesRead, redirectCount: redirects }, options.now);
 	}
 	const result = await readFxTwitter(target, read);

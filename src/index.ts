@@ -1,6 +1,6 @@
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
-import { XBrowserAccess } from "./x-browser";
+import { XBrowserAccess, type XBrowserName } from "./x-browser";
 import { SafeFetchError } from "./fetch-errors";
 import { createAnthropicProvider } from "./anthropic";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
@@ -122,29 +122,33 @@ export default function (pi: ExtensionAPI): void {
 	registerWebResearch(pi, route, { availableProviderHints: availableHints, xBrowser });
 	pi.on("session_shutdown", async () => { await xBrowser.shutdown(); });
 	pi.registerCommand("search-x", {
-		description: "X access: login, logout, status, auto, public (free FxTwitter), or direct",
+		description: "X access: connect [brave|chrome|chromium], disconnect, status, auto, public, or direct",
 		handler: async (args, ctx) => {
 			try {
-				switch (args.trim() || "status") {
-					case "login": {
-						if (!ctx.hasUI) throw new SafeFetchError({ kind: "extraction", message: "Run /search-x login in an interactive Pi session to sign in normally" });
-						const authorized = await xBrowser.login(() => ctx.ui.confirm("Sign in to X", "Complete normal X login in the dedicated browser window, then confirm here. This authorizes automatic reads using that profile; no cookies are imported from other browsers."));
-						ctx.ui.notify(authorized ? "X browser authorized. Automatic reads now prefer it; no paid API is used." : "X browser authorization canceled.", "info");
+				const parts = args.trim().split(/\s+/).filter(Boolean);
+				const [command = "status", browser = "brave"] = parts;
+				if (parts.length > (command === "connect" ? 2 : 1)) throw new SafeFetchError({ kind: "invalidRequest", message: "Unexpected X command arguments" });
+				switch (command) {
+					case "connect": {
+						if (!ctx.hasUI) throw new SafeFetchError({ kind: "extraction", message: "Run /search-x connect in an interactive Pi session to authorize your existing browser" });
+						if (!["brave", "chrome", "chromium"].includes(browser)) throw new SafeFetchError({ kind: "invalidRequest", message: "Choose brave, chrome, or chromium" });
+						const authorized = await xBrowser.connect(() => ctx.ui.confirm("Use your existing X login", `Allow pi-search to use ${browser} for read-only X extraction? Enable remote debugging in its inspect page and approve its native connection prompt. Only temporary X tabs are used; no browser is launched and no cookies are copied.`), browser as XBrowserName);
+						ctx.ui.notify(authorized ? "Browser connected. Automatic X reads now use its existing login; no paid API is used." : "X browser authorization canceled.", "info");
 						break;
 					}
-					case "logout":
-						await xBrowser.logout();
-						ctx.ui.notify(`X browser access disabled and its local profile deleted. This does not revoke the session at X. ${await xBrowser.status()}`, "info");
+					case "disconnect":
+						await xBrowser.disconnect();
+						ctx.ui.notify(`X browser access disabled. Your browser and X login are unchanged. ${await xBrowser.status()}`, "info");
 						break;
 					case "auto": case "public": case "direct":
-						await xBrowser.setMode(args.trim() as "auto" | "public" | "direct");
+						await xBrowser.setMode(command);
 						ctx.ui.notify(await xBrowser.status(), "info");
 						break;
 					case "status": ctx.ui.notify(await xBrowser.status(), "info"); break;
-					default: ctx.ui.notify("Usage: /search-x login | logout | status | auto | public | direct", "warning");
+					default: ctx.ui.notify("Usage: /search-x connect [brave|chrome|chromium] | disconnect | status | auto | public | direct", "warning");
 				}
 			} catch (error) {
-				ctx.ui.notify(error instanceof SafeFetchError ? error.message : "X browser operation failed. Close other pi-search X windows and check that Chrome, Chromium, or Brave is installed.", "error");
+				ctx.ui.notify(error instanceof SafeFetchError ? error.message : "X browser operation failed. Check remote debugging and approve the connection in your running browser.", "error");
 			}
 		},
 	});

@@ -283,7 +283,7 @@ The extension owns:
 - direct provider HTTP, bounded responses, cancellation, and error metadata;
 - safe direct HTML/text fetching and local AnyDoc document/PDF conversion;
 - free FxTwitter retrieval for public X URLs, with a persistent direct-only
-  opt-out, and explicitly authorized dedicated-browser X reads;
+  opt-out, and explicitly authorized X reads in the user's existing browser;
 - explicit page-bounded PDF extraction through local `pdftotext` when the
   caller requests `maxPages`;
 - remote YouTube caption extraction through bounded local `yt-dlp`; and

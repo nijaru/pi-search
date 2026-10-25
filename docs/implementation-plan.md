@@ -9,8 +9,9 @@ This is the tracked source of truth for implementation order.
 - Provider profiles, capabilities, usage metadata, hard-option reporting, and
   research budgets are defined and tested.
 - General fetching is local. X URLs are the reviewed exception: free FxTwitter
-  is the disclosed public default; a dedicated browser is used only after user
-  login. `/search-x direct` persistently disables both paths.
+  is the disclosed public default; an existing browser's login is reused only
+  after explicit connection consent, within an owned temporary tab.
+  `/search-x direct` persistently disables both paths.
 
 ## 1. Cost-controlled `web_search` — complete
 
@@ -187,7 +188,7 @@ until a required workflow demonstrates that pi-search must own them:
 
 - General browser automation, crawling, remote extraction, and provider fan-out.
   Selected X posts/Articles are the reviewed exception documented in README:
-  free FxTwitter by default, dedicated browser only after user login.
+  free FxTwitter by default, existing-browser reads only after connection consent.
 - Video downloads, frames, visual analysis, and OCR. Use Bash, `yt-dlp`,
   `ffmpeg`, or a dedicated vision workflow.
 - Local filesystem/repository operations and implicit GitHub cloning. Use

@@ -222,31 +222,46 @@ most 100 connected author posts. Missing/deleted posts and upstream omissions
 mean **thread completeness is never guaranteed**, separately from output
 truncation. Use `offset`/`nextOffset` for long output.
 
-For authenticated access, run **`/search-x login`** once and sign in normally in
-the dedicated Chrome, Chromium, or Brave window. A supported browser must already
-be installed; no browser binary is downloaded. Confirm in Pi when signed in.
-Subsequent automatic reads prefer this profile. Personal browser profiles and
-cookies are never imported, and an authenticated failure does **not** send that
-post ID to FxTwitter. Login may expire, and X may block automated browsers even
-with an account; rerun login or explicitly choose public mode when appropriate.
-Only loaded author posts are returned by the browser, not an exhaustive reply
-crawl.
+For authenticated access, use your **existing signed-in browser**:
+
+1. Enable remote debugging in `brave://inspect/#remote-debugging` (Chrome:
+   `chrome://inspect/#remote-debugging`). This permits local browser control;
+   pi-search never enables it for you or restarts your browser.
+2. Run **`/search-x connect`** for Brave, or `/search-x connect chrome` or
+   `/search-x connect chromium`.
+3. Confirm in Pi and approve the browser's native connection prompt.
+
+Automatic X reads now prefer your existing login. No separate profile or browser
+installation is needed, and cookies are never copied. Each new connection may
+require browser approval; the connection is reused during the Pi session.
+An authenticated failure does **not** send the target to FxTwitter. Sign in to
+X normally if your login expires, or explicitly choose public mode. Only loaded
+author posts are returned, not an exhaustive reply crawl. If multiple profiles
+have X tabs open, close the other profiles' X tabs before reading.
 
 - `/search-x status` reports the mode and authorization state.
 - `/search-x public` prefers FxTwitter without using the browser.
 - `/search-x direct` persistently disables both extra paths, including for search
   enrichment and research. Tool arguments cannot override this user policy.
 - `/search-x auto` restores browser-first, otherwise-public routing.
-- `/search-x logout` disables browser access and removes its local profile. It
-  preserves the selected mode and does not revoke an X session remotely.
+- `/search-x disconnect` revokes extension access while preserving the selected
+  mode. Your browser, X login, and remote-debugging setting remain unchanged.
 
-The profile is stored privately under Pi's agent directory at
-`pi-search/x/profile`. Manual login uses a normal browser network context.
-Automated reads restrict HTTPS destinations to X and its asset hosts, pin their
-DNS addresses, block WebSockets/service workers and media downloads, and enforce
-an overall deadline and aggregate response-byte limit. No posting, liking, or
-following controls are used. Browser access is serialized; another Pi session
-using the same profile may report it busy.
+Only the mode and authorized browser name are stored under Pi's agent directory
+at `pi-search/x/preferences.json`. The reader attaches only to its own temporary
+background tab; existing tabs are not navigated or instrumented. Cancellation
+and shutdown close that tab and disconnect without closing your browser.
+
+In that temporary tab, requests are limited to HTTPS X/asset hosts and read
+operations. Redirects are checked before following, private DNS answers are
+rejected, and service workers are bypassed for that tab. A restrictive page
+policy blocks frames, workers, and media; WebSockets and popup controls are
+blocked. Extraction has an overall deadline, bounded output, and an observed
+response-byte limit (20 MiB by default, including the X application's scripts).
+This is **not** the direct fetcher's DNS-pinned transport or a browser-wide
+network sandbox: it uses your browser's network configuration,
+and in-flight traffic can exceed the observed limit before the tab closes.
+No posting, liking, or following controls are used.
 
 `xMode: "auto" | "public" | "browser" | "direct"` selects a path for one fetch;
 `browser` requires prior user authorization. FxTwitter returns Markdown even when

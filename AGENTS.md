@@ -64,10 +64,13 @@ research workflow.
 - General fetching stays direct and local. X post/Article URLs are the reviewed
   exception: free FxTwitter is the disclosed, zero-configuration public default;
   do not prompt for every request. `/search-x direct` persistently opts out.
-  Authorized browser reads take priority only after `/search-x login`, use only
-  the extension-owned profile, and never fall back to a public service on an
-  authenticated failure. Other remote extraction services still need a separate
-  opt-in, privacy, cost, and SSRF review.
+  Authorized browser reads take priority only after `/search-x connect`, reuse
+  the user's existing login in an owned temporary tab, and never fall back to a
+  public service on an authenticated failure. Never enable browser control,
+  import cookies, instrument unrelated tabs, or change shared browser settings.
+  Browser extraction is not the direct HTTP transport's DNS-pinned sandbox; keep
+  its target-local controls and limitations explicit. Other remote extraction
+  services still need a separate opt-in, privacy, cost, and SSRF review.
 - Keep benchmarking/evaluation code separate from the runtime extension; a
   future `pi-search-evals` project can test adapters without coupling research
   tooling to Pi.
