@@ -477,6 +477,8 @@ export function validateResearchBudget(budget: ResearchBudget): void {
  * The fetcher revalidates redirects, blocks private/link-local/metadata
  * addresses, caps response size, and fences extracted text as untrusted.
  */
+export type XReadMode = "auto" | "public" | "browser" | "direct";
+
 export interface FetchRequest {
 	/** URL to fetch. Must be http(s). */
 	readonly url: Url;
@@ -494,13 +496,15 @@ export interface FetchRequest {
 	readonly readable?: boolean;
 	/** Permit bounded raw HTML when readable extraction fails. Default true. */
 	readonly allowRawHtmlFallback?: boolean;
+	/** X retrieval: authorized browser first, otherwise free FxTwitter. Direct bypasses both. */
+	readonly xMode?: XReadMode;
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
-export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript";
+export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript" | "fxtwitter" | "x-browser" | "x-article";
 
 export interface FetchWarning {
-	readonly code: "truncated" | "raw-fallback";
+	readonly code: "truncated" | "raw-fallback" | "partial" | "authenticated";
 	readonly message: string;
 }
 

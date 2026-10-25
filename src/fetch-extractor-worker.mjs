@@ -2,6 +2,7 @@ import { parentPort } from "node:worker_threads";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
+import { extractXDom } from "./x-dom.mjs";
 
 if (!parentPort) throw new Error("Fetch extractor worker requires a parent port");
 
@@ -37,6 +38,19 @@ function extractContent(sourceText, mimeType, request) {
 			return { content: document.documentElement?.textContent?.trim() ?? "", outputFormat: "text", extraction: "plain-text", title: documentTitle };
 		}
 		return { content: turndown.turndown(sourceText), outputFormat: "markdown", extraction: "raw", title: documentTitle };
+	}
+
+	const sourceUrl = new URL(request.url);
+	if (["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(sourceUrl.hostname) && /\/(?:status|article)\//.test(sourceUrl.pathname)) {
+		const selected = extractXDom(document, { url: request.url, postId: sourceUrl.pathname.match(/\/status\/(\d+)/)?.[1] });
+		if (!selected) throw extractionError("X returned no readable post or Article body; login pages and previews are not evidence");
+		if (selected.collapsedPostIds?.length) throw extractionError("X returned collapsed post previews, not full text");
+		if (request.format === "html") return { content: selected.html, outputFormat: "html", extraction: "x-article", title: selected.title };
+		if (request.format === "text") {
+			const { document: selectedDocument } = parseHTML(`<html><body>${selected.html}</body></html>`);
+			return { content: selectedDocument.documentElement.textContent.trim(), outputFormat: "text", extraction: "x-article", title: selected.title };
+		}
+		return { content: turndown.turndown(selected.html), outputFormat: "markdown", extraction: "x-article", title: selected.title };
 	}
 
 	let article;

@@ -4,10 +4,14 @@ import extension from "./index";
 describe("extension registration", () => {
 	it("registers exactly the three public tools", () => {
 		const names: string[] = [];
+		const commands: string[] = [];
 		extension({
+			on() {},
+			registerCommand(name: string) { commands.push(name); },
 			registerTool(tool: { name: string }) { names.push(tool.name); },
 		} as never);
 		expect(names).toEqual(["web_search", "web_fetch", "web_research"]);
+		expect(commands).toEqual(["search-x"]);
 	});
 
 	it("exposes Cloudflare only with credentials and an explicit valid upstream", () => {
@@ -19,7 +23,7 @@ describe("extension registration", () => {
 			for (const upstream of ["", "invalid", "exa"]) {
 				process.env.PI_SEARCH_CLOUDFLARE_PROVIDER = upstream;
 				const enums: string[][] = [];
-				extension({ registerTool(tool: { name: string; parameters: { properties: { provider?: { enum: string[] } } } }) {
+				extension({ on() {}, registerCommand() {}, registerTool(tool: { name: string; parameters: { properties: { provider?: { enum: string[] } } } }) {
 					if (tool.name !== "web_fetch") enums.push(tool.parameters.properties.provider!.enum);
 				} } as never);
 				expect(enums).toHaveLength(2);
@@ -40,7 +44,7 @@ describe("extension registration", () => {
 				if (value === undefined) delete process.env.DEEPSEEK_API_KEY;
 				else process.env.DEEPSEEK_API_KEY = value;
 				const enums: string[][] = [];
-				extension({ registerTool(tool: { name: string; parameters: { properties: { provider?: { enum: string[] } } } }) {
+				extension({ on() {}, registerCommand() {}, registerTool(tool: { name: string; parameters: { properties: { provider?: { enum: string[] } } } }) {
 					if (tool.name !== "web_fetch") enums.push(tool.parameters.properties.provider!.enum);
 				} } as never);
 				expect(enums).toHaveLength(2);

@@ -87,7 +87,9 @@ bounds. Fetched pages are returned as untrusted source content with final URL,
 extraction, status, and truncation metadata. Failed enrichment is a warning;
 the search evidence is retained.
 
-No remote extraction service or browser is inserted into this path.
+General enrichment stays direct. X URLs use the fetcher\'s disclosed free
+FxTwitter default or an explicitly authorized dedicated browser profile, honoring
+`/search-x direct`. Authenticated failures never fall back to public extraction.
 
 ## Provider adapter contract
 

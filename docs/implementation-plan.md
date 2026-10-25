@@ -8,7 +8,9 @@ This is the tracked source of truth for implementation order.
 - Model/auth execution context is explicit.
 - Provider profiles, capabilities, usage metadata, hard-option reporting, and
   research budgets are defined and tested.
-- Direct fetching is local; remote extraction is not implicit.
+- General fetching is local. X URLs are the reviewed exception: free FxTwitter
+  is the disclosed public default; a dedicated browser is used only after user
+  login. `/search-x direct` persistently disables both paths.
 
 ## 1. Cost-controlled `web_search` — complete
 
@@ -183,7 +185,9 @@ existing Pi process before relying on the cutover.
 These are current boundaries, not permanent exclusions. They remain outside
 until a required workflow demonstrates that pi-search must own them:
 
-- Browser automation, crawling, remote extraction, and provider fan-out.
+- General browser automation, crawling, remote extraction, and provider fan-out.
+  Selected X posts/Articles are the reviewed exception documented in README:
+  free FxTwitter by default, dedicated browser only after user login.
 - Video downloads, frames, visual analysis, and OCR. Use Bash, `yt-dlp`,
   `ffmpeg`, or a dedicated vision workflow.
 - Local filesystem/repository operations and implicit GitHub cloning. Use

@@ -1,4 +1,7 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
+import { XBrowserAccess } from "./x-browser";
+import { SafeFetchError } from "./fetch-errors";
 import { createAnthropicProvider } from "./anthropic";
 import { createBraveProvider, BraveQuotaTracker } from "./brave";
 import { createBraveAnswersProvider } from "./brave-answers";
@@ -113,7 +116,36 @@ export default function (pi: ExtensionAPI): void {
 		parallelResponses: parallelResponsesEnabled,
 		x: xToken !== undefined && xToken.trim().length > 0,
 	});
-	registerWebSearch(pi, route, { availableProviderHints: availableHints });
-	registerWebFetch(pi);
-	registerWebResearch(pi, route, { availableProviderHints: availableHints });
+	const xBrowser = new XBrowserAccess(join(getAgentDir(), "pi-search", "x"));
+	registerWebSearch(pi, route, { availableProviderHints: availableHints, fetcherOptions: { xBrowser } });
+	registerWebFetch(pi, { xBrowser });
+	registerWebResearch(pi, route, { availableProviderHints: availableHints, xBrowser });
+	pi.on("session_shutdown", async () => { await xBrowser.shutdown(); });
+	pi.registerCommand("search-x", {
+		description: "X access: login, logout, status, auto, public (free FxTwitter), or direct",
+		handler: async (args, ctx) => {
+			try {
+				switch (args.trim() || "status") {
+					case "login": {
+						if (!ctx.hasUI) throw new SafeFetchError({ kind: "extraction", message: "Run /search-x login in an interactive Pi session to sign in normally" });
+						const authorized = await xBrowser.login(() => ctx.ui.confirm("Sign in to X", "Complete normal X login in the dedicated browser window, then confirm here. This authorizes automatic reads using that profile; no cookies are imported from other browsers."));
+						ctx.ui.notify(authorized ? "X browser authorized. Automatic reads now prefer it; no paid API is used." : "X browser authorization canceled.", "info");
+						break;
+					}
+					case "logout":
+						await xBrowser.logout();
+						ctx.ui.notify(`X browser access disabled and its local profile deleted. This does not revoke the session at X. ${await xBrowser.status()}`, "info");
+						break;
+					case "auto": case "public": case "direct":
+						await xBrowser.setMode(args.trim() as "auto" | "public" | "direct");
+						ctx.ui.notify(await xBrowser.status(), "info");
+						break;
+					case "status": ctx.ui.notify(await xBrowser.status(), "info"); break;
+					default: ctx.ui.notify("Usage: /search-x login | logout | status | auto | public | direct", "warning");
+				}
+			} catch (error) {
+				ctx.ui.notify(error instanceof SafeFetchError ? error.message : "X browser operation failed. Close other pi-search X windows and check that Chrome, Chromium, or Brave is installed.", "error");
+			}
+		},
+	});
 }

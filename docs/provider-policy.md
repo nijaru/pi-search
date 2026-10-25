@@ -282,6 +282,8 @@ The extension owns:
 - model-registry authentication boundaries;
 - direct provider HTTP, bounded responses, cancellation, and error metadata;
 - safe direct HTML/text fetching and local AnyDoc document/PDF conversion;
+- free FxTwitter retrieval for public X URLs, with a persistent direct-only
+  opt-out, and explicitly authorized dedicated-browser X reads;
 - explicit page-bounded PDF extraction through local `pdftotext` when the
   caller requests `maxPages`;
 - remote YouTube caption extraction through bounded local `yt-dlp`; and
@@ -290,7 +292,8 @@ The extension owns:
 It does not own:
 
 - local repository/filesystem operations (`read`, Bash, `git`, `gh`);
-- browser automation or JS-only page execution;
+- general browser automation or arbitrary JS-only page execution (the bounded,
+  explicitly authorized X reader is the sole browser exception);
 - video downloads, frames, OCR, or visual analysis (`yt-dlp`, `ffmpeg`, vision
   workflows); or
 - implicit cloning, persistent search storage, or opaque answer synthesis.

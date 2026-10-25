@@ -208,6 +208,54 @@ Readability/Turndown extraction, and untrusted-content fencing. It also supports
 Use Bash, `git`, `gh`, `yt-dlp`, `ffmpeg`, or a browser workflow for local
 files, repository operations, video downloads/frames, OCR, and JS-only pages.
 
+### X posts, threads, and Articles
+
+Pass an X/Twitter post or Article URL to `web_fetch`. Public reads use
+[FxTwitter](https://docs.fxembed.com/api/introduction/) without keys, an X account,
+or configuration. The post ID is sent to FxTwitter; no paid X API or Grok call is
+made. This also applies to X URLs selected for search enrichment or research.
+Results identify the extraction path and remain untrusted.
+
+Long posts retain their full supplied text. Articles preserve headings, links,
+lists, and embedded code. Threads use at most two public API calls and retain at
+most 100 connected author posts. Missing/deleted posts and upstream omissions
+mean **thread completeness is never guaranteed**, separately from output
+truncation. Use `offset`/`nextOffset` for long output.
+
+For authenticated access, run **`/search-x login`** once and sign in normally in
+the dedicated Chrome, Chromium, or Brave window. A supported browser must already
+be installed; no browser binary is downloaded. Confirm in Pi when signed in.
+Subsequent automatic reads prefer this profile. Personal browser profiles and
+cookies are never imported, and an authenticated failure does **not** send that
+post ID to FxTwitter. Login may expire, and X may block automated browsers even
+with an account; rerun login or explicitly choose public mode when appropriate.
+Only loaded author posts are returned by the browser, not an exhaustive reply
+crawl.
+
+- `/search-x status` reports the mode and authorization state.
+- `/search-x public` prefers FxTwitter without using the browser.
+- `/search-x direct` persistently disables both extra paths, including for search
+  enrichment and research. Tool arguments cannot override this user policy.
+- `/search-x auto` restores browser-first, otherwise-public routing.
+- `/search-x logout` disables browser access and removes its local profile. It
+  preserves the selected mode and does not revoke an X session remotely.
+
+The profile is stored privately under Pi's agent directory at
+`pi-search/x/profile`. Manual login uses a normal browser network context.
+Automated reads restrict HTTPS destinations to X and its asset hosts, pin their
+DNS addresses, block WebSockets/service workers and media downloads, and enforce
+an overall deadline and aggregate response-byte limit. No posting, liking, or
+following controls are used. Browser access is serialized; another Pi session
+using the same profile may report it busy.
+
+`xMode: "auto" | "public" | "browser" | "direct"` selects a path for one fetch;
+`browser` requires prior user authorization. FxTwitter returns Markdown even when
+another format is requested; `outputFormat` reports the actual format.
+`/handle/article/POSTID` links work through FxTwitter. Bare `/i/article/ARTICLEID`
+links use the supplied page or the authorized browser; Article IDs are never
+mistaken for publishing-post IDs. If X hides that page, supply its publishing
+post URL instead.
+
 ## Development
 
 ```bash

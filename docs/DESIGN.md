@@ -138,7 +138,11 @@ The fetch operation uses pinned direct HTTP transport, manual redirect
 validation, DNS/IP SSRF checks, streamed byte limits, one overall deadline,
 cancellation, and local extraction. Fetched content is always untrusted data.
 `web_search` can opt into bounded enrichment of selected result URLs through
-this same fetcher; it never uses an implicit remote extraction service.
+this same fetcher. X URLs are the disclosed exception to direct-only fetching:
+free FxTwitter is the public default, with no per-request approval. A persistent
+`/search-x direct` policy disables this path. An explicitly authorized,
+extension-owned browser profile takes priority; authenticated failures never
+fall back to public extraction. See README's X section for usage and boundaries.
 
 - PDF URLs are fetched safely, validated by magic header, and passed to pinned
   local `@firecrawl/anydoc`/`pdf-inspector` conversion for structured Markdown.
@@ -153,8 +157,10 @@ this same fetcher; it never uses an implicit remote extraction service.
   runs in a worker with caller cancellation and remains bounded, untrusted
   content. It is not a hosted Firecrawl integration, separate public tool, or
   package rename.
-- Local files, repository work, video frames/downloads, OCR, and browser
+- Local files, repository work, video frames/downloads, OCR, and general browser
   automation remain explicit Bash, `git`, `gh`, `ffmpeg`, or browser workflows.
+  The optional X reader is limited to selected X posts/Articles, not arbitrary
+  authenticated page execution.
 
 ## Research limits
 

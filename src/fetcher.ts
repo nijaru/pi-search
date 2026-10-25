@@ -1,5 +1,7 @@
 import { Worker } from "node:worker_threads";
-import type { FetchRequest, FetchedContent, FetchOutputFormat } from "./contracts";
+import type { FetchRequest, FetchedContent, FetchOutputFormat, FetchExtraction, FetchWarning, XReadMode } from "./contracts";
+import { parseXUrl, readFxTwitter, type XUrl } from "./x-public";
+import type { XBrowserReader } from "./x-browser";
 import { SafeFetchError } from "./fetch-errors";
 import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } from "./ssrf";
 import type { DirectTransport } from "./direct-transport";
@@ -27,12 +29,13 @@ const MAX_OUTPUT_BYTES = 32_000;
 
 type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback" | "captionLanguage">> & {
 	readonly maxPages: number | undefined;
+	readonly xMode: XReadMode | undefined;
 };
 
 interface ExtractedContent {
 	readonly content: string;
 	readonly outputFormat: FetchOutputFormat;
-	readonly extraction: "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript";
+	readonly extraction: FetchExtraction;
 	readonly documentFormat?: string;
 	readonly title?: string;
 	readonly fellBackToRaw?: boolean;
@@ -49,6 +52,8 @@ export interface FetcherOptions {
 	readonly pdfMaxOutputBytes?: number;
 	readonly youtubeMaxOutputBytes?: number;
 	readonly documentConverter?: DocumentConverter;
+	/** Explicitly owned, user-authorized browser access. Never global auth discovery. */
+	readonly xBrowser?: XBrowserReader;
 }
 
 export async function fetchContent(
@@ -77,6 +82,13 @@ export async function fetchContent(
 	signal?.addEventListener("abort", onAbort, { once: true });
 
 	try {
+		const xTarget = parseXUrl(normalized.url);
+		const xDefaultMode = xTarget ? await options.xBrowser?.defaultMode() ?? "auto" : "direct";
+		// A persistent user-selected direct-only policy cannot be overridden by a tool call.
+		const xMode = xDefaultMode === "direct" ? "direct" : normalized.xMode ?? xDefaultMode;
+		if (xTarget && xMode !== "direct") {
+			return await fetchXContent(xTarget, xMode, normalized, controller.signal, options, maxResponseBytes);
+		}
 		if (parseYouTubeUrl(normalized.url) !== undefined) {
 			return await fetchYouTubeContent(normalized, controller.signal, options, options.now ?? (() => new Date()));
 		}
@@ -130,34 +142,9 @@ export async function fetchContent(
 			: documentCandidate
 				? await extractAnyDocContent(bytes, mimeType, finalUrl, controller.signal, options.documentConverter)
 				: await extractWithDeadline(decodeText(bytes, contentType, mimeType), mimeType, normalized, controller.signal);
-		const sliced = sliceOutput(extracted.content, normalized.offset, normalized.maxLength);
-		const warnings = [
-			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
-			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
-		];
-		const title = extracted.title === undefined ? undefined : boundText(extracted.title, MAX_TITLE_LENGTH);
-
-		return {
-			url: url.url.href,
-			...(url.url.href === normalized.url ? {} : { sourceUrl: normalized.url }),
-			...(title === undefined ? {} : { title }),
-			content: sliced.content,
-			contentTrust: "untrusted",
-			...(contentType === "" ? {} : { contentType }),
-			outputFormat: extracted.outputFormat,
-			extraction: extracted.extraction,
-			...(extracted.documentFormat === undefined ? {} : { documentFormat: extracted.documentFormat }),
-			fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
-			status: response.status,
-			redirectCount,
-			bytesRead: bytes.byteLength,
-			truncated: sliced.truncated,
-			offset: sliced.offset,
-			...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
-			totalCharacters: extracted.content.length,
-			warnings,
-			...(extracted.fellBackToRaw ? { fellBackToRaw: true } : {}),
-		};
+		return finishContent(extracted, normalized, {
+			url: url.url.href, ...(contentType ? { contentType } : {}), status: response.status, redirectCount, bytesRead: bytes.byteLength,
+		}, options.now);
 	} catch (error) {
 		if (timedOut && !signal?.aborted && isCanceled(error)) {
 			throw new SafeFetchError({ kind: "timeout", message: `Fetch timed out after ${timeoutMs} ms`, retryable: true, cause: error });
@@ -170,6 +157,88 @@ export async function fetchContent(
 		clearTimeout(timeoutId);
 		signal?.removeEventListener("abort", onAbort);
 	}
+}
+
+function finishContent(
+	extracted: ExtractedContent,
+	request: NormalizedFetchRequest,
+	metadata: Pick<FetchedContent, "url" | "contentType" | "status" | "redirectCount" | "bytesRead">,
+	now: () => Date = () => new Date(),
+	notices: readonly FetchWarning[] = [],
+): FetchedContent {
+	const sliced = sliceOutput(extracted.content, request.offset, request.maxLength);
+	return {
+		...metadata,
+		...(metadata.url === request.url ? {} : { sourceUrl: request.url }),
+		...(extracted.title === undefined ? {} : { title: boundText(extracted.title, MAX_TITLE_LENGTH) }),
+		content: sliced.content, contentTrust: "untrusted", outputFormat: extracted.outputFormat,
+		extraction: extracted.extraction, fetchedAt: now().toISOString(), truncated: sliced.truncated, offset: sliced.offset,
+		...(extracted.documentFormat === undefined ? {} : { documentFormat: extracted.documentFormat }),
+		...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
+		totalCharacters: extracted.content.length,
+		warnings: [
+			...notices,
+			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
+			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
+		],
+		...(extracted.fellBackToRaw ? { fellBackToRaw: true } : {}),
+	};
+}
+
+async function fetchXContent(
+	target: XUrl, mode: XReadMode, request: NormalizedFetchRequest,
+	signal: AbortSignal, options: FetcherOptions, maxBytes: number,
+): Promise<FetchedContent> {
+	if (mode === "auto" || mode === "browser") {
+		const browser = await options.xBrowser?.read(target, signal, maxBytes);
+		if (browser) {
+			const extracted = await extractWithDeadline(`<html><head><title></title></head><body><article>${browser.html}</article></body></html>`, "text/html", { ...request, readable: false }, signal);
+			return finishContent({ ...extracted, title: browser.title, extraction: "x-browser" }, request, {
+				url: target.url, status: 200, redirectCount: 0, bytesRead: browser.bytesRead, contentType: "text/html",
+			}, options.now, [
+				{ code: "authenticated", message: "Read using your authorized X browser profile; content may not be public and was not sent to FxTwitter" },
+				...(target.kind === "post" ? [{ code: "partial" as const, message: "Only loaded author posts are included; thread completeness is unknown" }] : []),
+			]);
+		}
+		if (mode === "browser") throw new SafeFetchError({ kind: "extraction", message: "X browser is not authorized. Run /search-x login once, or use public mode for free FxTwitter reads" });
+	}
+	let bytesRead = 0;
+	let redirects = 0;
+	const read = async (url: string) => {
+		if (signal.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
+		const remote = await fetchRemoteUrl(url, {
+			signal, lookup: options.lookup, transport: options.transport,
+			maxRedirects: url.startsWith("https://api.fxtwitter.com/") ? 0 : 5,
+			headers: { "accept-encoding": "identity" },
+		});
+		const { response } = remote;
+		redirects += remote.redirectCount;
+		if (response.status < 200 || response.status >= 300) {
+			await closeResponseBody(response.body);
+			throw new SafeFetchError({ kind: "http", status: response.status, message: `X retrieval returned HTTP ${response.status}`, retryable: response.status === 429 || response.status >= 500 });
+		}
+		const remaining = maxBytes - bytesRead;
+		const declared = parseContentLength(response.headers.get("content-length"));
+		if (remaining <= 0 || declared !== undefined && declared > remaining) {
+			await closeResponseBody(response.body);
+			throw new SafeFetchError({ kind: "responseTooLarge", message: "X retrieval exceeds the aggregate response-byte limit" });
+		}
+		const bytes = await readBoundedBody(response.body, remaining, signal);
+		bytesRead += bytes.byteLength;
+		return { bytes, url: remote.url.url.href, status: response.status, redirectCount: remote.redirectCount };
+	};
+	if (!target.postId) {
+		// Article IDs are not post IDs. Try only the supplied public page, never a
+		// guessed publishing post or a search that could return unrelated evidence.
+		const page = await read(target.url);
+		const extracted = await extractWithDeadline(new TextDecoder().decode(page.bytes), "text/html", request, signal);
+		if (extracted.extraction !== "x-article") throw new SafeFetchError({ kind: "extraction", message: "X Article body is unavailable. Provide its /handle/article/POSTID or publishing post URL, or authorize the browser with /search-x login" });
+		return finishContent(extracted, request, { url: page.url, contentType: "text/html", status: page.status, bytesRead, redirectCount: redirects }, options.now);
+	}
+	const result = await readFxTwitter(target, read);
+	return finishContent({ content: result.content, title: result.title, outputFormat: "markdown", extraction: "fxtwitter" }, request, {
+		url: result.url, contentType: "application/json", status: 200, redirectCount: redirects, bytesRead,
+	}, options.now, result.warnings.map((message) => ({ code: "partial", message })));
 }
 
 export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequest {
@@ -192,6 +261,9 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 	if (format !== "markdown" && format !== "text" && format !== "html") {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "format is not supported" });
 	}
+	if (request.xMode !== undefined && !["auto", "public", "browser", "direct"].includes(request.xMode)) {
+		throw new SafeFetchError({ kind: "invalidRequest", message: "xMode is not supported" });
+	}
 	const maxPages = request.maxPages;
 	if (maxPages !== undefined && (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 500)) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "maxPages must be between 1 and 500" });
@@ -209,6 +281,7 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 		allowRawHtmlFallback: request.allowRawHtmlFallback ?? true,
 		maxPages,
 		captionLanguage,
+		xMode: request.xMode,
 	};
 }
 
@@ -270,26 +343,9 @@ async function fetchYouTubeContent(
 		language: request.captionLanguage,
 		maxOutputBytes: options.youtubeMaxOutputBytes,
 	});
-	const sliced = sliceOutput(result.text, request.offset, request.maxLength);
-	const canonicalUrl = `https://www.youtube.com/watch?v=${result.videoId}`;
-	return {
-		url: canonicalUrl,
-		...(canonicalUrl === request.url ? {} : { sourceUrl: request.url }),
-		content: sliced.content,
-		contentTrust: "untrusted",
-		contentType: "text/plain",
-		outputFormat: "text",
-		extraction: "youtube-transcript",
-		fetchedAt: now().toISOString(),
-		status: 200,
-		redirectCount: 0,
-		bytesRead: result.bytesRead,
-		truncated: sliced.truncated,
-		offset: request.offset,
-		...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
-		totalCharacters: result.text.length,
-		warnings: sliced.truncated ? [{ code: "truncated", message: "Content was truncated to the configured output bound" }] : [],
-	};
+	return finishContent({ content: result.text, outputFormat: "text", extraction: "youtube-transcript" }, request, {
+		url: `https://www.youtube.com/watch?v=${result.videoId}`, contentType: "text/plain", status: 200, redirectCount: 0, bytesRead: result.bytesRead,
+	}, now);
 }
 
 function isPdfUrl(value: string): boolean {

@@ -61,8 +61,13 @@ research workflow.
   commit keys, cookies, or personal search history.
 - Prefer direct HTTP and lightweight extraction before adding heavyweight
   browser or crawling dependencies.
-- The first fetch path must stay direct and local to the extension. Any remote
-  extraction service needs a separate opt-in, privacy, cost, and SSRF review.
+- General fetching stays direct and local. X post/Article URLs are the reviewed
+  exception: free FxTwitter is the disclosed, zero-configuration public default;
+  do not prompt for every request. `/search-x direct` persistently opts out.
+  Authorized browser reads take priority only after `/search-x login`, use only
+  the extension-owned profile, and never fall back to a public service on an
+  authenticated failure. Other remote extraction services still need a separate
+  opt-in, privacy, cost, and SSRF review.
 - Keep benchmarking/evaluation code separate from the runtime extension; a
   future `pi-search-evals` project can test adapters without coupling research
   tooling to Pi.
