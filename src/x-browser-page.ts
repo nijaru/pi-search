@@ -68,7 +68,7 @@ export async function readXBrowserPage(connection: XBrowserConnection, target: X
 		// Inspect only target metadata to find an unambiguous X profile. Never attach to or read other tabs.
 		const { targetInfos } = await connection.send<{ targetInfos: TargetInfo[] }>("Target.getTargets");
 		const contexts = new Set(targetInfos.filter((info) => info.type === "page" && /^https:\/\/(?:www\.)?(?:x|twitter)\.com\//.test(info.url)).map((info) => info.browserContextId));
-		if (contexts.size > 1) throw new Error("Multiple X browser profiles are open; close the other X profiles before connecting");
+		if (contexts.size > 1) throw new SafeFetchError({ kind: "extraction", message: "Multiple X browser profiles are open; close the other X profiles before connecting" });
 		const browserContextId = contexts.values().next().value;
 		check();
 		// Keep creation awaited even after cancellation so a late-created tab is still closed in finally.
@@ -86,6 +86,7 @@ export async function readXBrowserPage(connection: XBrowserConnection, target: X
 			if (event.responseStatusCode === undefined && event.networkId) loading.add(event.networkId);
 			const hostname = new URL(request.url).hostname;
 			let resolved = resolvedHosts.get(hostname);
+			// Unlike direct HTTP, CDP cannot pin Chromium to these validated DNS answers.
 			if (!resolved) { resolved = validateRemoteUrl(request.url, { signal, lookup }); resolvedHosts.set(hostname, resolved); }
 			await resolved;
 			if (event.responseStatusCode !== undefined) {

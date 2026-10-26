@@ -1,7 +1,7 @@
 import { Worker } from "node:worker_threads";
 import type { FetchRequest, FetchedContent, FetchOutputFormat, FetchExtraction, FetchWarning, XReadMode } from "./contracts";
 import { parseXUrl, readFxTwitter, type XUrl } from "./x-public";
-import type { XBrowserReader } from "./x-browser";
+import type { XBrowserReader, XBrowserSelection } from "./x-browser";
 import { SafeFetchError } from "./fetch-errors";
 import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } from "./ssrf";
 import type { DirectTransport } from "./direct-transport";
@@ -83,11 +83,12 @@ export async function fetchContent(
 
 	try {
 		const xTarget = parseXUrl(normalized.url);
-		const xDefaultMode = xTarget ? await options.xBrowser?.defaultMode() ?? "auto" : "direct";
+		const xBrowser = xTarget ? await options.xBrowser?.select(controller.signal) : undefined;
+		const xDefaultMode = xTarget ? xBrowser?.mode ?? "auto" : "direct";
 		// A persistent user-selected direct-only policy cannot be overridden by a tool call.
 		const xMode = xDefaultMode === "direct" ? "direct" : normalized.xMode ?? xDefaultMode;
 		if (xTarget && xMode !== "direct") {
-			return await fetchXContent(xTarget, xMode, normalized, controller.signal, options, maxResponseBytes);
+			return await fetchXContent(xTarget, xMode, normalized, controller.signal, options, maxResponseBytes, xBrowser);
 		}
 		if (parseYouTubeUrl(normalized.url) !== undefined) {
 			return await fetchYouTubeContent(normalized, controller.signal, options, options.now ?? (() => new Date()));
@@ -187,12 +188,12 @@ function finishContent(
 
 async function fetchXContent(
 	target: XUrl, mode: XReadMode, request: NormalizedFetchRequest,
-	signal: AbortSignal, options: FetcherOptions, maxBytes: number,
+	signal: AbortSignal, options: FetcherOptions, maxBytes: number, selection?: XBrowserSelection,
 ): Promise<FetchedContent> {
 	if (mode === "auto" || mode === "browser") {
 		// A signed-in X page loads application bundles as well as source content.
 		// Keep explicit caller limits, but allow the existing 20 MiB hard cap by default.
-		const browser = await options.xBrowser?.read(target, signal, options.maxResponseBytes ?? MAX_FETCH_RESPONSE_BYTES, options.lookup);
+		const browser = await selection?.read(target, signal, options.maxResponseBytes ?? MAX_FETCH_RESPONSE_BYTES, options.lookup);
 		if (browser) {
 			const extracted = await extractWithDeadline(`<html><head><title></title></head><body><article>${browser.html}</article></body></html>`, "text/html", { ...request, readable: false }, signal);
 			return finishContent({ ...extracted, title: browser.title, extraction: "x-browser" }, request, {

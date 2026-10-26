@@ -12,9 +12,12 @@ export type { XBrowserDocument } from "./x-browser-page";
 
 export type XBrowserName = "brave" | "chrome" | "chromium";
 interface Preferences { mode: Exclude<XReadMode, "browser">; browser?: XBrowserName }
-export interface XBrowserReader {
-	defaultMode(): Promise<XReadMode>;
+export interface XBrowserSelection {
+	readonly mode: XReadMode;
 	read(target: XUrl, signal: AbortSignal, maxBytes: number, lookup?: Lookup): Promise<XBrowserDocument | undefined>;
+}
+export interface XBrowserReader {
+	select(signal: AbortSignal): Promise<XBrowserSelection>;
 }
 export function browserDirectories(): Record<XBrowserName, string> {
 	const home = homedir();
@@ -70,16 +73,29 @@ export class XBrowserAccess implements XBrowserReader {
 			await rename(temporary, join(this.directory, "preferences.json"));
 		} finally { await rm(temporary, { force: true }); }
 	}
-	async defaultMode(): Promise<XReadMode> { return (await this.preferences()).mode; }
+	select(signal: AbortSignal): Promise<XBrowserSelection> {
+		const revision = this.revision;
+		return this.serialized(async () => {
+			const preferences = await this.preferences();
+			return {
+				mode: preferences.mode,
+				// Bind the read to this policy, so revocation between routing and reading
+				// cannot turn an authorized request into a public fallback.
+				read: (target, signal, maxBytes, lookup) => this.read(preferences, revision, target, signal, maxBytes, lookup),
+			};
+		}, signal, revision);
+	}
 	async status(): Promise<string> {
 		const p = await this.preferences();
 		return `X access: ${p.mode}; ${p.browser ? `${p.browser} authorized${this.connection?.connected ? " and connected" : " (browser approval may be needed)"}` : "browser not authorized"}. ${p.mode === "direct" ? "Only direct X HTTP is allowed." : "Public extraction uses free FxTwitter."} No paid retrieval or separate browser profile.`;
 	}
-	private serialized<T>(task: () => Promise<T>, signal: AbortSignal): Promise<T> {
-		const revision = this.revision;
+	private serialized<T>(task: () => Promise<T>, signal: AbortSignal, revision = this.revision): Promise<T> {
+		const check = (): void => { if (signal.aborted || this.stopped || revision !== this.revision) throw canceled(); };
 		const pending = this.queue.catch(() => undefined).then(async () => {
-			if (signal.aborted || this.stopped || revision !== this.revision) throw canceled();
-			return task();
+			check();
+			const result = await task();
+			check();
+			return result;
 		});
 		this.queue = pending;
 		return abortable(pending, signal);
@@ -112,7 +128,7 @@ export class XBrowserAccess implements XBrowserReader {
 			}, controller.signal);
 		} finally { clearTimeout(timeout); }
 	}
-	async read(target: XUrl, signal: AbortSignal, maxBytes: number, lookup?: Lookup): Promise<XBrowserDocument | undefined> {
+	private async read(preferences: Preferences, revision: number, target: XUrl, signal: AbortSignal, maxBytes: number, lookup?: Lookup): Promise<XBrowserDocument | undefined> {
 		return this.serialized(async () => {
 			const controller = new AbortController();
 			this.active = controller;
@@ -120,7 +136,6 @@ export class XBrowserAccess implements XBrowserReader {
 			signal.addEventListener("abort", abort, { once: true });
 			if (signal.aborted) abort();
 			try {
-				const preferences = await this.preferences();
 				if (controller.signal.aborted) throw canceled();
 				if (!preferences.browser) return undefined;
 				if (preferences.mode === "direct") throw canceled();
@@ -133,7 +148,7 @@ export class XBrowserAccess implements XBrowserReader {
 				if (error instanceof SafeFetchError) throw error;
 				throw new SafeFetchError({ kind: "extraction", message: "Authenticated X read failed. Check that X is signed in in your connected browser. Use public mode only if you intend to disclose this post ID to FxTwitter", cause: error });
 			} finally { signal.removeEventListener("abort", abort); this.active = undefined; }
-		}, signal);
+		}, signal, revision);
 	}
 	private change(task: () => Promise<void>): Promise<void> {
 		this.revision++;

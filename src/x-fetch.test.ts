@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { fetchContent } from "./fetcher";
 import { SafeFetchError } from "./fetch-errors";
 import type { DirectTransport } from "./direct-transport";
-import type { XBrowserReader } from "./x-browser";
+import type { XBrowserReader, XBrowserSelection } from "./x-browser";
 
 const lookup = async () => [{ address: "93.184.216.34", family: 4 as const }];
 const url = "https://x.com/alice/status/123";
@@ -13,10 +13,10 @@ function transport(payload: unknown, calls: string[], status = 200): DirectTrans
 		return { status, statusText: "OK", headers: new Headers({ "content-type": "application/json" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify(payload)); } } };
 	};
 }
-const browser: XBrowserReader = {
-	async defaultMode() { return "auto"; },
-	async read() { return { html: "<p>Private browser evidence</p>", title: "Private post", postCount: 1, bytesRead: 100 }; },
-};
+function reader(read: XBrowserSelection["read"] = async () => ({ html: "<p>Private browser evidence</p>", title: "Private post", postCount: 1, bytesRead: 100 }), mode: XBrowserSelection["mode"] = "auto"): XBrowserReader {
+	return { async select() { return { mode, read }; } };
+}
+const browser = reader();
 
 describe("X fetch routing and bounds", () => {
 	it("uses free FxTwitter with no configuration and keeps common paging/provenance", async () => {
@@ -39,13 +39,13 @@ describe("X fetch routing and bounds", () => {
 		expect(result.content).toContain("Private browser evidence");
 		expect(result.warnings.some((w) => w.code === "authenticated")).toBe(true);
 		expect(calls).toEqual([]);
-		await expect(fetchContent({ url }, undefined, { ...options, xBrowser: { ...browser, async read() { throw new SafeFetchError({ kind: "extraction", message: "login expired" }); } } })).rejects.toMatchObject({ kind: "extraction" });
+		await expect(fetchContent({ url }, undefined, { ...options, xBrowser: reader(async () => { throw new SafeFetchError({ kind: "extraction", message: "login expired" }); }) })).rejects.toMatchObject({ kind: "extraction" });
 		expect(calls).toEqual([]);
 	});
 
 	it("makes explicit modes strict and falls back only when browser access was never enabled", async () => {
 		const calls: string[] = [];
-		const options = { lookup, transport: transport({ code: 200, status: post }, calls), xBrowser: { ...browser, async read() { return undefined; } } };
+		const options = { lookup, transport: transport({ code: 200, status: post }, calls), xBrowser: reader(async () => undefined) };
 		await expect(fetchContent({ url, xMode: "browser" }, undefined, options)).rejects.toThrow("not authorized");
 		expect(calls).toEqual([]);
 		expect((await fetchContent({ url }, undefined, options)).extraction).toBe("fxtwitter");
@@ -57,7 +57,7 @@ describe("X fetch routing and bounds", () => {
 		const calls: string[] = [];
 		const result = await fetchContent({ url, xMode: "public" }, undefined, {
 			lookup, transport: transport({ direct: true }, calls),
-			xBrowser: { ...browser, async defaultMode() { return "direct"; }, async read() { throw new Error("must not use the browser"); } },
+			xBrowser: reader(async () => { throw new Error("must not use the browser"); }, "direct"),
 		});
 		expect(calls).toEqual([url]);
 		expect(result.extraction).toBe("plain-text");

@@ -250,7 +250,9 @@ have X tabs open, close the other profiles' X tabs before reading.
 Only the mode and authorized browser name are stored under Pi's agent directory
 at `pi-search/x/preferences.json`. The reader attaches only to its own temporary
 background tab; existing tabs are not navigated or instrumented. Cancellation
-and shutdown close that tab and disconnect without closing your browser.
+closes the owned tab; shutdown also disconnects without closing your browser.
+If the connection drops before tab creation is acknowledged, a blank temporary
+tab may remain.
 
 In that temporary tab, requests are limited to HTTPS X/asset hosts and read
 operations. Redirects are checked before following, private DNS answers are

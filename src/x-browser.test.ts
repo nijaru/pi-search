@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserRequestAllowed } from "./x-browser-page";
 import { browserEndpoint, XBrowserConnection } from "./x-cdp";
-import { XBrowserAccess } from "./x-browser";
+import { XBrowserAccess, type XBrowserSelection } from "./x-browser";
 import { parseXUrl } from "./x-public";
 import { fetchContent } from "./fetcher";
 
 const url = "https://x.com/alice/status/123";
 const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
+async function readBrowser(access: XBrowserAccess, ...args: Parameters<XBrowserSelection["read"]>) {
+	return (await access.select(args[1])).read(...args);
+}
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>((r) => { resolve = r; }); return { promise, resolve }; };
 
 /** Real local WebSocket boundary; keeps a user tab alive while emulating owned-tab CDP. */
@@ -121,7 +124,7 @@ describe("existing-browser consent and ownership", () => {
 	it("does not connect without consent; uses the existing login and preserves user tabs on disconnect", async () => {
 		const fixture = await browserFixture();
 		try {
-			expect(await fixture.access.read(parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
+			expect(await readBrowser(fixture.access, parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
 			expect(await fixture.access.connect(async () => false)).toBe(false);
 			expect(fixture.sockets.size).toBe(0);
 			await expect(stat(fixture.directory)).rejects.toMatchObject({ code: "ENOENT" });
@@ -134,8 +137,8 @@ describe("existing-browser consent and ownership", () => {
 			expect([...fixture.tabs]).toEqual(["user-tab"]);
 			await fixture.access.setMode("direct");
 			await fixture.access.disconnect();
-			expect(await fixture.access.defaultMode()).toBe("direct");
-			expect(await fixture.access.read(parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
+			expect((await fixture.access.select(new AbortController().signal)).mode).toBe("direct");
+			expect(await readBrowser(fixture.access, parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
 			expect(fixture.unrelatedTouched).toBe(false);
 			expect([...fixture.tabs]).toEqual(["user-tab"]);
 			expect(JSON.parse(await readFile(join(fixture.directory, "preferences.json"), "utf8"))).toEqual({ mode: "direct" });
@@ -185,8 +188,8 @@ describe("existing-browser consent and ownership", () => {
 		try {
 			await fixture.access.connect(async () => true);
 			await Promise.all([fixture.access.disconnect(), fixture.access.setMode("public")]);
-			expect(await fixture.access.read(parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
-			expect(await fixture.access.defaultMode()).toBe("public");
+			expect(await readBrowser(fixture.access, parseXUrl(url)!, new AbortController().signal, 4096)).toBeUndefined();
+			expect((await fixture.access.select(new AbortController().signal)).mode).toBe("public");
 		} finally { await fixture.close(); }
 	});
 
@@ -195,7 +198,7 @@ describe("existing-browser consent and ownership", () => {
 		try {
 			await fixture.access.connect(async () => true);
 			const controller = new AbortController();
-			const read = fixture.access.read(parseXUrl(url)!, controller.signal, 4096).catch((error) => error);
+			const read = readBrowser(fixture.access, parseXUrl(url)!, controller.signal, 4096).catch((error) => error);
 			await fixture.created.promise;
 			controller.abort();
 			expect(await read).toMatchObject({ kind: "canceled" });
@@ -228,7 +231,7 @@ describe("existing-browser consent and ownership", () => {
 		} finally { connection.close(); await fixture.close(); }
 	});
 
-	it("does not start browser access when revocation arrives during a preferences read", async () => {
+	it("does not leak a target when revocation arrives during fetch policy lookup", async () => {
 		// Isolate the filesystem scheduling boundary so the real race is deterministic.
 		const program = `
 			import { mock } from "bun:test";
@@ -248,17 +251,23 @@ describe("existing-browser consent and ownership", () => {
 			} }));
 			mock.module(${JSON.stringify(new URL("./x-cdp.ts", import.meta.url).pathname)}, () => ({ browserEndpoint: async () => { connections++; return "unused"; }, XBrowserConnection: { open: async () => { throw new Error("Must not connect"); } } }));
 			const { XBrowserAccess } = await import(${JSON.stringify(new URL("./x-browser.ts", import.meta.url).href)});
+			const { fetchContent } = await import(${JSON.stringify(new URL("./fetcher.ts", import.meta.url).href)});
 			const directory = await fs.mkdtemp(join(tmpdir(), "pi-search-revoke-"));
 			const access = new XBrowserAccess(directory);
 			try {
 				await fs.writeFile(join(directory, "preferences.json"), JSON.stringify({ mode: "auto", browser: "brave" }));
-				const read = access.read({ url: "${url}", postId: "123", kind: "post" }, new AbortController().signal, 4096).catch(error => error);
+				let publicCalls = 0;
+				const read = fetchContent({ url: "${url}" }, undefined, { xBrowser: access,
+					lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+					transport: async () => { publicCalls++; throw new Error("Private target leaked"); },
+				}).catch(error => error);
 				await reading;
 				const disconnected = access.disconnect();
 				release();
 				assert.equal((await read).kind, "canceled");
 				await disconnected;
 				assert.equal(connections, 0);
+				assert.equal(publicCalls, 0);
 			} finally { release(); await access.shutdown(); await fs.rm(directory, { recursive: true, force: true }); }
 		`;
 		const child = Bun.spawn([process.execPath, "--eval", program], { stdout: "pipe", stderr: "pipe" });
@@ -267,6 +276,18 @@ describe("existing-browser consent and ownership", () => {
 			const [exit, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
 			expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
 		} finally { clearTimeout(deadline); }
+	});
+
+	it("rejects a selected browser policy revoked before its read starts", async () => {
+		const fixture = await browserFixture();
+		try {
+			await fixture.access.connect(async () => true);
+			const signal = new AbortController().signal;
+			const selected = await fixture.access.select(signal);
+			await fixture.access.disconnect();
+			await expect(selected.read(parseXUrl(url)!, signal, 4096, lookup)).rejects.toMatchObject({ kind: "canceled" });
+			expect([...fixture.tabs]).toEqual(["user-tab"]);
+		} finally { await fixture.close(); }
 	});
 
 	it("does not send an authorized target to FxTwitter when the browser becomes unavailable", async () => {
@@ -287,7 +308,7 @@ for (const [scenario, kind] of [["redirect", "redirect"], ["large", "responseToo
 		const fixture = await browserFixture(scenario);
 		try {
 			await fixture.access.connect(async () => true);
-			await expect(fixture.access.read(parseXUrl(url)!, AbortSignal.timeout(2000), 1024, lookup)).rejects.toMatchObject({ kind });
+			await expect(readBrowser(fixture.access, parseXUrl(url)!, AbortSignal.timeout(2000), 1024, lookup)).rejects.toMatchObject({ kind });
 			expect(fixture.unsafeRedirectFollowed).toBe(false);
 			expect(fixture.unrelatedTouched).toBe(false);
 			expect([...fixture.tabs]).toEqual(["user-tab"]);
