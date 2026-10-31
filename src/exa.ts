@@ -36,7 +36,7 @@ const capabilities: ProviderCapabilities = {
 };
 
 const profile: ProviderProfile = {
-	auth: "environment",
+	auth: "direct",
 	costModel: "usage-based",
 	estimatedCostUsd: EXA_ESTIMATED_SEARCH_COST_USD,
 };

@@ -41,7 +41,7 @@ const capabilities: ProviderCapabilities = {
 };
 
 const profile: ProviderProfile = {
-	auth: "environment",
+	auth: "direct",
 	costModel: "per-request",
 	estimatedCostUsd: DEEPSEEK_ESTIMATED_SEARCH_COST_USD,
 };

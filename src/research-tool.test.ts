@@ -218,7 +218,7 @@ describe("web_research", () => {
 		const exa: Provider = {
 			id: "exa",
 			capabilities: { domainFilter: true, dateFilter: true },
-			profile: { auth: "environment", costModel: "per-request", estimatedCostUsd: 0.007 },
+			profile: { auth: "direct", costModel: "per-request", estimatedCostUsd: 0.007 },
 			search: async (request) => {
 				seen.push(request);
 				return {
@@ -255,7 +255,7 @@ describe("web_research", () => {
 	});
 
 	it("rejects hard research filters the selected route cannot enforce", async () => {
-		const brave: Provider = { id: "brave", capabilities: { domainFilter: true }, profile: { auth: "environment", costModel: "per-request" }, search: async () => { throw new Error("must not dispatch"); } };
+		const brave: Provider = { id: "brave", capabilities: { domainFilter: true }, profile: { auth: "direct", costModel: "per-request" }, search: async () => { throw new Error("must not dispatch"); } };
 		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
 		await expect(executeResearch({ question: "main", dateRange: { from: "2026-01-01" }, budget }, route, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_PROVIDER", message: expect.stringContaining("date range") });
 	});

@@ -56,11 +56,50 @@ location, live-access, and content-type controls when requested.
 
 ## Configuration
 
-The extension reads credentials only at construction or through Pi's model
-registry; it never logs keys. Keys can live in a shell-local secret injector
-(e.g. `fnox`) rather than global environment files — because providers are
-registered only when their key is present at construction, an unset
-variable simply leaves that provider disabled.
+Direct-provider keys can come from environment variables or from shell
+commands in the optional user-only file
+`~/.pi/agent/pi-search/credentials.json` (under `getAgentDir()` when
+`PI_CODING_AGENT_DIR` is set). For example, with Fnox installed:
+
+```json
+{
+  "EXA_API_KEY": "!fnox --config \"$HOME/.config/fnox/config.toml\" --profile pi --no-defaults --if-missing error --non-interactive get EXA_API_KEY",
+  "BRAVE_API_KEY": "!fnox --config \"$HOME/.config/fnox/config.toml\" --profile pi --no-defaults --if-missing error --non-interactive get BRAVE_API_KEY"
+}
+```
+
+Any shell command that prints a key can be used; Fnox is not a dependency.
+The file must be a flat object whose only supported names are `BRAVE_API_KEY`,
+`EXA_API_KEY`, `DEEPSEEK_API_KEY`, `PARALLEL_API_KEY`, `X_API_BEARER_TOKEN`, and
+`CLOUDFLARE_API_TOKEN`. Values must be nonempty `!<shell command>` references,
+not plaintext keys. Do not embed secrets in the commands either.
+`CLOUDFLARE_ACCOUNT_ID` and all billing/enable settings remain environment
+variables; credentials alone do not enable spending or opt-in providers.
+
+**Treat this file as executable code.** Keep it writable only by your user and
+review its commands. No project credentials file is loaded. Commands run with
+Pi's permissions and inherited environment, from the agent directory, using
+`/bin/sh` on macOS/Linux or `cmd.exe` on Windows—not your interactive Fish
+configuration. Use installed executables on Pi's `PATH` or absolute paths;
+commands must not require terminal input.
+
+Commands run once per extension load, concurrently, before tools are registered,
+including loads outside a session. Each has a 10-second timeout and a 16 KiB
+stdout limit. Trimmed stdout becomes the private adapter credential; stderr is
+discarded. Keys are not written to `process.env` or logged. Ordinary subprocess
+cleanup uses a dedicated process group on macOS/Linux and `taskkill /t` on
+Windows; commands must not launch detached daemons. Windows tree cleanup after
+a shell has already exited is best-effort.
+
+A configured command overrides the corresponding inherited variable. Invalid
+JSON, unsupported names, literal/nonstring values, command failure, empty
+stdout, timeout, or excessive output fails extension loading with a sanitized
+error—never an env fallback. A missing file or omitted entry preserves env
+support, including its existing whitespace handling. Restart Pi or run `/reload`
+to pick up changes or refreshed keys; there is no per-request refresh. Native
+provider auth still resolves through Pi's model registry at request time.
+
+Alternatively, configure direct keys and routing settings in the environment:
 
 ```bash
 # Optional metered search for non-native/local models
@@ -170,9 +209,9 @@ are then enforced locally on results that report a date. Results with a known
 publication date are filtered to the requested inclusive range; undated
 results remain visible with an explicit warning.
 
-The adapter reads `DEEPSEEK_API_KEY` from the environment, like the other
-direct providers. A DeepSeek login stored only in Pi's model registry does not
-register it.
+The adapter receives `DEEPSEEK_API_KEY` from the environment or the user
+credentials command file, like the other direct providers. A DeepSeek login
+stored only in Pi's model registry does not register it.
 
 ### Local and virtual models
 

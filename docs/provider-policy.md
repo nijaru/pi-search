@@ -184,9 +184,10 @@ structured sources rather than an answer whose citations would have to become
 results. Native DeepSeek grounding can be added later if Pi's catalog exposes
 a Responses-API DeepSeek model.
 
-The adapter uses the direct-provider environment key path
-(`DEEPSEEK_API_KEY`); a DeepSeek login stored only in Pi's model registry does
-not register it.
+The adapter uses the direct-provider credential path (`DEEPSEEK_API_KEY`),
+from the environment or the user credential-command file described in
+[Configuration](../README.md#configuration). A DeepSeek login stored only in
+Pi's model registry does not register it.
 
 ## Search constraints
 

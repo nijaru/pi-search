@@ -21,6 +21,7 @@ import { createXAIProvider } from "./xai";
 import { availableProviderHints } from "./provider-availability";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
+import { loadDirectCredentials } from "./credentials";
 
 /**
  * Native grounding is selected for supported active models. Exa is the
@@ -28,8 +29,10 @@ import { registerWebSearch } from "./search-tool";
  * cheaper second metered path, and Brave is the paced last-resort keyword
  * path. Automatic availability failures may use one visible fallback.
  */
-export default function (pi: ExtensionAPI): void {
-	const braveKey = process.env.BRAVE_API_KEY;
+export default async function (pi: ExtensionAPI): Promise<void> {
+	const agentDir = getAgentDir();
+	const credentials = await loadDirectCredentials(agentDir);
+	const braveKey = credentials.BRAVE_API_KEY;
 	// Brave is a conservative last-resort path: pace starts at 1 RPS and never claims
 	// to know the account's billing balance. Set `=0` only with explicit metered
 	// opt-in when that pacing is intentionally not wanted.
@@ -43,15 +46,15 @@ export default function (pi: ExtensionAPI): void {
 	const xaiX = createXAIProvider({ tool: "x_search" });
 	const anthropic = createAnthropicProvider();
 	const meta = createMetaProvider();
-	const exaKey = process.env.EXA_API_KEY;
-	const deepseekKey = process.env.DEEPSEEK_API_KEY;
-	const parallelKey = process.env.PARALLEL_API_KEY;
-	const xToken = process.env.X_API_BEARER_TOKEN;
+	const exaKey = credentials.EXA_API_KEY;
+	const deepseekKey = credentials.DEEPSEEK_API_KEY;
+	const parallelKey = credentials.PARALLEL_API_KEY;
+	const xToken = credentials.X_API_BEARER_TOKEN;
 	const exa = createExaProvider({ apiKey: exaKey });
 	const deepseek = createDeepSeekProvider({ apiKey: deepseekKey });
 	const cloudflareUpstream = process.env.PI_SEARCH_CLOUDFLARE_PROVIDER;
 	const cloudflareAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
-	const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+	const cloudflareToken = credentials.CLOUDFLARE_API_TOKEN;
 	// Credentials alone do not enable gateway spending or select Ceramic.
 	const cloudflareConfigured = ["ceramic", "exa", "linkup"].includes(cloudflareUpstream ?? "")
 		&& Boolean(cloudflareAccount?.trim()) && Boolean(cloudflareToken?.trim());
@@ -116,7 +119,7 @@ export default function (pi: ExtensionAPI): void {
 		parallelResponses: parallelResponsesEnabled,
 		x: xToken !== undefined && xToken.trim().length > 0,
 	});
-	const xBrowser = new XBrowserAccess(join(getAgentDir(), "pi-search", "x"));
+	const xBrowser = new XBrowserAccess(join(agentDir, "pi-search", "x"));
 	registerWebSearch(pi, route, { availableProviderHints: availableHints, fetcherOptions: { xBrowser } });
 	registerWebFetch(pi, { xBrowser });
 	registerWebResearch(pi, route, { availableProviderHints: availableHints, xBrowser });

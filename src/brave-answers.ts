@@ -53,7 +53,7 @@ const capabilities: ProviderCapabilities = {
 };
 
 const profile: ProviderProfile = {
-	auth: "environment",
+	auth: "direct",
 	costModel: "usage-based",
 };
 

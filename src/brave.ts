@@ -164,7 +164,7 @@ const capabilities: ProviderCapabilities = {
 };
 
 const profile: ProviderProfile = {
-	auth: "environment",
+	auth: "direct",
 	costModel: "per-request",
 };
 

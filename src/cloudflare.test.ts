@@ -43,7 +43,7 @@ describe("CloudflareProvider", () => {
 			expect(result.results[0]).toMatchObject({ provider: "cloudflare", upstreamProvider: upstream, searchQuery: "q", url: "https://example.com/page", domain: "example.com", title: "Example", excerpt: "Useful evidence." });
 			expect(result.answer).toBeUndefined();
 			expect(result.usage).toBeUndefined();
-			expect(configured.profile).toEqual({ auth: "environment", costModel: "unknown" });
+			expect(configured.profile).toEqual({ auth: "direct", costModel: "unknown" });
 		}
 	});
 

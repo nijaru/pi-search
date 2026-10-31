@@ -37,7 +37,7 @@ export interface CloudflareAdapterOptions {
 
 const capabilities: ProviderCapabilities = { semantic: true, excerpts: true };
 // BYOK agreements and gateway credits do not establish actual billed costs.
-const profile: ProviderProfile = { auth: "environment", costModel: "unknown" };
+const profile: ProviderProfile = { auth: "direct", costModel: "unknown" };
 const unsupportedOptions = [
 	"domains", "dateRange", "social", "executionModel", "searchContextSize",
 	"returnTokenBudget", "externalWebAccess", "userLocation", "searchContentTypes", "imageSettings",

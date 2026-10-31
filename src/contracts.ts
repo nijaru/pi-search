@@ -95,7 +95,8 @@ export interface ProviderProfile {
 	readonly typicalLatencyMs?: number;
 	readonly estimatedCostUsd?: number;
 	readonly costModel: "free" | "per-request" | "usage-based" | "unknown";
-	readonly auth: "none" | "environment" | "modelRegistry";
+	/** Direct credentials are supplied at construction, from env or a user command. */
+	readonly auth: "none" | "direct" | "modelRegistry";
 }
 
 /** A single provider-reported quota or rate-limit window. */

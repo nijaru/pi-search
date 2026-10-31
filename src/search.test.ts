@@ -10,7 +10,7 @@ function makeProvider(search: Provider["search"]): Provider {
 	return {
 		id: "brave",
 		capabilities: {},
-		profile: { auth: "environment", costModel: "unknown" },
+		profile: { auth: "direct", costModel: "unknown" },
 		search,
 	};
 }
