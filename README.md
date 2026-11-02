@@ -83,21 +83,29 @@ Pi's permissions and inherited environment, from the agent directory, using
 configuration. Use installed executables on Pi's `PATH` or absolute paths;
 commands must not require terminal input.
 
-Commands run once per extension load, concurrently, before tools are registered,
-including loads outside a session. Each has a 10-second timeout and a 16 KiB
-stdout limit. Trimmed stdout becomes the private adapter credential; stderr is
-discarded. Keys are not written to `process.env` or logged. Ordinary subprocess
+Startup validates the file without executing commands. Direct-provider hints use
+nonempty env keys or validated command references to determine configuration;
+answer-provider enable gates are unchanged.
+Each command runs on its key's first use, at most once per extension instance;
+concurrent calls and providers using the same key share its result. Unused keys,
+fetch-only sessions, and `/search-x` commands do not run credential commands.
+Each command has a 10-second timeout and a 16 KiB stdout limit. Trimmed stdout
+becomes the private adapter credential; stderr is discarded. Keys are not written
+to `process.env` or logged. Canceling a search stops its wait, not a shared command;
+shutdown or `/reload` cancels and drains pending commands. Ordinary subprocess
 cleanup uses a dedicated process group on macOS/Linux and `taskkill /t` on
 Windows; commands must not launch detached daemons. Windows tree cleanup after
 a shell has already exited is best-effort.
 
 A configured command overrides the corresponding inherited variable. Invalid
-JSON, unsupported names, literal/nonstring values, command failure, empty
-stdout, timeout, or excessive output fails extension loading with a sanitized
-error—never an env fallback. A missing file or omitted entry preserves env
-support, including its existing whitespace handling. Restart Pi or run `/reload`
-to pick up changes or refreshed keys; there is no per-request refresh. Native
-provider auth still resolves through Pi's model registry at request time.
+JSON, unsupported names, or literal/nonstring values fail extension loading.
+Command failure, empty stdout, timeout, or excessive output fails the affected
+search with a sanitized error—never an env fallback. Failed command results are
+also retained until reload. A missing file or omitted entry preserves env
+support, including its existing whitespace handling. Configuration and inherited
+environment are captured at load time. Restart Pi or run `/reload` to pick up
+changes or refreshed keys; there is no per-request refresh. Native provider auth
+still resolves through Pi's model registry at request time.
 
 Alternatively, configure direct keys and routing settings in the environment:
 

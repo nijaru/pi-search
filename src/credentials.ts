@@ -10,8 +10,13 @@ const SECRET_NAMES = [
 	"X_API_BEARER_TOKEN",
 	"CLOUDFLARE_API_TOKEN",
 ] as const;
-type SecretName = (typeof SECRET_NAMES)[number];
-export type DirectCredentials = Readonly<Partial<Record<SecretName, string>>>;
+export type SecretName = (typeof SECRET_NAMES)[number];
+export interface DirectCredentials {
+	/** A validated command reference or a nonempty inherited key, not a live auth probe. */
+	has(name: SecretName): boolean;
+	get(name: SecretName, signal: AbortSignal): Promise<string | undefined>;
+	shutdown(): Promise<void>;
+}
 const TIMEOUT_MS = 10_000;
 const MAX_STDOUT_BYTES = 16_384;
 
@@ -35,8 +40,9 @@ async function killProcessTree(child: ChildProcess): Promise<void> {
 	try { child.kill("SIGKILL"); } catch { /* process already gone */ }
 }
 
-function resolveCommand(name: SecretName, command: string, agentDir: string, env: NodeJS.ProcessEnv): Promise<string> {
+function resolveCommand(name: SecretName, command: string, agentDir: string, env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<string> {
 	return new Promise((resolve, reject) => {
+		if (signal.aborted) return reject(configError(`${name} command canceled`));
 		let child: ChildProcess;
 		try {
 			child = spawn(command, {
@@ -62,6 +68,7 @@ function resolveCommand(name: SecretName, command: string, agentDir: string, env
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			signal.removeEventListener("abort", onAbort);
 			if (cleanupTimer !== undefined) clearTimeout(cleanupTimer);
 			await stop();
 			child.stdout?.destroy();
@@ -79,7 +86,10 @@ function resolveCommand(name: SecretName, command: string, agentDir: string, env
 			// A detached descendant can retain a pipe after the shell has exited.
 			cleanupTimer = setTimeout(() => { void finish(null); }, 1_500);
 		};
+		const onAbort = (): void => fail("canceled");
 		const timer = setTimeout(() => fail("timed out (10s limit)"), TIMEOUT_MS);
+		signal.addEventListener("abort", onAbort, { once: true });
+		if (signal.aborted) onAbort();
 		child.stdout?.on("data", (chunk: Buffer) => {
 			if (failure !== undefined || settled) return;
 			bytes += chunk.length;
@@ -94,41 +104,68 @@ function resolveCommand(name: SecretName, command: string, agentDir: string, env
 	});
 }
 
-/** Load only the user agent directory; never consult project config or mutate the environment. */
+function waitForCredential(pending: Promise<string>, signal: AbortSignal): Promise<string> {
+	if (signal.aborted) return Promise.reject(configError("credential resolution canceled"));
+	return new Promise((resolve, reject) => {
+		const abort = (): void => reject(configError("credential resolution canceled"));
+		signal.addEventListener("abort", abort, { once: true });
+		pending.then(
+			(value) => { signal.removeEventListener("abort", abort); resolve(value); },
+			(error) => { signal.removeEventListener("abort", abort); reject(error); },
+		);
+	});
+}
+
+/** Validate only user config at load; defer command execution until a provider needs its key. */
 export async function loadDirectCredentials(agentDir: string, env: NodeJS.ProcessEnv = process.env): Promise<DirectCredentials> {
 	const inherited = { ...env };
-	const credentials: Partial<Record<SecretName, string>> = {};
+	const inheritedKeys: Partial<Record<SecretName, string>> = {};
 	for (const name of SECRET_NAMES) {
 		// Keep existing env semantics: whitespace-only values are unavailable, but
 		// nonempty values are passed to adapters unchanged.
-		if (inherited[name] !== undefined) credentials[name] = inherited[name];
+		if (inherited[name] !== undefined) inheritedKeys[name] = inherited[name];
 	}
-	let text: string;
+	let text = "{}";
 	try {
 		text = await readFile(join(agentDir, "pi-search", "credentials.json"), "utf8");
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return credentials;
-		throw configError("could not read configuration");
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw configError("could not read configuration");
 	}
 	let config: unknown;
 	try { config = JSON.parse(text); } catch { throw configError("invalid JSON"); }
 	if (config === null || typeof config !== "object" || Array.isArray(config)) {
 		throw configError("expected a flat object of credential commands");
 	}
-	const commands: [SecretName, string][] = [];
+	const commands = new Map<SecretName, string>();
 	for (const [name, value] of Object.entries(config)) {
 		if (!SECRET_NAMES.includes(name as SecretName)) throw configError("unsupported credential name");
 		if (typeof value !== "string" || !value.startsWith("!") || value.slice(1).trim().length === 0 || value.includes("\0")) {
 			throw configError(`${name} must be a nonempty !<shell command> reference, not a literal secret`);
 		}
-		commands.push([name as SecretName, value.slice(1)]);
+		commands.set(name as SecretName, value.slice(1));
 	}
-	// Validate everything first, then wait for every bounded command to clean up,
-	// including when another command fails. At most six commands run concurrently.
-	const results = await Promise.allSettled(commands.map(([name, command]) => resolveCommand(name, command, agentDir, inherited)));
-	for (const [index, result] of results.entries()) {
-		if (result.status === "rejected") throw result.reason;
-		credentials[commands[index]![0]] = result.value;
-	}
-	return credentials;
+	const lifetime = new AbortController();
+	const pending = new Map<SecretName, Promise<string>>();
+	return {
+		has: (name) => commands.has(name) || Boolean(inheritedKeys[name]?.trim()),
+		async get(name, signal) {
+			if (lifetime.signal.aborted || signal.aborted) throw configError("credential resolution canceled");
+			const command = commands.get(name);
+			if (command === undefined) return inheritedKeys[name];
+			let result = pending.get(name);
+			if (result === undefined) {
+				result = resolveCommand(name, command, agentDir, inherited, lifetime.signal);
+				pending.set(name, result);
+			}
+			// A canceled caller stops waiting, not a shared command needed by another
+			// call. The bounded command remains owned by this instance until shutdown.
+			const value = await waitForCredential(result, signal);
+			if (lifetime.signal.aborted || signal.aborted) throw configError("credential resolution canceled");
+			return value;
+		},
+		async shutdown() {
+			lifetime.abort();
+			await Promise.allSettled(pending.values());
+		},
+	};
 }
