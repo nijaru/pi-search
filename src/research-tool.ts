@@ -1,4 +1,3 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	defineTool,
 	type ExtensionAPI,
@@ -6,7 +5,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { Type, type Static, type TUnsafe } from "typebox";
+import { Type, type Static } from "typebox";
 import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchProviderSelection, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
 import { toolUsage } from "./grounding";
@@ -20,12 +19,12 @@ import { renderModelUrl, renderSafeUrl } from "./url-rendering";
 import { compactText, sanitizeBlock } from "./render-text";
 import { SEARCH_PROVIDER_HINT_IDS, type SearchProviderHintId } from "./contracts";
 
-const ResearchProviderSchema = StringEnum(["native", ...SEARCH_PROVIDER_HINT_IDS] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
+const ResearchProviderSchema = Type.Enum(["native", ...SEARCH_PROVIDER_HINT_IDS] as const, { type: "string", description: "Provider hint; omit for automatic routing" });
 
 /** Full tool schema for a given set of dispatchable provider hints. */
 function webResearchParametersFor(hints: readonly SearchProviderHintId[]) {
 	const ids = ["native", ...hints] as const;
-	const schema = StringEnum(ids as unknown as readonly string[], { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
+	const schema = Type.Enum(ids, { type: "string", description: "Provider hint; omit for automatic routing" });
 	return Type.Object({
 		...WebResearchParameters.properties,
 		provider: Type.Optional(schema),
@@ -457,7 +456,7 @@ export async function executeResearch(
 			} catch (error) {
 				if (error instanceof SearchToolError && error.usage !== undefined) recordUsage(error.usage, estimatedCost);
 				else if (estimatedCost > 0) warnings.push(warning("Research retained the failed call's estimated cost reservation; actual billing is unconfirmed"));
-				if (deadlineController.signal.aborted || signal?.aborted) {
+				if (deadlineController.signal.aborted || signal?.aborted || remaining(deadline) <= 1) {
 					stopReason = signal?.aborted ? "canceled" : "deadline";
 					warnings.push(warning(`Research search failed for query ${JSON.stringify(query)}: ${error instanceof Error ? error.message : String(error)}`));
 					break;
@@ -511,7 +510,7 @@ export async function executeResearch(
 						break;
 					}
 				} catch (error) {
-					if (deadlineController.signal.aborted || signal?.aborted) {
+					if (deadlineController.signal.aborted || signal?.aborted || remaining(deadline) <= 1) {
 						stopReason = signal?.aborted ? "canceled" : "deadline";
 						break;
 					}
@@ -520,7 +519,7 @@ export async function executeResearch(
 				}
 			}
 		}
-		if (deadlineController.signal.aborted && stopReason === "completed") stopReason = signal?.aborted ? "canceled" : "deadline";
+		if ((deadlineController.signal.aborted || remaining(deadline) <= 1) && stopReason === "completed") stopReason = signal?.aborted ? "canceled" : "deadline";
 		if (stopReason === "completed" && hadFailedFetch) stopReason = "partial";
 		return boundedResponse(currentResponse(), normalized.budget.maxOutputChars);
 	} finally {

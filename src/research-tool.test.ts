@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import type { Provider, SearchRequest, SearchResponse } from "./contracts";
 import { SearchToolError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
@@ -178,6 +178,21 @@ describe("web_research", () => {
 		}) };
 		const result = await executeResearch({ question: "main", fetchResults: 2, budget: { ...budget, maxFetches: 1 } }, () => selected, context());
 		expect(result).toMatchObject({ stopReason: "budget", fetchAttempts: 1, fetchesCompleted: 0 });
+	});
+
+	it("recognizes an elapsed fetch deadline before its abort timer fires", async () => {
+		let now = 1_000;
+		const clock = spyOn(Date, "now").mockImplementation(() => now);
+		const transport: DirectTransport = async () => {
+			now += 100;
+			throw new SafeFetchError({ kind: "timeout", message: "Fetch deadline elapsed" });
+		};
+		try {
+			const result = await executeResearch({ question: "main", fetchResults: 1, budget: { ...budget, maxFetches: 1, timeoutMs: 100 } }, () => provider(), context(), { lookup: publicLookup, transport });
+			expect(result).toMatchObject({ stopReason: "deadline", fetchAttempts: 1, fetchesCompleted: 0 });
+		} finally {
+			clock.mockRestore();
+		}
 	});
 
 	it("keeps deadline precedence over a failed requested fetch", async () => {

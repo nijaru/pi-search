@@ -1,7 +1,6 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { Type, type Static, type TUnsafe } from "typebox";
+import { Type, type Static } from "typebox";
 import type { FetchRequest, FetchedContent } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import {
@@ -15,7 +14,7 @@ import {
 import { renderModelUrl, renderSafeUrl } from "./url-rendering";
 import { compactText } from "./render-text";
 
-const FetchFormatSchema = StringEnum(["markdown", "text", "html"] as const) as TUnsafe<"markdown" | "text" | "html">;
+const FetchFormatSchema = Type.Enum(["markdown", "text", "html"] as const, { type: "string" });
 
 export const WebFetchParameters = Type.Object({
 	url: Type.String({ minLength: 1, maxLength: 8_192, description: "HTTP(S) URL to fetch" }),
@@ -24,7 +23,7 @@ export const WebFetchParameters = Type.Object({
 	),
 	offset: Type.Optional(Type.Integer({ minimum: 0, maximum: MAX_FETCH_OFFSET, description: `Character offset for bounded paging (0-${MAX_FETCH_OFFSET})` })),
 	format: Type.Optional(FetchFormatSchema),
-	xMode: Type.Optional(StringEnum(["auto", "public", "browser", "direct"] as const, { description: "X URLs: auto prefers your authorized browser, otherwise free FxTwitter (sends the post ID). public uses FxTwitter; browser requires /search-x connect; direct bypasses both. No paid fallback." }) as TUnsafe<"auto" | "public" | "browser" | "direct">),
+	xMode: Type.Optional(Type.Enum(["auto", "public", "browser", "direct"] as const, { type: "string", description: "X URLs: auto prefers your authorized browser, otherwise free FxTwitter (sends the post ID). public uses FxTwitter; browser requires /search-x connect; direct bypasses both. No paid fallback." })),
 	maxPages: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, description: "Maximum PDF pages to parse with the bounded page-limited PDF path" })),
 	captionLanguage: Type.Optional(Type.String({ minLength: 1, maxLength: 32, description: "YouTube caption language (default en)" })),
 	readable: Type.Optional(Type.Boolean({ description: "Extract the main readable article content (default true)" })),

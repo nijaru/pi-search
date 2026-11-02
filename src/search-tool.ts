@@ -1,4 +1,3 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	defineTool,
 	type ExtensionAPI,
@@ -6,7 +5,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { Type, type Static, type TUnsafe } from "typebox";
+import { Type, type Static } from "typebox";
 import { SEARCH_PROVIDER_HINT_IDS, type FetchedContent, type Provider, type ProviderContext, type ProviderModel, type SearchProviderHintId, type SearchProviderSelection, type SearchRequest, type SearchResponse } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import { boundUtf8, fetchContent, type FetcherOptions } from "./fetcher";
@@ -36,13 +35,13 @@ import {
 } from "./search";
 import { MAX_SEARCH_DOMAIN_LENGTH } from "./search-cleanup";
 
-const SearchModeSchema = StringEnum(["auto", "keyword", "fresh"] as const, { description: "Search mode; auto selects the provider path" }) as TUnsafe<"auto" | "keyword" | "fresh">;
-const SearchProviderSchema = StringEnum(["native", ...SEARCH_PROVIDER_HINT_IDS] as const, { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
+const SearchModeSchema = Type.Enum(["auto", "keyword", "fresh"] as const, { type: "string", description: "Search mode; auto selects the provider path" });
+const SearchProviderSchema = Type.Enum(["native", ...SEARCH_PROVIDER_HINT_IDS] as const, { type: "string", description: "Provider hint; omit for automatic routing" });
 
 /** Build the provider-enum schema from hints this installation can dispatch. */
-function providerSchemaFor(hints: readonly SearchProviderHintId[]): TUnsafe<"native" | SearchProviderHintId> {
+function providerSchemaFor(hints: readonly SearchProviderHintId[]) {
 	const ids = ["native", ...hints] as const;
-	return StringEnum(ids as unknown as readonly string[], { description: "Provider hint; omit for automatic routing" }) as TUnsafe<"native" | SearchProviderHintId>;
+	return Type.Enum(ids, { type: "string", description: "Provider hint; omit for automatic routing" });
 }
 export const SearchDomainsSchema = Type.Object(
 	{
@@ -58,11 +57,11 @@ export const SearchDateRangeSchema = Type.Object(
 	},
 	{ description: "Optional publication date range" },
 );
-const SearchContextSizeSchema = StringEnum(["low", "medium", "high"] as const, { description: "Provider-native search context size" }) as TUnsafe<"low" | "medium" | "high">;
-const ReturnTokenBudgetSchema = StringEnum(["default", "unlimited"] as const, { description: "Provider-native returned-token budget" }) as TUnsafe<"default" | "unlimited">;
+const SearchContextSizeSchema = Type.Enum(["low", "medium", "high"] as const, { type: "string", description: "Provider-native search context size" });
+const ReturnTokenBudgetSchema = Type.Enum(["default", "unlimited"] as const, { type: "string", description: "Provider-native returned-token budget" });
 const SearchUserLocationSchema = Type.Object(
 	{
-		type: StringEnum(["approximate"] as const) as TUnsafe<"approximate">,
+		type: Type.Enum(["approximate"] as const, { type: "string" }),
 		country: Type.Optional(Type.String({ minLength: 2, maxLength: 2, description: "Two-letter ISO country code" })),
 		region: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_LOCATION_FIELD_LENGTH })),
 		city: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_SEARCH_LOCATION_FIELD_LENGTH })),
@@ -98,12 +97,12 @@ export const WebSearchParameters = Type.Object({
 	social: Type.Optional(SocialSearchSchema),
 	executionModel: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_EXECUTION_MODEL_LENGTH, description: "Model id when deliberately selecting a model-mediated provider" })),
 	provider: Type.Optional(SearchProviderSchema),
-	answerMode: Type.Optional(StringEnum(["auto", "evidence"] as const, { description: "Return a provider answer when available or evidence only" }) as TUnsafe<"auto" | "evidence">),
+	answerMode: Type.Optional(Type.Enum(["auto", "evidence"] as const, { type: "string", description: "Return a provider answer when available or evidence only" })),
 	searchContextSize: Type.Optional(SearchContextSizeSchema),
 	returnTokenBudget: Type.Optional(ReturnTokenBudgetSchema),
 	externalWebAccess: Type.Optional(Type.Boolean({ description: "Allow live internet access when supported" })),
 	userLocation: Type.Optional(SearchUserLocationSchema),
-	searchContentTypes: Type.Optional(Type.Array(StringEnum(["text", "image"] as const) as TUnsafe<"text" | "image">, { minItems: 1, maxItems: MAX_SEARCH_CONTENT_TYPES })),
+	searchContentTypes: Type.Optional(Type.Array(Type.Enum(["text", "image"] as const, { type: "string" }), { minItems: 1, maxItems: MAX_SEARCH_CONTENT_TYPES })),
 	imageSettings: Type.Optional(SearchImageSettingsSchema),
 	includeContent: Type.Optional(Type.Boolean({ default: false, description: "Fetch selected result pages for source context" })),
 	contentResults: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CONTENT_RESULTS, default: DEFAULT_CONTENT_RESULTS, description: `Number of result pages to fetch when includeContent is enabled (1-${MAX_CONTENT_RESULTS})` })),
