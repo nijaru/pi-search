@@ -12,6 +12,11 @@ To upgrade an existing install, reinstall an explicit published version
 (`pi install npm:@nijaru/pi-search@<version>`) and restart Pi. Pi leaves an
 exact version pin in its extension settings unchanged during `pi update`.
 
+Credential handling differs between the published `0.0.9` release and `main`.
+Version `0.0.9` runs configured credential commands during extension loading;
+the lazy, first-use resolution described below is implemented on `main` but
+has not yet been published.
+
 ## Status
 
 The cost-controlled core is implemented. The extension exposes exactly three
@@ -83,7 +88,8 @@ Pi's permissions and inherited environment, from the agent directory, using
 configuration. Use installed executables on Pi's `PATH` or absolute paths;
 commands must not require terminal input.
 
-Startup validates the file without executing commands. Direct-provider hints use
+**Unreleased credential lifecycle (`main`):** Startup validates the file without
+executing commands. Direct-provider hints use
 nonempty env keys or validated command references to determine configuration;
 answer-provider enable gates are unchanged.
 Each command runs on its key's first use, at most once per extension instance;
