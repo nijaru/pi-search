@@ -173,16 +173,7 @@ export function providerContextFromPi(context: ExtensionContext): ProviderContex
 			getApiKeyAndHeaders: async (requested) => {
 				const selected = resolvePiModel(requested);
 				if (selected === undefined) return { ok: false, error: `Pi model ${requested.provider}/${requested.id} is not available` };
-				const resolved = await context.modelRegistry.getApiKeyAndHeaders(selected);
-				return resolved.ok
-					? {
-						ok: true,
-						...(resolved.apiKey === undefined ? {} : { apiKey: resolved.apiKey }),
-						...(resolved.headers === undefined ? {} : { headers: resolved.headers }),
-						...(resolved.baseUrl === undefined ? {} : { baseUrl: resolved.baseUrl }),
-						...(resolved.env === undefined ? {} : { env: resolved.env }),
-					}
-					: { ok: false, error: resolved.error };
+				return context.modelRegistry.getApiKeyAndHeaders(selected);
 			},
 		},
 	};

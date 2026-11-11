@@ -109,8 +109,12 @@ async function authenticate(model: ProviderModel, registry: NonNullable<Provider
 	if (!auth.ok) {
 		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
 	}
-	// A provider-resolved endpoint wins over the catalog base URL, matching
-	// `ModelRegistry.stream()`; adapters build their request URL from this model.
+	return resolveModelExecution(model, auth);
+}
+
+/** Apply registry routing without reconstructing resolved headers or environment. */
+export function resolveModelExecution(model: ProviderModel, auth: ModelExecution["auth"]): ModelExecution {
+	// Match Pi request dispatch: adapters build their URL from the execution model.
 	return { model: auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model, auth };
 }
 

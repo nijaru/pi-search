@@ -14,8 +14,8 @@ import type {
 	SearchWarning,
 } from "./contracts";
 import { createProviderError, isProviderError } from "./errors";
-import { modelAuthHeaders, type ModelExecution } from "./model-selection";
-import { cancelResponseBody, readBoundedResponseText } from "./http";
+import { modelAuthHeaders, resolveModelExecution, type ModelExecution } from "./model-selection";
+import { cancelResponseBody, readBoundedResponseText, ResponseBodyTooLargeError } from "./http";
 import { parseProviderRateLimits, retryAfterMsFromHeaders as parseRetryAfter } from "./provider-http";
 import { validateSearchRequest } from "./search";
 import { normalizeSearchUrl } from "./search-cleanup";
@@ -439,9 +439,7 @@ async function selectSearchExecution(active: ProviderModel | undefined, registry
 		} catch (error) {
 			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 		}
-		// A provider-resolved endpoint wins over the catalog base URL; the adapter
-		// builds its request URL from this model. Mirrors selectModelExecution().
-		if (auth.ok) return { model: auth.baseUrl ? { ...selected, baseUrl: auth.baseUrl } : selected, auth };
+		if (auth.ok) return resolveModelExecution(selected, auth);
 		if (request.executionModel !== undefined) {
 			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
 		}
@@ -565,49 +563,17 @@ function endpointFor(model: ProviderModel, override?: string): string {
 }
 
 async function readBody(response: Response, signal: AbortSignal, maxBytes: number, provider: "openai"): Promise<string> {
-	if (response.body === null) return "";
-	const reader = response.body.getReader();
-	const decoder = new TextDecoder();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	const onAbort = () => {
-		void reader.cancel().catch(() => undefined);
-	};
-	signal.addEventListener("abort", onAbort, { once: true });
 	try {
-		while (true) {
-			if (signal.aborted) {
-				throw createProviderError({ provider, kind: "canceled", message: "Search canceled", retryable: false });
-			}
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (value !== undefined) {
-				total += value.byteLength;
-				if (total > maxBytes) {
-					throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search response exceeded the response-size limit", retryable: false });
-				}
-				chunks.push(value);
-			}
-		}
-		return chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
+		return await readBoundedResponseText(response, maxBytes, signal);
 	} catch (error) {
+		if (error instanceof ResponseBodyTooLargeError) {
+			throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search response exceeded the response-size limit", retryable: false });
+		}
 		if (isProviderError(error)) throw error;
 		if (signal.aborted) {
 			throw createProviderError({ provider, kind: "canceled", message: "Search canceled", retryable: false, cause: error });
 		}
 		throw createProviderError({ provider, kind: "network", message: "OpenAI web search response stream failed", retryable: true, cause: error });
-	} finally {
-		signal.removeEventListener("abort", onAbort);
-		try {
-			await reader.cancel();
-		} catch {
-			// The body is already complete or canceled.
-		}
-		try {
-			reader.releaseLock();
-		} catch {
-			// Some Response implementations release the lock during cancel.
-		}
 	}
 }
 

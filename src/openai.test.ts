@@ -562,6 +562,103 @@ describe("OpenAIProvider", () => {
 		expect(calls).toBe(0);
 	});
 
+	it("decodes split UTF-8 SSE at the exact byte limit and rejects overflow", async () => {
+		const completion = {
+			type: "response.completed",
+			response: {
+				...payload,
+				output: [payload.output[1], {
+					type: "message",
+					content: [{
+						type: "output_text", text: "Café 🌍",
+						annotations: [{ type: "url_citation", url: "https://typescriptlang.org/docs" }],
+					}],
+				}],
+			},
+		};
+		const body = `data: ${JSON.stringify(completion)}\n\n`;
+		const bytes = new TextEncoder().encode(body);
+		for (const [limit, contentLength] of [[bytes.length, undefined], [bytes.length - 1, undefined], [bytes.length - 1, "1"]] as const) {
+			let canceled = false;
+			let offset = 0;
+			const stream = new ReadableStream<Uint8Array>({
+				pull(controller) {
+					if (offset === bytes.length) controller.close();
+					else {
+						controller.enqueue(bytes.subarray(offset, offset + 1));
+						offset += 1;
+					}
+				},
+				cancel() { canceled = true; },
+			}, { highWaterMark: 0 });
+			const provider = createOpenAIProvider({
+				provider: "openai",
+				maxResponseBytes: limit,
+				fetchImpl: async () => new Response(stream, { headers: {
+					"content-type": "text/event-stream",
+					"x-request-id": "bounded-id",
+					"retry-after": "2",
+					...(contentLength === undefined ? {} : { "content-length": contentLength }),
+				} }),
+			});
+			const pending = provider.search({ query: "q" }, new AbortController().signal, context());
+			if (limit === bytes.length) {
+				expect((await pending).answer?.text).toBe("Café 🌍");
+			} else {
+				await expect(pending).rejects.toMatchObject({
+					provider: "openai", kind: "malformed", retryable: false,
+					message: "OpenAI web search response exceeded the response-size limit",
+					requestId: "bounded-id", retryAfterMs: 2_000,
+				});
+				expect(canceled).toBe(true);
+			}
+			expect(stream.locked).toBe(false);
+		}
+	});
+
+	it("rejects an oversized Content-Length without reading the body", async () => {
+		let reads = 0;
+		let canceled = false;
+		const stream = new ReadableStream<Uint8Array>({
+			pull() { reads += 1; throw new Error("must not read"); },
+			cancel() { canceled = true; },
+		}, { highWaterMark: 0 });
+		const provider = createOpenAIProvider({
+			provider: "openai", maxResponseBytes: 10,
+			fetchImpl: async () => new Response(stream, { headers: { "content-length": "11", "x-request-id": "large-id" } }),
+		});
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+			kind: "malformed", retryable: false, requestId: "large-id",
+		});
+		expect(reads).toBe(0);
+		expect(canceled).toBe(true);
+		expect(stream.locked).toBe(false);
+	});
+
+	it("classifies abort during a pending success read as canceled, not truncated SSE", async () => {
+		let reading!: () => void;
+		const started = new Promise<void>((resolve) => { reading = resolve; });
+		let canceled = false;
+		const stream = new ReadableStream<Uint8Array>({
+			pull() { reading(); },
+			cancel() { canceled = true; },
+		}, { highWaterMark: 0 });
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: async () => new Response(stream, { headers: { "x-request-id": "cancel-id" } }),
+		});
+		const controller = new AbortController();
+		const pending = provider.search({ query: "q" }, controller.signal, context());
+		await started;
+		controller.abort(new Error("private abort reason"));
+		await expect(pending).rejects.toMatchObject({
+			provider: "openai", kind: "canceled", retryable: false,
+			message: "Search canceled", requestId: "cancel-id",
+		});
+		expect(canceled).toBe(true);
+		expect(stream.locked).toBe(false);
+	});
+
 	it("classifies a broken success stream as a retryable network failure", async () => {
 		const stream = new ReadableStream<Uint8Array>({
 			start(controller) {
@@ -649,6 +746,53 @@ describe("OpenAIProvider", () => {
 });
 
 describe("resolved endpoint", () => {
+	it("uses keyless auth routing and explicit authorization instead of catalog headers", async () => {
+		for (const authorization of ["Bearer workload", null] as const) {
+			let calls = 0;
+			const provider = createOpenAIProvider({
+				provider: "openai",
+				fetchImpl: async (input, init) => {
+					calls += 1;
+					expect(String(input)).toBe("https://workload.example/v1/responses");
+					const headers = new Headers(init?.headers);
+					expect(headers.get("authorization")).toBe(authorization);
+					expect(headers.get("x-disabled")).toBeNull();
+					return response(payload);
+				},
+			});
+			const pending = provider.search(request, new AbortController().signal, {
+				model: { ...model(), headers: { authorization: "Bearer catalog", "x-disabled": "default" } },
+				modelRegistry: { getApiKeyAndHeaders: async () => ({
+					ok: true, baseUrl: "https://workload.example/v1",
+					headers: { Authorization: authorization, "x-disabled": null }, env: { IDENTITY: "workload" },
+				}) },
+			});
+			if (authorization === null) {
+				await expect(pending).rejects.toMatchObject({ kind: "auth", fallbackSafe: true });
+				expect(calls).toBe(0);
+			} else {
+				await pending;
+				expect(calls).toBe(1);
+			}
+		}
+	});
+
+	it("stops on a thrown resolver failure rather than trying a lower-ranked model", async () => {
+		const calls: string[] = [];
+		const provider = createOpenAIProvider({
+			provider: "openai",
+			fetchImpl: async () => { throw new Error("must not fetch"); },
+		});
+		await expect(provider.search(request, new AbortController().signal, {
+			model: model(),
+			modelRegistry: {
+				getModels: () => [{ ...model(), id: "gpt-5.6-luna" }],
+				getApiKeyAndHeaders: async (selected) => { calls.push(selected.id); throw new Error("resolver failed"); },
+			},
+		})).rejects.toMatchObject({ kind: "auth", message: "Pi model authentication could not be resolved", fallbackSafe: true });
+		expect(calls).toEqual(["gpt-5.6-luna"]);
+	});
+
 	it("uses the auth-resolved base URL over the catalog base URL", async () => {
 		let seenUrl: string | undefined;
 		const provider = createOpenAIProvider({
