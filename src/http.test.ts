@@ -24,6 +24,24 @@ describe("bounded response reader", () => {
 		expect(canceled).toBe(true);
 	});
 
+	it("preserves the abort failure when body cancellation rejects", async () => {
+		let reading!: () => void;
+		const started = new Promise<void>((resolve) => { reading = resolve; });
+		const stream = new ReadableStream<Uint8Array>({
+			pull() { reading(); },
+			cancel() { throw new Error("body teardown failed"); },
+		}, { highWaterMark: 0 });
+		const controller = new AbortController();
+		const pending = readBoundedResponseText(new Response(stream), 100, controller.signal);
+		await started;
+		const reason = new DOMException("caller canceled", "AbortError");
+		controller.abort(reason);
+		await expect(pending).rejects.toBe(reason);
+		// Allow rejected teardown promises to reach the host's unhandled-rejection check.
+		await Bun.sleep(0);
+		expect(stream.locked).toBe(false);
+	});
+
 	it("enforces a streamed byte limit without Content-Length", async () => {
 		const stream = new ReadableStream<Uint8Array>({
 			start(controller) {

@@ -1,6 +1,5 @@
 import type {
 	Provider,
-	ProviderAuthResult,
 	ProviderCapabilities,
 	ProviderContext,
 	ProviderId,
@@ -433,13 +432,8 @@ async function selectSearchExecution(active: ProviderModel | undefined, registry
 	}
 
 	for (const selected of selectedCandidates) {
-		let auth: ProviderAuthResult;
-		try {
-			auth = await registry.getApiKeyAndHeaders(selected);
-		} catch (error) {
-			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
-		}
-		if (auth.ok) return resolveModelExecution(selected, auth);
+		const execution = await resolveModelExecution(selected, registry, provider);
+		if (execution !== undefined) return execution;
 		if (request.executionModel !== undefined) {
 			throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${selected.id}`, retryable: false });
 		}

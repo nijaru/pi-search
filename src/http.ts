@@ -48,7 +48,7 @@ export async function readBoundedResponseText(
 	const decoder = new TextDecoder();
 	let bytesRead = 0;
 	const onAbort = () => {
-		void reader.cancel(signal?.reason);
+		void reader.cancel(signal?.reason).catch(() => undefined);
 	};
 	signal?.addEventListener("abort", onAbort, { once: true });
 	try {

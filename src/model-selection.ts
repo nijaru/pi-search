@@ -100,20 +100,22 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 }
 
 async function authenticate(model: ProviderModel, registry: NonNullable<ProviderContext["modelRegistry"]>, options: ModelSelectionOptions): Promise<ModelExecution> {
+	const execution = await resolveModelExecution(model, registry, options.searchProvider);
+	if (execution === undefined) {
+		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
+	}
+	return execution;
+}
+
+/** Resolve credentials and routing; callers own model ordering and unavailable-auth policy. */
+export async function resolveModelExecution(model: ProviderModel, registry: NonNullable<ProviderContext["modelRegistry"]>, provider: ProviderId): Promise<ModelExecution | undefined> {
 	let auth: ProviderAuthResult;
 	try {
 		auth = await registry.getApiKeyAndHeaders(model);
 	} catch (error) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
+		throw createProviderError({ provider, kind: "auth", fallbackSafe: true, message: "Pi model authentication could not be resolved", retryable: false, cause: error });
 	}
-	if (!auth.ok) {
-		throw createProviderError({ provider: options.searchProvider, kind: "auth", fallbackSafe: true, message: `Pi model authentication is not configured for ${model.id}`, retryable: false });
-	}
-	return resolveModelExecution(model, auth);
-}
-
-/** Apply registry routing without reconstructing resolved headers or environment. */
-export function resolveModelExecution(model: ProviderModel, auth: ModelExecution["auth"]): ModelExecution {
+	if (!auth.ok) return;
 	// Match Pi request dispatch: adapters build their URL from the execution model.
 	return { model: auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model, auth };
 }
