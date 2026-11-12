@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
 import type { FetchRequest, FetchedContent, FetchOutputFormat, FetchExtraction, FetchWarning, XReadMode } from "./contracts";
-import { parseXUrl, readFxTwitter, type XUrl } from "./x-public";
+import { MAX_X_REPLIES, parseXUrl, readFxTwitter, type XUrl } from "./x-public";
 import type { XBrowserReader, XBrowserSelection } from "./x-browser";
 import { SafeFetchError } from "./fetch-errors";
 import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } from "./ssrf";
@@ -167,7 +167,7 @@ export async function fetchContent(
 function finishContent(
 	extracted: ExtractedContent,
 	request: NormalizedFetchRequest,
-	metadata: Pick<FetchedContent, "url" | "contentType" | "status" | "redirectCount" | "bytesRead">,
+	metadata: Pick<FetchedContent, "url" | "contentType" | "status" | "redirectCount" | "bytesRead" | "xConversation">,
 	now: () => Date = () => new Date(),
 	notices: readonly FetchWarning[] = [],
 ): FetchedContent {
@@ -212,10 +212,10 @@ async function fetchXContent(
 	}
 	let bytesRead = 0;
 	let redirects = 0;
-	const read = async (url: string) => {
-		if (signal.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
+	const read = async (url: string, readSignal = signal) => {
+		if (readSignal.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 		const remote = await fetchRemoteUrl(url, {
-			signal, lookup: options.lookup, transport: options.transport,
+			signal: readSignal, lookup: options.lookup, transport: options.transport,
 			maxRedirects: url.startsWith("https://api.fxtwitter.com/") ? 0 : 5,
 			headers: { "accept-encoding": "identity" },
 		});
@@ -231,7 +231,7 @@ async function fetchXContent(
 			await closeResponseBody(response.body);
 			throw new SafeFetchError({ kind: "responseTooLarge", message: "X retrieval exceeds the aggregate response-byte limit" });
 		}
-		const bytes = await readBoundedBody(response.body, remaining, signal);
+		const bytes = await readBoundedBody(response.body, remaining, readSignal);
 		bytesRead += bytes.byteLength;
 		return { bytes, url: remote.url.url.href, status: response.status, redirectCount: remote.redirectCount };
 	};
@@ -243,9 +243,10 @@ async function fetchXContent(
 		if (extracted.extraction !== "x-article") throw new SafeFetchError({ kind: "extraction", message: "X Article body is unavailable. Provide its /handle/article/POSTID or publishing post URL, or authorize the browser with /search-x connect" });
 		return finishContent(extracted, request, { url: page.url, contentType: "text/html", status: page.status, bytesRead, redirectCount: redirects }, options.now);
 	}
-	const result = await readFxTwitter(target, read, request.xReplies);
+	const result = await readFxTwitter(target, read, { maxReplies: request.xReplies, signal });
 	return finishContent({ content: result.content, title: result.title, outputFormat: "markdown", extraction: "fxtwitter" }, request, {
 		url: result.url, contentType: "application/json", status: 200, redirectCount: redirects, bytesRead,
+		...(result.conversation === undefined ? {} : { xConversation: result.conversation }),
 	}, options.now, result.warnings.map((message) => ({ code: "partial", message })));
 }
 
@@ -274,7 +275,7 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 	}
 	const xReplies = request.xReplies;
 	if (xReplies !== undefined) {
-		if (!Number.isInteger(xReplies) || xReplies < 1 || xReplies > 20) throw new SafeFetchError({ kind: "invalidRequest", message: "xReplies must be between 1 and 20" });
+		if (!Number.isInteger(xReplies) || xReplies < 0 || xReplies > MAX_X_REPLIES) throw new SafeFetchError({ kind: "invalidRequest", message: `xReplies must be between 0 and ${MAX_X_REPLIES}` });
 		if (request.xMode !== "public" || !parseXUrl(url)?.postId) throw new SafeFetchError({ kind: "invalidRequest", message: "xReplies requires xMode public and an X publishing post URL, not a bare Article ID" });
 	}
 	const maxPages = request.maxPages;

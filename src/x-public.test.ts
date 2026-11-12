@@ -10,7 +10,7 @@ function post(id = "100", parent?: string, extra: Post = {}): Post {
 		media: {}, ...extra,
 	};
 }
-function payload(focal: Post = post(), thread: unknown[] | null = null) { return { code: 200, status: focal, thread }; }
+function payload(focal: Post = post(), thread: unknown[] | null = null) { return { code: 200, status: focal, thread, replies: null, cursor: null }; }
 function reader(...responses: unknown[]) {
 	const calls: string[] = [];
 	return { calls, read: async (url: string) => {
@@ -94,8 +94,8 @@ describe("readFxTwitter", () => {
 		expect(result.content).not.toContain("secret");
 		expect(result.content).not.toContain("javascript:");
 		expect(result.postCount).toBe(1);
-		expect(result.warnings.join(" ")).toContain("completeness is unknown");
-		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/thread/100"]);
+		expect(result.warnings.join(" ")).toContain("coverage is unknown");
+		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/conversation/100?ranking_mode=likes"]);
 	});
 	it("renders real-shaped full Articles including atomic code, links, media and citations", async () => {
 		const fixture = reader(payload(articlePost(article())));
@@ -110,13 +110,13 @@ describe("readFxTwitter", () => {
 		expect(result.content).toContain("1. First");
 		expect(result.content).toContain("> Quoted");
 		expect(result.content).not.toContain("A short preview");
-		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/status/100"]);
+		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/conversation/100?ranking_mode=likes"]);
 	});
-	it("also expands Articles discovered from publishing status links without unrolling", async () => {
+	it("expands publishing-status Articles while retaining author continuations", async () => {
 		const fixture = reader(payload(articlePost(article()), [post("101", "100")]));
 		const result = await readFxTwitter(target(), fixture.read);
 		expect(result.content).toContain("xurl auth oauth2");
-		expect(result.postCount).toBe(1);
+		expect(result.postCount).toBe(2);
 		expect(fixture.calls).toHaveLength(1);
 	});
 	it("fails rather than returning preview-only Articles or unrenderable atomic bodies", async () => {
@@ -155,7 +155,7 @@ describe("readFxTwitter", () => {
 		const unrelated = post("999", "100", { author: { id: "43", screen_name: "replyguy" }, text: "Unrelated reply" });
 		const disconnected = post("998", "997", { text: "Missing parent text" });
 		const fixture = reader(payload(chain[0], [...chain.slice(0, 31).reverse(), unrelated]), payload(chain[30], [...chain.reverse(), disconnected]));
-		const result = await readFxTwitter(target(), fixture.read);
+		const result = await readFxTwitter(target(), fixture.read, { maxReplies: 0 });
 		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/thread/100", "https://api.fxtwitter.com/2/thread/130"]);
 		expect(result.postCount).toBe(41);
 		const sources = [...result.content.matchAll(/\[Source\]\(<https:\/\/x.com\/writer\/status\/(\d+)>\)/g)].map((match) => match[1]);
@@ -166,7 +166,7 @@ describe("readFxTwitter", () => {
 	});
 	it("warns on missing/tombstoned posts and a failed continuation without inventing content", async () => {
 		const fixture = reader(payload(post(), [post(), post("101", "100"), { type: "tombstone", id: "102" }]), { code: 503 });
-		const result = await readFxTwitter(target(), fixture.read);
+		const result = await readFxTwitter(target(), fixture.read, { maxReplies: 0 });
 		expect(result.postCount).toBe(2);
 		expect(result.warnings.join(" ")).toContain("posts are unavailable");
 		expect(result.warnings.join(" ")).toContain("continuation could not be read");
@@ -178,57 +178,58 @@ describe("readFxTwitter", () => {
 		await expect(readFxTwitter(target(), async (url) => {
 			if (++calls === 2) throw new SafeFetchError({ kind: "canceled", message: "private URL" });
 			return fixture.read(url);
-		})).rejects.toMatchObject({ kind: "canceled", message: "FxTwitter public X request failed" });
+		}, { maxReplies: 0 })).rejects.toMatchObject({ kind: "canceled", message: "FxTwitter public X request failed" });
 	});
-	it("bounds output to 100 posts and at most two calls", async () => {
+	it("caps the author thread without reclassifying overflow as comments", async () => {
 		const chain = Array.from({ length: 150 }, (_, index) => post(String(100 + index), index ? String(99 + index) : undefined));
 		const fixture = reader(payload(chain[0], [...chain].reverse()));
 		const result = await readFxTwitter(target(), fixture.read);
 		expect(result.postCount).toBe(100);
+		expect(result.conversation).toMatchObject({ replyCount: 0, stopReason: "thread-limit", paginationExhausted: true });
 		expect(result.content).not.toContain("status/200>");
-		expect(result.warnings.join(" ")).toContain("100-post limit");
+		expect(result.warnings.join(" ")).toContain("100-post author-thread limit");
 		expect(fixture.calls).toHaveLength(1);
 	});
-	it("returns an opt-in bounded reply sample separately from the author thread in one call", async () => {
+	it("honors a smaller reply limit without reading an unnecessary next page", async () => {
 		const reply = (id: string, parent = "100", text = `Comment ${id}`) => post(id, parent, { text, author: { id: "43", screen_name: "reader" } });
 		const fixture = reader({ ...payload(post(), [post(), post("101", "100")]), replies: [
 			reply("200"), reply("201", "200"), reply("200"), reply("202", "999", "Unrelated"),
 			reply("203", "100", "Extra comment"), { type: "tombstone", id: "204" },
 		], cursor: { bottom: "opaque" } });
-		const result = await readFxTwitter(target(), fixture.read, 2);
+		const result = await readFxTwitter(target(), fixture.read, { maxReplies: 2 });
 		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/conversation/100?ranking_mode=likes"]);
 		expect(result.postCount).toBe(2);
-		expect(result.replyCount).toBe(2);
-		expect(result.content).toContain("# Replies (sample; ranked by likes)");
+		expect(result.conversation).toMatchObject({ replyCount: 2, stopReason: "reply-limit", paginationExhausted: false });
+		expect(result.content).toContain("# Replies (public conversation; parents before children)");
 		expect(result.content).toContain("Comment 200");
 		expect(result.content).toContain("Comment 201");
 		expect(result.content).toContain("[Reply to](<https://x.com/i/web/status/200>)");
 		expect(result.content.match(/Comment 200/g)).toHaveLength(1);
 		expect(result.content).not.toContain("Unrelated");
 		expect(result.content).not.toContain("Extra comment");
-		expect(result.warnings.join(" ")).toContain("not exhaustive");
+		expect(result.warnings.join(" ")).toContain("coverage is unknown");
 	});
 	it("connects replies through author continuations but not through ancestors or cyclic branches", async () => {
 		const reply = (id: string, parent: string) => post(id, parent, { text: `Comment ${id}`, author: { id: "43", screen_name: "reader" } });
 		const fixture = reader({ ...payload(post("100", "90"), [post("90"), post("101", "100")]), replies: [
 			reply("200", "101"), reply("201", "90"), reply("202", "203"), reply("203", "202"), reply("204", "100"),
 		] });
-		const result = await readFxTwitter(target(), fixture.read, 10);
-		expect(result.replyCount).toBe(2);
+		const result = await readFxTwitter(target(), fixture.read, { maxReplies: 10 });
+		expect(result.conversation?.replyCount).toBe(2);
 		expect(result.content).toContain("Comment 200");
 		expect(result.content).toContain("Comment 204");
 		for (const id of ["201", "202", "203"]) expect(result.content).not.toContain(`Comment ${id}`);
 	});
 	it("does not misreport missing reply data as zero comments and validates reply limits before dispatch", async () => {
-		await expect(readFxTwitter(target(), reader(payload()).read, 2)).rejects.toMatchObject({ kind: "extraction" });
-		for (const limit of [0, -1, 21, 1.5, NaN]) {
+		await expect(readFxTwitter(target(), reader({ code: 200, status: post(), cursor: null }).read)).rejects.toMatchObject({ kind: "extraction" });
+		for (const limit of [-1, 201, 1.5, NaN]) {
 			const fixture = reader();
-			await expect(readFxTwitter(target(), fixture.read, limit)).rejects.toMatchObject({ kind: "invalidRequest" });
+			await expect(readFxTwitter(target(), fixture.read, { maxReplies: limit })).rejects.toMatchObject({ kind: "invalidRequest" });
 			expect(fixture.calls).toEqual([]);
 		}
-		const result = await readFxTwitter(target(), reader({ ...payload(), replies: null }).read, 2);
-		expect(result.replyCount).toBe(0);
-		expect(result.warnings.join(" ")).toContain("not exhaustive");
+		const result = await readFxTwitter(target(), reader({ ...payload(), replies: null }).read);
+		expect(result.conversation).toMatchObject({ replyCount: 0, stopReason: "exhausted", paginationExhausted: true });
+		expect(result.warnings.join(" ")).toContain("coverage is unknown");
 	});
 	it("bounds tree depth, Article block counts and inline range counts", async () => {
 		let nested: unknown = "leaf";

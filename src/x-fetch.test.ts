@@ -8,9 +8,10 @@ const lookup = async () => [{ address: "93.184.216.34", family: 4 as const }];
 const url = "https://x.com/alice/status/123";
 const post = { type: "status", id: "123", text: "Long public evidence ".repeat(80), author: { id: "42", screen_name: "alice" } };
 function transport(payload: unknown, calls: string[], status = 200): DirectTransport {
+	const body = typeof payload === "object" && payload !== null ? { thread: null, replies: null, cursor: null, ...payload } : payload;
 	return async (target) => {
 		calls.push(target.url.href);
-		return { status, statusText: "OK", headers: new Headers({ "content-type": "application/json" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify(payload)); } } };
+		return { status, statusText: "OK", headers: new Headers({ "content-type": "application/json" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify(body)); } } };
 	};
 }
 function reader(read: XBrowserSelection["read"] = async () => ({ html: "<p>Private browser evidence</p>", title: "Private post", postCount: 1, bytesRead: 100 }), mode: XBrowserSelection["mode"] = "auto"): XBrowserReader {
@@ -23,7 +24,8 @@ describe("X fetch routing and bounds", () => {
 		const calls: string[] = [];
 		const options = { lookup, transport: transport({ code: 200, status: post }, calls) };
 		const first = await fetchContent({ url, maxLength: 120 }, undefined, options);
-		expect(calls).toEqual(["https://api.fxtwitter.com/2/thread/123"]);
+		expect(calls).toEqual(["https://api.fxtwitter.com/2/conversation/123?ranking_mode=likes"]);
+		expect(first.xConversation).toMatchObject({ pagesRead: 1, replyCount: 0, paginationExhausted: true, stopReason: "exhausted" });
 		expect(first).toMatchObject({ url, extraction: "fxtwitter", outputFormat: "markdown", truncated: true, nextOffset: 120, contentTrust: "untrusted" });
 		const next = await fetchContent({ url, offset: first.nextOffset, maxLength: 120 }, undefined, options);
 		expect(next.offset).toBe(120);
@@ -68,11 +70,46 @@ describe("X fetch routing and bounds", () => {
 		const payload = { code: 200, status: post, thread: [post, second] };
 		const bytes = new TextEncoder().encode(JSON.stringify(payload));
 		let calls = 0;
-		await expect(fetchContent({ url }, undefined, {
+		await expect(fetchContent({ url, xMode: "public", xReplies: 0 }, undefined, {
 			lookup, maxResponseBytes: bytes.byteLength + 10,
 			transport: async () => { calls++; return { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield bytes; } } }; },
 		})).rejects.toMatchObject({ kind: "responseTooLarge" });
 		expect(calls).toBe(2);
+	});
+
+	it("retains validated conversation pages and closes a later response at the aggregate byte limit", async () => {
+		const first = new TextEncoder().encode(JSON.stringify({ code: 200, status: post, replies: [], thread: null, cursor: { bottom: "next" } }));
+		let calls = 0, closed = false;
+		const result = await fetchContent({ url }, undefined, {
+			lookup, maxResponseBytes: first.byteLength + 10,
+			transport: async () => {
+				calls++;
+				return calls === 1
+					? { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield first; } } }
+					: { status: 200, statusText: "OK", headers: new Headers({ "content-length": "100" }), body: { async *[Symbol.asyncIterator]() { throw new Error("must not consume"); }, async cancel() { closed = true; } } };
+			},
+		});
+		expect(calls).toBe(2);
+		expect(closed).toBe(true);
+		expect(result.bytesRead).toBe(first.byteLength);
+		expect(result.xConversation).toMatchObject({ pagesRead: 1, paginationExhausted: false, stopReason: "byte-limit" });
+	});
+
+	it("blocks public API redirects and recovers earlier evidence only after a validated page", async () => {
+		for (const hasFirstPage of [false, true]) {
+			let calls = 0, closed = false;
+			const pending = fetchContent({ url }, undefined, { lookup, transport: async (target) => {
+				expect(target.url.origin).toBe("https://api.fxtwitter.com");
+				calls++;
+				return hasFirstPage && calls === 1
+					? { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify({ code: 200, status: post, thread: null, replies: [], cursor: { bottom: "next" } })); } } }
+					: { status: 302, statusText: "Found", headers: new Headers({ location: "https://elsewhere.example/" }), body: { async *[Symbol.asyncIterator]() { throw new Error("must not consume redirect body"); }, async cancel() { closed = true; } } };
+			} });
+			if (hasFirstPage) expect((await pending).xConversation).toMatchObject({ pagesRead: 1, stopReason: "upstream-error", paginationExhausted: false });
+			else await expect(pending).rejects.toMatchObject({ kind: "redirect" });
+			expect(calls).toBe(hasFirstPage ? 2 : 1);
+			expect(closed).toBe(true);
+		}
 	});
 
 	it("enforces aggregate bytes, upstream errors, SSRF, and cancellation on the proxy path", async () => {
@@ -95,21 +132,21 @@ describe("X fetch routing and bounds", () => {
 		await expect(fetchContent({ url, xMode: "direct" }, undefined, { lookup, transport: source })).rejects.toMatchObject({ kind: "extraction" });
 	});
 
-	it("fetches opt-in public reply samples and never bypasses direct-only policy", async () => {
+	it("honors explicit public reply limits and never bypasses direct-only policy", async () => {
 		const calls: string[] = [];
 		const replies = [{ ...post, id: "200", text: "Public comment", author: { id: "43", screen_name: "bob" }, replying_to: { status: "123" } }];
 		const options = { lookup, transport: transport({ code: 200, status: post, replies }, calls), xBrowser: reader(async () => { throw new Error("must not use browser"); }) };
 		const result = await fetchContent({ url, xMode: "public", xReplies: 2 }, undefined, options);
 		expect(calls).toEqual(["https://api.fxtwitter.com/2/conversation/123?ranking_mode=likes"]);
 		expect(result.content).toContain("Public comment");
-		expect(result.warnings.some((warning) => warning.message.includes("not exhaustive"))).toBe(true);
+		expect(result.warnings.some((warning) => warning.message.includes("coverage is unknown"))).toBe(true);
 		calls.length = 0;
 		await expect(fetchContent({ url, xMode: "public", xReplies: 2 }, undefined, { ...options, xBrowser: reader(async () => undefined, "direct") })).rejects.toMatchObject({ kind: "invalidRequest" });
 		for (const request of [
 			{ url, xReplies: 2 }, { url, xMode: "browser" as const, xReplies: 2 },
 			{ url: "https://example.com", xMode: "public" as const, xReplies: 2 },
 			{ url: "https://x.com/i/article/456", xMode: "public" as const, xReplies: 2 },
-			{ url, xMode: "public" as const, xReplies: 21 },
+			{ url, xMode: "public" as const, xReplies: 201 },
 		]) await expect(fetchContent(request, undefined, options)).rejects.toMatchObject({ kind: "invalidRequest" });
 		expect(calls).toEqual([]);
 	});

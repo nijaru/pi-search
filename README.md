@@ -272,31 +272,44 @@ made. This also applies to X URLs selected for search enrichment or research.
 Results identify the extraction path and remain untrusted.
 
 Long posts retain their full supplied text. Articles preserve headings, links,
-lists, and embedded code. Threads use at most two public API calls and retain at
-most 100 connected author posts. Missing/deleted posts and upstream omissions
-mean **thread completeness is never guaranteed**, separately from output
-truncation. Use `offset`/`nextOffset` for long output. Offsets and character
-limits use UTF-16 units; use `maxLength` of at least 2 for emoji and other
-astral characters.
-
-**Comments are opt-in.** To read a bounded public reply sample:
+lists, and embedded code. **Public post reads include conversation retrieval by
+default**, with no browser setup, login, or approval prompt:
 
 ```json
-{"url":"https://x.com/jack/status/20","xMode":"public","xReplies":10}
+{"url":"https://x.com/jack/status/20"}
 ```
 
-`xReplies` accepts 1–20. It makes one
-[FxTwitter conversation request](https://api.fxtwitter.com/2/openapi.json),
-returns replies separately from the author thread, and preserves source and
-parent-post links. Replies are ranked by likes; only replies with a parent chain
-back to the selected post are included. This is a sample, **not all comments**:
-hidden/deleted replies, missing parents, ranking, and upstream omissions limit
-coverage. Offset paging refetches live content rather than a saved snapshot,
-so a changing reply ranking can change later pages. No cursor crawl, media
-download, or paid API is used. Public reply
-samples require `xMode: "public"` and a publishing post URL, not a bare
-`/i/article/ARTICLEID` link. They never use the browser, and persistent direct-only
-policy rejects the request rather than silently dropping the reply option.
+The [FxTwitter conversation API](https://api.fxtwitter.com/2/openapi.json)
+is paginated automatically, stopping after 8 pages, 200 replies, or a 20-second
+conversation deadline. The existing aggregate response-byte limit still applies
+(5 MiB by default). Local assembly is capped at 100 author-thread posts, 1,000
+graph candidates, and 3 million characters. Repeated or malformed cursors stop
+the crawl rather than looping. A later upstream failure or limit returns already
+validated evidence with an explicit partial-result notice; caller cancellation
+and SSRF failures still reject the request.
+
+Posts are deduplicated, nested replies are connected across pages, and parents
+appear before children. Source and parent-post links are retained. Upstream
+pages are ranked by likes; posts with unverified parent relationships are omitted
+with a warning. `xConversation` metadata reports pages read, author/reply counts,
+the stop reason, and whether upstream pagination ended. **Exhausted pagination
+does not prove that every X reply was returned**: hidden, deleted, protected,
+nested, or upstream-omitted replies may still be missing.
+
+To request fewer replies, use `xMode: "public"` with `xReplies` from 0–200.
+Zero selects an author-thread-only read (at most two public API calls). Explicit
+reply limits require a publishing post URL, not a bare `/i/article/ARTICLEID`
+link; bare Article links can supply the Article body but not its conversation.
+Public reads never use the browser. Persistent direct-only policy is still
+respected, and a previously authorized browser retains its existing priority in
+`auto` mode; browser/direct DOM reads include only the selected post.
+
+Conversation coverage is separate from output truncation. Use `offset`/
+`nextOffset` for long extracted output, not to bypass conversation crawl limits.
+Offset paging refetches live content rather than a saved snapshot, so changing
+posts or reply rankings can change later pages. Offsets and character limits use
+UTF-16 units; use `maxLength` of at least 2 for emoji and other astral characters.
+No media download or paid API is used.
 
 For authenticated access, use your **existing signed-in browser**:
 

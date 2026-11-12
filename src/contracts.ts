@@ -501,12 +501,21 @@ export interface FetchRequest {
 	readonly allowRawHtmlFallback?: boolean;
 	/** X retrieval: authorized browser first, otherwise free FxTwitter. Direct bypasses both. */
 	readonly xMode?: XReadMode;
-	/** Opt-in sample of 1–20 replies ranked by likes. Requires xMode public and a post ID. */
+	/** Public X reply limit (0–200, default 200). Zero reads only the author thread; explicit use requires public mode. */
 	readonly xReplies?: number;
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
 export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript" | "fxtwitter" | "x-browser" | "x-post" | "x-article";
+
+export interface XConversationMetadata {
+	readonly pagesRead: number;
+	readonly replyCount: number;
+	readonly threadPostCount: number;
+	/** Only upstream pagination exhaustion, never proof that every X reply was found. */
+	readonly paginationExhausted: boolean;
+	readonly stopReason: "exhausted" | "reply-limit" | "thread-limit" | "page-limit" | "candidate-limit" | "content-limit" | "byte-limit" | "timeout" | "upstream-error" | "invalid-cursor" | "cursor-loop";
+}
 
 export interface FetchWarning {
 	readonly code: "truncated" | "raw-fallback" | "partial" | "authenticated";
@@ -534,6 +543,8 @@ export interface FetchedContent {
 	readonly outputFormat: FetchOutputFormat;
 	/** Extraction path used to produce `content`. */
 	readonly extraction: FetchExtraction;
+	/** Public X conversation coverage, separate from model-visible text truncation. */
+	readonly xConversation?: XConversationMetadata;
 	/** AnyDoc format used for local document conversion. */
 	readonly documentFormat?: string;
 	/** When the content was fetched. */
