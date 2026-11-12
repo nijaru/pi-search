@@ -95,6 +95,32 @@ describe("X fetch routing and bounds", () => {
 		expect(result.xConversation).toMatchObject({ pagesRead: 1, paginationExhausted: false, stopReason: "byte-limit" });
 	});
 
+	it("accounts for bytes consumed from a later page even when its stream fails", async () => {
+		for (const failure of ["overflow", "network"] as const) {
+			const first = new TextEncoder().encode(JSON.stringify({ code: 200, status: post, replies: [], thread: null, cursor: { bottom: "next" } }));
+			let calls = 0, closed = false, chunksRead = 0;
+			const result = await fetchContent({ url }, undefined, {
+				lookup, maxResponseBytes: first.byteLength + 10,
+				transport: async () => ++calls === 1
+					? { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield first; } } }
+					: { status: 200, statusText: "OK", headers: new Headers(), body: {
+						async *[Symbol.asyncIterator]() {
+							chunksRead++; yield new Uint8Array(5);
+							if (failure === "network") throw new SafeFetchError({ kind: "network", message: "connection reset" });
+							chunksRead++; yield new Uint8Array(6);
+							throw new Error("must stop before reading more");
+						},
+						async cancel() { closed = true; },
+					} },
+			});
+			expect(result.bytesRead).toBe(first.byteLength + (failure === "overflow" ? 11 : 5));
+			expect(result.xConversation).toMatchObject({ pagesRead: 1, stopReason: failure === "overflow" ? "byte-limit" : "upstream-error" });
+			expect(calls).toBe(2);
+			expect(chunksRead).toBe(failure === "overflow" ? 2 : 1);
+			expect(closed).toBe(true);
+		}
+	});
+
 	it("blocks public API redirects and recovers earlier evidence only after a validated page", async () => {
 		for (const hasFirstPage of [false, true]) {
 			let calls = 0, closed = false;

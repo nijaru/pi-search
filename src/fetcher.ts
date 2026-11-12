@@ -231,8 +231,7 @@ async function fetchXContent(
 			await closeResponseBody(response.body);
 			throw new SafeFetchError({ kind: "responseTooLarge", message: "X retrieval exceeds the aggregate response-byte limit" });
 		}
-		const bytes = await readBoundedBody(response.body, remaining, readSignal);
-		bytesRead += bytes.byteLength;
+		const bytes = await readBoundedBody(response.body, remaining, readSignal, (count) => { bytesRead += count; });
 		return { bytes, url: remote.url.url.href, status: response.status, redirectCount: remote.redirectCount };
 	};
 	if (!target.postId) {
@@ -428,7 +427,7 @@ async function extractWithDeadline(
 }
 
 
-async function readBoundedBody(body: ResponseBody | null, maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
+async function readBoundedBody(body: ResponseBody | null, maxBytes: number, signal: AbortSignal, observeBytes?: (count: number) => void): Promise<Uint8Array> {
 	if (!body) return new Uint8Array();
 	const chunks: Uint8Array[] = [];
 	let total = 0;
@@ -440,11 +439,16 @@ async function readBoundedBody(body: ResponseBody | null, maxBytes: number, sign
 	const onAbort = (): void => rejectAborted?.(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" }));
 	signal.addEventListener("abort", onAbort, { once: true });
 	try {
+		// The signal can abort after response headers arrive but before this
+		// listener is installed. Do not enter a possibly stalled iterator then.
+		if (signal.aborted) throw new SafeFetchError({ kind: "canceled", message: "Fetch canceled" });
 		while (true) {
 			const next = await Promise.race([iterator.next(), aborted]);
 			if (next.done) break;
 			const bytes = next.value instanceof Uint8Array ? next.value : new Uint8Array(next.value);
 			total += bytes.byteLength;
+			// Failed pages still consumed input, including the chunk that hit a limit.
+			observeBytes?.(bytes.byteLength);
 			if (total > maxBytes) {
 				throw new SafeFetchError({ kind: "responseTooLarge", message: "Response exceeds the configured byte limit" });
 			}

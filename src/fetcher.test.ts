@@ -137,6 +137,23 @@ describe("direct content fetch", () => {
 		}
 	});
 
+	it("does not start consuming a body when cancellation arrives with its headers", async () => {
+		const controller = new AbortController();
+		let reads = 0, closed = false;
+		await expect(fetchContent(baseRequest, controller.signal, {
+			lookup: publicLookup,
+			transport: async () => {
+				controller.abort();
+				return { status: 200, statusText: "OK", headers: new Headers({ "content-type": "text/plain" }), body: {
+					async *[Symbol.asyncIterator]() { reads++; yield new TextEncoder().encode("must not read"); },
+					async cancel() { closed = true; },
+				} };
+			},
+		})).rejects.toMatchObject({ kind: "canceled" });
+		expect(reads).toBe(0);
+		expect(closed).toBe(true);
+	});
+
 	it("enforces actual streamed byte limits without Content-Length", async () => {
 		let closed = 0;
 		await expect(
