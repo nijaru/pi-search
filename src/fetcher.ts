@@ -11,6 +11,7 @@ import {
 	AnyDocConversionError,
 	anyDocFormatHint,
 	convertDocumentWithWorker,
+	MAX_DOCUMENT_TEXT_BYTES,
 	isAnyDocCandidate,
 	isAnyDocMimeType,
 	type AnyDocFormat,
@@ -324,6 +325,7 @@ async function extractAnyDocContent(
 	const formatHint: AnyDocFormat | undefined = anyDocFormatHint(mimeType, url);
 	try {
 		const result = await (converter ?? convertDocumentWithWorker)(bytes, formatHint, signal);
+		if (Buffer.byteLength(result.content, "utf8") > MAX_DOCUMENT_TEXT_BYTES) throw new AnyDocConversionError("resourceLimit", "Document Markdown exceeds the 2 MiB limit");
 		return {
 			content: result.content,
 			outputFormat: "markdown",
@@ -334,6 +336,7 @@ async function extractAnyDocContent(
 		if (error instanceof SafeFetchError) throw error;
 		if (error instanceof AnyDocConversionError) {
 			const message = `AnyDoc ${error.code}: ${error.message}`;
+			if (error.code === "resourceLimit") throw new SafeFetchError({ kind: "responseTooLarge", message, cause: error });
 			if (error.code === "unsupported") throw new SafeFetchError({ kind: "unsupportedContentType", message, cause: error });
 			// needsOcr names scanned/image-only pages; OCR stays out of scope by
 			// design, so it surfaces as an explicit unsupported-content failure.

@@ -260,6 +260,15 @@ describe("local anydoc document conversion", () => {
 		});
 	}
 
+	it("maps native and custom-converter output limits to responseTooLarge at the fetch boundary", async () => {
+		await expect(fetchContent({ url: "https://example.test/expanded.xlsx" }, undefined, {
+			lookup: publicLookup, transport: transportFor(compressedWorkbook(3000), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+		})).rejects.toMatchObject({ kind: "responseTooLarge" });
+		await expect(fetchContent({ url: "https://example.test/notes.rtf" }, undefined, {
+			lookup: publicLookup, transport: transportFor(new TextEncoder().encode("{\\rtf1 test}"), "application/rtf"),
+			documentConverter: async () => ({ content: "é".repeat(MAX_DOCUMENT_TEXT_BYTES / 2 + 1), documentFormat: "rtf" }),
+		})).rejects.toMatchObject({ kind: "responseTooLarge" });
+	});
 	it("preserves direct HTML even when a URL has a document extension", async () => {
 		const html = "<html><head><title>Article</title></head><body><article><p>HTML evidence.</p></article></body></html>";
 		const result = await fetchContent({ url: "https://example.test/article.docx" }, undefined, {

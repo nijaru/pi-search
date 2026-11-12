@@ -249,8 +249,12 @@ Readability/Turndown extraction, and untrusted-content fencing. It also supports
   `@firecrawl/anydoc` conversion to structured Markdown: DOC/DOCX, PPT/PPTX,
   XLS/XLSX, ODT/ODS/ODP, RTF, EPUB, CSV, and PDF. Conversion is local, runs
   outside the event loop, and requires no API key or hosted Firecrawl service.
-  AnyDoc detects scanned/image-only and encrypted PDFs and fails explicitly;
-  OCR is not implicit.
+  Each conversion runs in a disposable subprocess with a 30-second deadline,
+  bounded IPC, and a 2 MiB UTF-8 Markdown limit. Cancellation kills and joins the
+  process. AnyDoc detects scanned/image-only and encrypted PDFs and fails
+  explicitly; OCR is not implicit. Subprocess isolation contains native crashes,
+  but is not a hard memory sandbox: AnyDoc materializes its result before the
+  output check, so a hostile document can still pressure system memory.
 - An explicit `maxPages` request uses bounded local `pdftotext`, because
   AnyDoc does not expose page-range selection.
 - YouTube captions through bounded local `yt-dlp` with no playlist, cookie, or
@@ -287,7 +291,9 @@ returns replies separately from the author thread, and preserves source and
 parent-post links. Replies are ranked by likes; only replies with a parent chain
 back to the selected post are included. This is a sample, **not all comments**:
 hidden/deleted replies, missing parents, ranking, and upstream omissions limit
-coverage. No cursor crawl, media download, or paid API is used. Public reply
+coverage. Offset paging refetches live content rather than a saved snapshot,
+so a changing reply ranking can change later pages. No cursor crawl, media
+download, or paid API is used. Public reply
 samples require `xMode: "public"` and a publishing post URL, not a bare
 `/i/article/ARTICLEID` link. They never use the browser, and persistent direct-only
 policy rejects the request rather than silently dropping the reply option.
