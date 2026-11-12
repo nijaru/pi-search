@@ -189,7 +189,7 @@ describe("search result cleanup", () => {
 		]);
 		expect(cleaned.appliedOptions).toContain("dateRange");
 		expect(cleaned.warnings).toContainEqual({ code: "partial-results", message: "Search removed 2 result entries outside the requested date range" });
-		expect(cleaned.warnings).toContainEqual({ code: "partial-results", message: "Search could not verify the publication date of 1 result entry against the requested date range" });
+		expect(cleaned.warnings).toContainEqual({ code: "partial-results", option: "dateRange", message: "Search could not verify the publication date of 1 result entry against the requested date range" });
 	});
 
 	it("keeps answer citations aligned when date filtering removes a source", () => {
@@ -219,6 +219,17 @@ describe("search result cleanup", () => {
 		expect(cleaned.answer?.citations[0]).toMatchObject({ startIndex: 0, endIndex: 12 });
 	});
 
+	it("does not treat unrelated provider warning prose as date verification", () => {
+		const request = validateSearchRequest({ query: "q", dateRange: { from: "2026-01-02" } });
+		const response = cleanupSearchResponse({
+			query: "q", provider: "brave",
+			results: [{ url: "https://example.com/undated", provider: "brave", searchQuery: "q" }],
+			appliedOptions: [], warnings: [{ code: "partial-results", message: "Provider changed its publication date display" }],
+		}, request, "brave");
+		expect(response.warnings).toContainEqual({ code: "partial-results", option: "dateRange", message: expect.stringContaining("could not verify") });
+		expect(cleanupSearchResponse(response, request, "brave").warnings).toEqual(response.warnings);
+	});
+
 	it("does not duplicate a provider's own date-range warning", () => {
 		const request = validateSearchRequest({ query: "q", dateRange: { from: "2026-01-02" } });
 		const cleaned = cleanupSearchResponse({
@@ -226,7 +237,7 @@ describe("search result cleanup", () => {
 			provider: "deepseek",
 			results: [{ url: "https://example.com/undated", provider: "deepseek", searchQuery: "q" }],
 			appliedOptions: ["dateRange"],
-			warnings: [{ code: "partial-results", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" }],
+			warnings: [{ code: "partial-results", option: "dateRange", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" }],
 		}, request, "deepseek");
 		expect(cleaned.warnings.filter((item) => item.message.startsWith("Search could not verify"))).toHaveLength(0);
 	});

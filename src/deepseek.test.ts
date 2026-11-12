@@ -70,7 +70,7 @@ describe("DeepSeekProvider", () => {
 		expect(result.results.map((item) => item.url)).toEqual(["https://example.com/inside", "https://example.com/undated"]);
 		expect(result.warnings).toEqual([
 			{ code: "partial-results", message: "DeepSeek removed 2 result entries outside the requested date range" },
-			{ code: "partial-results", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" },
+			{ code: "partial-results", option: "dateRange", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" },
 		]);
 	});
 

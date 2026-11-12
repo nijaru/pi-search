@@ -13,6 +13,7 @@ import type {
 import { createProviderError } from "./errors";
 import { httpSource, objectValue, optionalString, optionalTimestamp, postJson, requireApiKey, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { filterSearchResultsByDateRange } from "./search-cleanup";
 
 export const DEEPSEEK_SEARCH_ENDPOINT = "https://api.deepseek.com/v1/tools/search";
 export const DEFAULT_DEEPSEEK_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -177,44 +178,6 @@ function excerptFromRecord(record: Record<string, unknown>): string | undefined 
 	return optionalString(record.summary, 4_000) ?? optionalString(record.snippet, 4_000);
 }
 
-/** Inclusive UTC day boundaries for date-only bounds; exact instants otherwise. */
-function boundaryMs(value: string, endOfDay: boolean): number | undefined {
-	const milliseconds = Date.parse(value);
-	if (!Number.isFinite(milliseconds)) return undefined;
-	return endOfDay && !value.includes("T") ? milliseconds + 86_400_000 - 1 : milliseconds;
-}
-
-/**
- * The date operators widen the provider window to protect inclusive boundary
- * days, so enforce the exact inclusive range on results whose date is known.
- * Results without a date cannot be checked and remain visible with a warning.
- */
-function filterByDateRange(
-	results: readonly SearchResult[],
-	request: SearchRequest,
-): { readonly results: readonly SearchResult[]; readonly removed: number; readonly unverified: number } {
-	const fromMs = request.dateRange?.from === undefined ? undefined : boundaryMs(request.dateRange.from, false);
-	const toMs = request.dateRange?.to === undefined ? undefined : boundaryMs(request.dateRange.to, true);
-	if (fromMs === undefined && toMs === undefined) return { results, removed: 0, unverified: 0 };
-	const kept: SearchResult[] = [];
-	let removed = 0;
-	let unverified = 0;
-	for (const result of results) {
-		const publishedMs = result.publishedAt === undefined ? Number.NaN : Date.parse(result.publishedAt);
-		if (!Number.isFinite(publishedMs)) {
-			unverified += 1;
-			kept.push(result);
-			continue;
-		}
-		if ((fromMs !== undefined && publishedMs < fromMs) || (toMs !== undefined && publishedMs > toMs)) {
-			removed += 1;
-			continue;
-		}
-		kept.push(result);
-	}
-	return { results: kept, removed, unverified };
-}
-
 export function normalizeDeepSeekResponse(
 	payload: unknown,
 	request: SearchRequest,
@@ -248,7 +211,7 @@ export function normalizeDeepSeekResponse(
 		});
 	}
 	if (discarded > 0 && results.length === 0) return malformed("results contained no parseable HTTP URLs");
-	const dateFiltered = filterByDateRange(results, normalized);
+	const dateFiltered = filterSearchResultsByDateRange(results, normalized.dateRange);
 	const warnings: SearchWarning[] = [];
 	if (discarded > 0) {
 		warnings.push({ code: "partial-results", message: `DeepSeek discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}` });
@@ -257,7 +220,7 @@ export function normalizeDeepSeekResponse(
 		warnings.push({ code: "partial-results", message: `DeepSeek removed ${dateFiltered.removed} result entr${dateFiltered.removed === 1 ? "y" : "ies"} outside the requested date range` });
 	}
 	if (dateFiltered.unverified > 0) {
-		warnings.push({ code: "partial-results", message: `DeepSeek could not verify the publication date of ${dateFiltered.unverified} result entr${dateFiltered.unverified === 1 ? "y" : "ies"} against the requested date range` });
+		warnings.push({ code: "partial-results", option: "dateRange", message: `DeepSeek could not verify the publication date of ${dateFiltered.unverified} result entr${dateFiltered.unverified === 1 ? "y" : "ies"} against the requested date range` });
 	}
 	return {
 		query: normalized.query,
