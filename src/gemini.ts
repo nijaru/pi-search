@@ -10,7 +10,7 @@ import type {
 	SearchResult,
 	SearchWarning,
 } from "./contracts";
-import { createProviderError } from "./errors";
+import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody } from "./http";
 import { executeGroundedSearch } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
@@ -96,8 +96,8 @@ function authHeaders(execution: ModelExecution): Readonly<Record<string, string>
 	) {
 		headers.set("x-goog-api-key", execution.auth.apiKey);
 	}
-	if (!headers.has("x-goog-api-key")) {
-		throw createProviderError({ provider: "gemini", kind: "auth", fallbackSafe: true, message: "Gemini authentication returned no API key", retryable: false });
+	if (!headers.get("x-goog-api-key")?.trim() && !headers.get("authorization")?.trim()) {
+		throw createProviderError({ provider: "gemini", kind: "auth", fallbackSafe: true, message: "Gemini authentication returned no usable API key or authorization header", retryable: false });
 	}
 	return Object.fromEntries(headers.entries());
 }
@@ -150,9 +150,39 @@ async function resolveGroundingUrls(
 	return resolved;
 }
 
+function optionalRecord(value: unknown): Record<string, unknown> | undefined {
+	return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function reportedUsage(root: Record<string, unknown>, searchQueries = 0) {
+	const usage = optionalRecord(root.usageMetadata);
+	const clean = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+	const inputTokens = clean(usage?.promptTokenCount);
+	const outputTokens = clean(usage?.candidatesTokenCount);
+	const totalTokens = clean(usage?.totalTokenCount);
+	if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined && searchQueries === 0) return undefined;
+	return {
+		...(inputTokens === undefined ? {} : { inputTokens }),
+		...(outputTokens === undefined ? {} : { outputTokens }),
+		...(totalTokens === undefined ? {} : { totalTokens }),
+		...(searchQueries === 0 ? {} : { searchQueries }),
+	};
+}
+
 async function normalizeGeminiResponse(payload: unknown, request: SearchRequest, signal: AbortSignal, fetchImpl: SearchHttpFetch): Promise<SearchResponse> {
+	const root = objectValue(payload, "response", "gemini");
+	try {
+		return await normalizeGeminiEvidence(root, request, signal, fetchImpl);
+	} catch (error) {
+		if (!isProviderError(error)) throw error;
+		throw createProviderError({ ...error, message: error.message, requestId: optionalString(root.responseId, 500), usage: reportedUsage(root), fallbackSafe: false, cause: error });
+	}
+}
+
+async function normalizeGeminiEvidence(payload: unknown, request: SearchRequest, signal: AbortSignal, fetchImpl: SearchHttpFetch): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "gemini");
+	if (root.usageMetadata !== undefined) objectValue(root.usageMetadata, "usageMetadata", "gemini");
 	const promptFeedback = root.promptFeedback;
 	if (promptFeedback !== undefined) {
 		const feedback = objectValue(promptFeedback, "promptFeedback", "gemini");
@@ -174,36 +204,51 @@ async function normalizeGeminiResponse(payload: unknown, request: SearchRequest,
 	let discarded = 0;
 	let redirectAttempts = 0;
 	for (const candidateValue of root.candidates) {
-		const candidate = objectValue(candidateValue, "candidates[]", "gemini");
+		const candidate = optionalRecord(candidateValue);
+		if (candidate === undefined) {
+			discarded += 1;
+			continue;
+		}
 		const finishReason = optionalString(candidate.finishReason);
 		if (finishReason !== undefined && finishReason !== "STOP" && finishReason !== "UNSPECIFIED") {
 			warnings.push({ code: "partial-results", message: `Gemini grounding candidate finished with ${finishReason}` });
 		}
-		const content = candidate.content;
-		if (content !== null && typeof content === "object" && !Array.isArray(content)) {
-			const parts = (content as Record<string, unknown>).parts;
+		const content = optionalRecord(candidate.content);
+		if (candidate.content !== undefined && content === undefined) discarded += 1;
+		if (content !== undefined) {
+			const parts = content.parts;
 			if (Array.isArray(parts)) {
-				for (const part of parts) {
-					if (part !== null && typeof part === "object" && !Array.isArray(part) && typeof (part as Record<string, unknown>).text === "string") answerParts.push((part as Record<string, unknown>).text as string);
+				for (const value of parts) {
+					const part = optionalRecord(value);
+					if (part === undefined || (part.text !== undefined && typeof part.text !== "string")) discarded += 1;
+					else if (typeof part.text === "string") answerParts.push(part.text);
 				}
-			}
+			} else if (parts !== undefined) discarded += 1;
 		}
 		const metadata = candidate.groundingMetadata;
 		if (metadata === undefined) continue;
-		const grounding = objectValue(metadata, "groundingMetadata", "gemini");
+		const grounding = optionalRecord(metadata);
+		if (grounding === undefined) {
+			discarded += 1;
+			continue;
+		}
 		if (Array.isArray(grounding.webSearchQueries)) {
 			for (const query of grounding.webSearchQueries) if (typeof query === "string" && query.trim().length > 0) groundingQueries.add(query.trim());
 		}
-		if (!Array.isArray(grounding.groundingChunks)) continue;
+		if (!Array.isArray(grounding.groundingChunks)) {
+			if (grounding.groundingChunks !== undefined) discarded += 1;
+			continue;
+		}
 		const planned: Array<{ source: Record<string, unknown>; parsed: { url: string; domain: string }; resolve: boolean }> = [];
 		for (const chunkValue of grounding.groundingChunks) {
-			const chunk = objectValue(chunkValue, "groundingChunks[]", "gemini");
-			const web = chunk.web;
-			if (web === undefined) {
+			const chunk = optionalRecord(chunkValue);
+			const source = optionalRecord(chunk?.web);
+			if (source === undefined) {
+				if (chunk === undefined || chunk.web !== undefined) discarded += 1;
+				// Keep a slot for every original chunk: supports refer to these indices.
 				planned.push({ source: {}, parsed: { url: "", domain: "" }, resolve: false });
 				continue;
 			}
-			const source = objectValue(web, "groundingChunks[].web", "gemini");
 			const parsed = httpSource(source.uri ?? source.url, "gemini");
 			if (parsed === undefined) {
 				discarded += 1;
@@ -266,30 +311,19 @@ async function normalizeGeminiResponse(payload: unknown, request: SearchRequest,
 		throw createProviderError({ provider: "gemini", kind: "malformed", message: "Gemini returned no parseable grounding URLs", retryable: false });
 	}
 	if (discarded > 0) warnings.push({ code: "partial-results", message: `Gemini discarded ${discarded} malformed grounding entr${discarded === 1 ? "y" : "ies"}` });
-	const usage = root.usageMetadata;
-	const usageRecord = usage === undefined ? undefined : objectValue(usage, "usageMetadata", "gemini");
-	const inputTokens = typeof usageRecord?.promptTokenCount === "number" && Number.isFinite(usageRecord.promptTokenCount) ? usageRecord.promptTokenCount : undefined;
-	const outputTokens = typeof usageRecord?.candidatesTokenCount === "number" && Number.isFinite(usageRecord.candidatesTokenCount) ? usageRecord.candidatesTokenCount : undefined;
-	const totalTokens = typeof usageRecord?.totalTokenCount === "number" && Number.isFinite(usageRecord.totalTokenCount) ? usageRecord.totalTokenCount : undefined;
 	const answerText = answerParts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_GEMINI_ANSWER_LENGTH);
 	const resultByUrl = new Map(results.map((result) => [result.url, result]));
 	const citations = [...answerCitationUrls].map((url) => resultByUrl.get(url)).filter((result): result is SearchResult => result !== undefined).map((result) => ({ url: result.url, ...(result.title === undefined ? {} : { title: result.title }) }));
 	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && citations.length > 0
 		? { text: answerText, contentTrust: "untrusted" as const, provider: "gemini" as const, citations }
 		: undefined;
-	const usageDetails = inputTokens === undefined && outputTokens === undefined && totalTokens === undefined && groundingQueries.size === 0
-		? undefined
-		: {
-			...(inputTokens === undefined ? {} : { inputTokens }),
-			...(outputTokens === undefined ? {} : { outputTokens }),
-			...(totalTokens === undefined ? {} : { totalTokens }),
-			...(groundingQueries.size === 0 ? {} : { searchQueries: groundingQueries.size }),
-		};
+	const usageDetails = reportedUsage(root, groundingQueries.size);
 	return {
 		query: normalized.query,
 		results,
 		...(answer === undefined ? {} : { answer }),
 		provider: "gemini",
+		...(optionalString(root.responseId, 500) === undefined ? {} : { requestId: optionalString(root.responseId, 500) }),
 		appliedOptions: [],
 		warnings,
 		...(usageDetails === undefined ? {} : { usage: usageDetails }),

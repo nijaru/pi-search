@@ -33,6 +33,7 @@ const capabilities: ProviderCapabilities = {
 	social: true,
 	dateFilter: true,
 	handleFilter: true,
+	combinedHandleFilters: true,
 };
 
 const profile: ProviderProfile = {

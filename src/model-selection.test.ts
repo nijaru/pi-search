@@ -77,6 +77,13 @@ function options(baseUrl?: string, env?: Record<string, string>) {
 }
 
 describe("resolved endpoint routing", () => {
+	it("marks unavailable model selection safe before dispatch", async () => {
+		const context: ProviderContext = { modelRegistry: { getModels: () => [], getApiKeyAndHeaders: async () => { throw new Error("must not authenticate"); } } };
+		for (const request of [{ query: "q" }, { query: "q", executionModel: "missing" }]) {
+			await expect(selectModelExecution({ ...options(), context, request, allowRegistryFallback: true })).rejects.toMatchObject({ kind: "unsupported", fallbackSafe: true });
+		}
+	});
+
 	it("preserves keyless routing, environment, and explicit header decisions end to end", async () => {
 		for (const authorization of ["Bearer workload", null] as const) {
 			const auth = {

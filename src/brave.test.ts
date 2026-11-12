@@ -18,6 +18,25 @@ function response(body: unknown, status = 200, headers: Record<string, string> =
 const signal = new AbortController().signal;
 
 describe("BraveProvider", () => {
+	it("keeps valid siblings and normalization warnings through search", async () => {
+		const provider = createBraveProvider({ apiKey: "test", fetchImpl: async () => response({ web: { results: [null, [], { url: "bad" }, { url: "https://example.com/page", description: "Evidence" }, { url: "https://example.com/bad", title: 42 }] } }) });
+		const result = await provider.search({ query: "q" }, signal, {});
+		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "Evidence" }]);
+		expect(result.warnings).toContainEqual(expect.objectContaining({ code: "partial-results" }));
+		for (const results of [[null, []], [{ url: "bad" }]]) {
+			expect(() => normalizeBraveResponse({ web: { results } }, { query: "q" })).toThrow(expect.objectContaining({ kind: "malformed" }));
+		}
+		expect(normalizeBraveResponse({ web: { results: [] } }, { query: "q" }).results).toEqual([]);
+	});
+
+	it("bounds quota headers and windows and ignores invalid reset dates", () => {
+		const info = parseBraveRateLimits(new Headers({ "x-ratelimit-limit": "1,".repeat(1_000), "x-ratelimit-reset": "9".repeat(5_000), "retry-after": "9".repeat(5_000) }));
+		expect(info?.windows).toHaveLength(8);
+		expect(info?.retryAfterMs).toBeUndefined();
+		expect(parseBraveRateLimits(new Headers({ "x-ratelimit-limit": "1,".repeat(10_000) }))).toBeUndefined();
+		expect(parseBraveRateLimits(new Headers({ "x-ratelimit-reset": "99999999999999999999" }))).toBeUndefined();
+	});
+
 	it("builds one bounded request with safe domain operators and fresh mode", () => {
 		const plan = buildBraveRequest({
 			query: "typescript fetch",

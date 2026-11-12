@@ -15,6 +15,17 @@ function provider(options: Partial<ParallelAdapterOptions> = {}) {
 }
 
 describe("ParallelProvider", () => {
+	it("skips malformed entries without losing siblings or plan warnings", async () => {
+		const configured = provider({ fetchImpl: async () => response({ ...payload, results: [null, [], 1, { url: "bad" }, ...payload.results] }) });
+		const result = await configured.search({ query: "q", mode: "fresh" }, new AbortController().signal, {});
+		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." }]);
+		expect(result.warnings.map((warning) => warning.code)).toEqual(["unsupported-option", "partial-results"]);
+		for (const results of [[null, []], {}]) {
+			await expect(provider({ fetchImpl: async () => response({ results }) }).search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "malformed" });
+		}
+		expect((await provider({ fetchImpl: async () => response({ results: [] }) }).search({ query: "q" }, new AbortController().signal, {})).results).toEqual([]);
+	});
+
 	it("sends an objective and normalizes bounded excerpts", async () => {
 		let seenBody: Record<string, unknown> | undefined;
 		const result = await provider({ fetchImpl: async (_input, init) => {

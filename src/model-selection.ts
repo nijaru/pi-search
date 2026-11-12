@@ -68,6 +68,7 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 			throw createProviderError({
 				provider: options.searchProvider,
 				kind: "unsupported",
+				fallbackSafe: true,
 				message: `Model ${requested} is not an available ${options.searchProvider} search model`,
 				retryable: false,
 			});
@@ -94,6 +95,7 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 	throw createProviderError({
 		provider: options.searchProvider,
 		kind: "unsupported",
+		fallbackSafe: true,
 		message: `An explicit executionModel is required when ${options.searchProvider} is not the active model`,
 		retryable: false,
 	});

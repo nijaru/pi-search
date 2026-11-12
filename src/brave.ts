@@ -239,7 +239,7 @@ function parseNonNegative(value: string | null): number | undefined {
 }
 
 function splitHeader(value: string | null): string[] {
-	return value === null ? [] : value.split(",").map((part) => part.trim());
+	return value === null || value.length > 4_096 ? [] : value.split(",", 8).map((part) => part.trim());
 }
 
 function parseReset(value: string | undefined): Pick<ProviderRateLimitWindow, "resetAt" | "resetAfterMs"> {
@@ -247,7 +247,7 @@ function parseReset(value: string | undefined): Pick<ProviderRateLimitWindow, "r
 	const numeric = parseNonNegative(value);
 	if (numeric === undefined) return {};
 	if (numeric >= 1_000_000_000_000) {
-		return { resetAt: new Date(numeric).toISOString() };
+		return numeric <= 8_640_000_000_000_000 ? { resetAt: new Date(numeric).toISOString() } : {};
 	}
 	if (numeric >= 1_000_000_000) {
 		return { resetAt: new Date(numeric * 1_000).toISOString() };
@@ -276,7 +276,7 @@ export function parseBraveRateLimits(headers: Headers): ProviderRateLimitInfo | 
 	}
 	const retryAfter = headers.get("retry-after");
 	let retryAfterMs: number | undefined;
-	if (retryAfter !== null) {
+	if (retryAfter !== null && retryAfter.length <= 4_096) {
 		const seconds = parseNonNegative(retryAfter);
 		if (seconds !== undefined) retryAfterMs = Math.round(seconds * 1_000);
 		else {
@@ -339,16 +339,26 @@ export function normalizeBraveResponse(
 	const root = objectValue(payload, "response");
 	const web = objectValue(root.web, "web");
 	if (!Array.isArray(web.results)) return malformed("web.results is not an array");
-	const results = web.results
-		.map((value) => resultFromPayload(value, normalized.query))
-		.filter((result) => resultAllowed(result, normalized))
-		.slice(0, normalized.maxResults);
+	const parsed: SearchResult[] = [];
+	let discarded = 0;
+	let firstMalformed: unknown;
+	for (const value of web.results) {
+		try {
+			parsed.push(resultFromPayload(value, normalized.query));
+		} catch (error) {
+			if (!isProviderError(error) || error.kind !== "malformed") throw error;
+			discarded += 1;
+			firstMalformed ??= error;
+		}
+	}
+	if (parsed.length === 0 && firstMalformed !== undefined) throw firstMalformed;
+	const results = parsed.filter((result) => resultAllowed(result, normalized)).slice(0, normalized.maxResults);
 	return {
 		query: normalized.query,
 		results,
 		provider: "brave",
 		appliedOptions: [],
-		warnings: [],
+		warnings: discarded > 0 ? [{ code: "partial-results", message: `Brave discarded ${discarded} malformed result entries` }] : [],
 		...(options.requestId === undefined ? {} : { requestId: options.requestId }),
 		...(options.rateLimits === undefined ? {} : { usage: { rateLimits: options.rateLimits } }),
 	};
@@ -455,7 +465,7 @@ export class BraveProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "malformed", message: "Brave returned a malformed or oversized JSON response", retryable: false, requestId, rateLimits, cause: error });
 		}
 		const normalizedResponse = normalizeBraveResponse(payload, normalized, { requestId, rateLimits });
-		return { ...normalizedResponse, appliedOptions: plan.appliedOptions, warnings: plan.warnings };
+		return { ...normalizedResponse, appliedOptions: plan.appliedOptions, warnings: [...plan.warnings, ...normalizedResponse.warnings] };
 	}
 }
 

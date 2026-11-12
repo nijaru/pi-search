@@ -30,6 +30,7 @@ describe("X API provider", () => {
 	});
 
 	it("maps bounded X handles and date ranges to recent search", () => {
+		expect(provider().capabilities.combinedHandleFilters).toBe(true);
 		const plan = buildXRequest({ query: "protocols", dateRange: { from: "2026-01-01", to: "2026-01-02" }, social: { includeHandles: ["@alice", "bob"], excludeHandles: ["carol"] } });
 		const url = new URL(plan.url);
 		expect(url.searchParams.get("query")).toBe("protocols (from:alice OR from:bob) -from:carol");

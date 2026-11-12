@@ -31,6 +31,26 @@ const payload = {
 };
 
 describe("XAIProvider", () => {
+	it("preserves root usage and ids on noncompleted, tool-failed, and unusable responses", async () => {
+		for (const tool of ["web_search", "x_search"] as const) {
+			for (const failure of [{ status: "incomplete" }, { status: "failed" }, { status: undefined }, { status: "completed", output: [{ type: `${tool}_call`, status: "failed" }] }, { status: "completed", citations: [], output: [] }]) {
+				const provider = createXAIProvider({ tool, fetchImpl: async () => response({ ...payload, ...failure, usage: { ...payload.usage, cost_in_usd_ticks: 50_000_000 } }) });
+				await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ provider: tool === "x_search" ? "xai-x" : "xai", requestId: "xai-1", usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20, billedUnits: 20, billedUnit: "tokens", costUsd: 0.005 }, fallbackSafe: false });
+			}
+		}
+	});
+
+	it("retains reported monetary cost without inventing token counts or zero costs", async () => {
+		for (const [usage, expected] of [[{ cost_in_usd_ticks: 50_000_000 }, { costUsd: 0.005 }], [{ cost_in_nano_usd: 5_000_000 }, { costUsd: 0.005 }], [undefined, undefined]] as const) {
+			const provider = createXAIProvider({ tool: "web_search", fetchImpl: async () => response({ status: "failed", usage }) });
+			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ usage: expected, fallbackSafe: false });
+		}
+	});
+
+	it("does not advertise combined handle filters", () => {
+		expect(createXAIProvider({ tool: "x_search" }).capabilities.combinedHandleFilters).not.toBe(true);
+	});
+
 	it("uses xAI web search and normalizes response citations", async () => {
 		let seenBody: Record<string, unknown> | undefined;
 		let seenHeaders: Headers | undefined;

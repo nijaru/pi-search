@@ -10,8 +10,8 @@ import type {
 	SearchResult,
 	SearchWarning,
 } from "./contracts";
-import { createProviderError } from "./errors";
-import { executeGroundedSearch } from "./grounding";
+import { createProviderError, isProviderError } from "./errors";
+import { executeGroundedSearch, tokenUsage } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
@@ -121,7 +121,30 @@ function appendCitation(results: SearchResult[], seen: Set<string>, value: unkno
 	return true;
 }
 
+function reportedUsage(root: Record<string, unknown>) {
+	const value = root.usage;
+	const usage = value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+	const tokens = tokenUsage(usage?.input_tokens, usage?.output_tokens, usage?.total_tokens);
+	const amount = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+	const ticks = amount(usage?.cost_in_usd_ticks);
+	const nanoUsd = amount(usage?.cost_in_nano_usd);
+	// xAI Responses defines 10 billion ticks (or 1 billion nano-USD) per USD:
+	// https://docs.x.ai/developers/rest-api-reference/inference/responses
+	const costUsd = ticks !== undefined ? ticks / 10_000_000_000 : nanoUsd === undefined ? undefined : nanoUsd / 1_000_000_000;
+	return tokens === undefined && costUsd === undefined ? undefined : { ...tokens, ...(costUsd === undefined ? {} : { costUsd }) };
+}
+
 function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XAITool): SearchResponse {
+	const root = objectValue(payload, "response", tool === "x_search" ? "xai-x" : "xai");
+	try {
+		return normalizeXAIEvidence(root, request, tool);
+	} catch (error) {
+		if (!isProviderError(error)) throw error;
+		throw createProviderError({ ...error, message: error.message, requestId: optionalString(root.id, 500), usage: reportedUsage(root), fallbackSafe: false, cause: error });
+	}
+}
+
+function normalizeXAIEvidence(payload: unknown, request: SearchRequest, tool: XAITool): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", "xai");
 	const status = optionalString(root.status);
@@ -186,18 +209,7 @@ function normalizeXAIResponse(payload: unknown, request: SearchRequest, tool: XA
 	const answer = normalized.answerMode !== "evidence" && answerText.length > 0 && answerCitations.length > 0
 		? { text: answerText, contentTrust: "untrusted" as const, provider, citations: answerCitations }
 		: undefined;
-	const usage = root.usage;
-	const usageRecord = usage !== null && typeof usage === "object" && !Array.isArray(usage) ? usage as Record<string, unknown> : undefined;
-	const inputTokens = typeof usageRecord?.input_tokens === "number" && Number.isFinite(usageRecord.input_tokens) ? usageRecord.input_tokens : undefined;
-	const outputTokens = typeof usageRecord?.output_tokens === "number" && Number.isFinite(usageRecord.output_tokens) ? usageRecord.output_tokens : undefined;
-	const totalTokens = typeof usageRecord?.total_tokens === "number" && Number.isFinite(usageRecord.total_tokens) ? usageRecord.total_tokens : undefined;
-	const usageDetails = inputTokens === undefined && outputTokens === undefined && totalTokens === undefined
-		? undefined
-		: {
-			...(inputTokens === undefined ? {} : { inputTokens }),
-			...(outputTokens === undefined ? {} : { outputTokens }),
-			...(totalTokens === undefined ? {} : { totalTokens, billedUnits: totalTokens, billedUnit: "tokens" }),
-		};
+	const usageDetails = reportedUsage(root);
 	return {
 		query: normalized.query,
 		results: normalizedResults,

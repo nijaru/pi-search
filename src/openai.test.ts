@@ -60,6 +60,45 @@ const payload = {
 };
 
 describe("OpenAIProvider", () => {
+	it("marks predispatch model unavailability safe without automatically using pro or ultra", async () => {
+		let calls = 0;
+		const provider = createOpenAIProvider({ provider: "openai", fetchImpl: async () => { calls += 1; return response(payload); } });
+		for (const id of ["gpt-5-pro", "gpt-5-ultra"]) {
+			const expensive = { ...model(), id };
+			const ctx: ProviderContext = { model: expensive, modelRegistry: { getModels: () => [expensive], getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test" }) } };
+			await expect(provider.search({ query: "q" }, new AbortController().signal, ctx)).rejects.toMatchObject({ kind: "unsupported", fallbackSafe: true });
+			expect(calls).toBe(0);
+		}
+		await expect(provider.search({ query: "q", executionModel: "missing" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "unsupported", fallbackSafe: true });
+		expect(calls).toBe(0);
+		for (const id of ["gpt-5-pro", "gpt-5-ultra"]) {
+			const expensive = { ...model(), id };
+			await provider.search({ query: "q", executionModel: id }, new AbortController().signal, { model: expensive, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test" }) } });
+		}
+		expect(calls).toBe(2);
+	});
+
+	it("preserves billed usage and response ids on JSON and SSE failures", async () => {
+		const failures = [
+			{ ...payload, status: "incomplete" },
+			{ ...payload, status: "failed" },
+			{ ...payload, output: [{ type: "web_search_call", status: "failed" }] },
+			{ ...payload, output: [] },
+		];
+		for (const failure of failures) {
+			expect(() => normalizeOpenAIResponse(failure, { query: "q" })).toThrow(expect.objectContaining({ requestId: "resp-123", usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, billedUnits: 30, billedUnit: "tokens" }, fallbackSafe: false }));
+			const provider = createOpenAIProvider({ provider: "openai", fetchImpl: async () => response(failure) });
+			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ requestId: "resp-123", usage: { totalTokens: 30 }, fallbackSafe: false });
+		}
+		const noStatus = createOpenAIProvider({ provider: "openai", fetchImpl: async () => response({ ...payload, status: undefined }) });
+		await expect(noStatus.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "malformed", retryable: false, requestId: "resp-123", usage: { totalTokens: 30 }, fallbackSafe: false });
+		expect(() => normalizeOpenAIResponse({ status: "failed" }, { query: "q" })).toThrow(expect.objectContaining({ usage: undefined, fallbackSafe: false }));
+		for (const type of ["response.failed", "response.incomplete", "error"]) {
+			const provider = createOpenAIProvider({ provider: "openai", fetchImpl: async () => response(`data: ${JSON.stringify({ type, response: { ...payload, status: "failed" } })}\n\n`) });
+			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ requestId: "resp-123", usage: { totalTokens: 30 }, fallbackSafe: false });
+		}
+	});
+
 	it("normalizes citations and sources as inspectable evidence", () => {
 		const result = normalizeOpenAIResponse(payload, request, "openai");
 		expect(result).toMatchObject({ query: request.query, provider: "openai", requestId: "resp-123", usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, billedUnits: 30, billedUnit: "tokens" } });

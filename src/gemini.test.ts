@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { ProviderContext } from "./contracts";
+import type { ProviderAuthResult, ProviderContext } from "./contracts";
 import { createGeminiProvider } from "./gemini";
 
 function response(body: unknown, status = 200, headers: Record<string, string> = { "content-type": "application/json" }): Response {
@@ -23,6 +23,54 @@ function crossProviderContext(apiKey: string | undefined = "gemini-test"): Provi
 }
 
 describe("GeminiProvider", () => {
+	it("preserves usage and root response ids on blocked and unusable responses", async () => {
+		const noUsage = createGeminiProvider({ fetchImpl: async () => response({ candidates: [] }) });
+		await expect(noUsage.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ usage: undefined, fallbackSafe: false });
+		for (const body of [{ promptFeedback: { blockReason: "SAFETY" } }, { candidates: [] }, { candidates: [null] }, { candidates: "invalid" }]) {
+			const provider = createGeminiProvider({ fetchImpl: async () => response({ ...body, responseId: "gemini-billed", usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 4, totalTokenCount: 12 } }) });
+			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ requestId: "gemini-billed", usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 }, fallbackSafe: false });
+		}
+	});
+
+	it("skips malformed candidates, parts, and chunks without shifting citation indices", async () => {
+		const provider = createGeminiProvider({ fetchImpl: async () => response({ candidates: [null, [], { groundingMetadata: "bad" }, { content: { parts: [null, [], { text: "Answer" }] }, groundingMetadata: { groundingChunks: [null, { web: [] }, { web: { uri: "https://example.com/page" } }], groundingSupports: [{ groundingChunkIndices: [2] }] } }] }) });
+		const result = await provider.search({ query: "q", mode: "keyword" }, new AbortController().signal, context());
+		expect(result.results).toMatchObject([{ url: "https://example.com/page" }]);
+		expect(result.answer).toMatchObject({ text: "Answer", citations: [{ url: "https://example.com/page" }] });
+		expect(result.warnings.map((warning) => warning.code)).toEqual(["unsupported-option", "partial-results"]);
+	});
+
+	it("accepts header-only auth and preserves resolved routing and null deletions", async () => {
+		const ctx = context();
+		const cases: Array<{ auth: Extract<ProviderAuthResult, { ok: true }>; key: string | null; authorization: string | null }> = [
+			{ auth: { ok: true, headers: { "X-Goog-Api-Key": "header-key", authorization: null } }, key: "header-key", authorization: null },
+			{ auth: { ok: true, apiKey: "must-not-return", headers: { "x-goog-api-key": null, Authorization: "Bearer workload" } }, key: null, authorization: "Bearer workload" },
+			{ auth: { ok: true, headers: { "x-goog-api-key": null, Authorization: "Bearer workload" } }, key: null, authorization: "Bearer workload" },
+		];
+		for (const { auth, key, authorization } of cases) {
+			let calls = 0;
+			const provider = createGeminiProvider({ fetchImpl: async (input, init) => {
+				calls += 1;
+				expect(String(input)).toBe("https://resolved.test/v1beta/models/gemini-flash-lite-latest:generateContent");
+				const headers = new Headers(init?.headers);
+				expect(headers.get("x-goog-api-key")).toBe(key);
+				expect(headers.get("authorization")).toBe(authorization);
+				return response({ candidates: [{ groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com" } }] } }] });
+			} });
+			await provider.search({ query: "q" }, new AbortController().signal, { model: { ...ctx.model!, headers: { "x-goog-api-key": "catalog", authorization: "Bearer catalog" } }, modelRegistry: { getApiKeyAndHeaders: async () => ({ ...auth, baseUrl: "https://resolved.test/v1beta", env: { IDENTITY: "workload" } }) } });
+			expect(calls).toBe(1);
+		}
+	});
+
+	it("rejects deleted or empty auth before any network request", async () => {
+		let calls = 0;
+		const provider = createGeminiProvider({ fetchImpl: async () => { calls += 1; return response({}); } });
+		for (const headers of [{ "X-Goog-Api-Key": null, Authorization: null }, { "X-Goog-Api-Key": "", Authorization: " " }]) {
+			await expect(provider.search({ query: "q" }, new AbortController().signal, { model: context().model, modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "must-not-return", headers }) } })).rejects.toMatchObject({ kind: "auth", fallbackSafe: true });
+		}
+		expect(calls).toBe(0);
+	});
+
 	it("uses native Google Search grounding and returns grounding chunks", async () => {
 		let seenBody: Record<string, unknown> | undefined;
 		let seenHeaders: Headers | undefined;

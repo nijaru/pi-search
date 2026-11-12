@@ -296,6 +296,23 @@ export function normalizeOpenAIResponse(
 	request: SearchRequest,
 	provider: ProviderId = "openai",
 ): SearchResponse {
+	const root = objectValue(payload, "response", provider);
+	try {
+		// Some Responses-compatible callers normalize evidence without a status.
+		// When reported, a nonterminal/failure status must never become success.
+		if (root.status !== undefined) responseStatusFailure(provider, root);
+		return normalizeOpenAIEvidence(root, request, provider);
+	} catch (error) {
+		if (!isProviderError(error)) throw error;
+		throw createProviderError({ ...error, message: error.message, ...responseMetadata(root), fallbackSafe: false, cause: error });
+	}
+}
+
+function responseMetadata(root: Record<string, unknown>) {
+	return { requestId: optionalString(root.id), usage: usageFromPayload(root.usage) };
+}
+
+function normalizeOpenAIEvidence(payload: unknown, request: SearchRequest, provider: ProviderId): SearchResponse {
 	const normalized = validateSearchRequest(request);
 	const root = objectValue(payload, "response", provider) as OpenAIResponsePayload & Record<string, unknown>;
 	const items = outputItems(root, provider);
@@ -424,6 +441,7 @@ async function selectSearchExecution(active: ProviderModel | undefined, registry
 		throw createProviderError({
 			provider,
 			kind: "unsupported",
+			fallbackSafe: true,
 			message: request.executionModel === undefined
 				? `No ${provider} Responses model is available for native search`
 				: `Model ${request.executionModel} is not an available ${provider} Responses search model`,
@@ -607,7 +625,6 @@ function parseResponseBody(body: string, provider: OpenAIProviderId, secrets: re
 			const parsed = JSON.parse(trimmed) as unknown;
 			if (Array.isArray(parsed)) return malformed(provider, "JSON response must be an object envelope");
 			const response = objectValue(parsed, "response", provider);
-			if (optionalString(response.status) === undefined) return malformed(provider, "JSON response has no terminal status");
 			return response;
 		} catch (error) {
 			if (isProviderError(error)) throw error;
@@ -622,14 +639,14 @@ function parseResponseBody(body: string, provider: OpenAIProviderId, secrets: re
 		const type = String(event.type ?? "");
 		if (type === "error") {
 			const diagnostic = sanitizeErrorDiagnostic(JSON.stringify(event), secrets);
-			throw createProviderError({ provider, kind: "http", message: `OpenAI web search returned an error event${diagnostic === undefined ? "" : `: ${diagnostic}`}`, retryable: false });
+			throw createProviderError({ provider, kind: "http", message: `OpenAI web search returned an error event${diagnostic === undefined ? "" : `: ${diagnostic}`}`, retryable: false, ...responseMetadata(typeof event.response === "object" && event.response !== null && !Array.isArray(event.response) ? event.response as Record<string, unknown> : event) });
 		}
 		if (type === "response.output_item.done" && event.item !== undefined) output.push(event.item);
 		if (["response.done", "response.completed", "response.incomplete", "response.failed"].includes(type)) {
 			terminal = true;
 			if (event.response !== undefined) completed = objectValue(event.response, "response event", provider);
 			if (type !== "response.done" && type !== "response.completed") {
-				throw createProviderError({ provider, kind: "http", message: `OpenAI web search stream was ${type.replace("response.", "")}`, retryable: type === "response.incomplete" });
+				throw createProviderError({ provider, kind: "http", message: `OpenAI web search stream was ${type.replace("response.", "")}`, retryable: type === "response.incomplete", ...responseMetadata(completed ?? event) });
 			}
 		}
 	}
@@ -643,17 +660,18 @@ function parseResponseBody(body: string, provider: OpenAIProviderId, secrets: re
 	return { output, status: "completed" };
 }
 
-function responseStatusFailure(provider: OpenAIProviderId, payload: Record<string, unknown>): void {
+function responseStatusFailure(provider: ProviderId, payload: Record<string, unknown>): void {
 	const status = optionalString(payload.status);
 	if (status === "completed") return;
 	if (status === undefined) {
-		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search response has no terminal status", retryable: true });
+		throw createProviderError({ provider, kind: "malformed", message: "OpenAI web search response has no terminal status", retryable: false, ...responseMetadata(payload) });
 	}
 	throw createProviderError({
 		provider,
 		kind: "http",
 		message: `OpenAI web search response was ${status}`,
 		retryable: status === "incomplete" || status === "in_progress",
+		...responseMetadata(payload),
 	});
 }
 
@@ -674,6 +692,8 @@ function addResponseMetadata(
 		requestId: error.requestId ?? requestId,
 		retryAfterMs: error.retryAfterMs ?? retryAfterMs,
 		rateLimits: error.rateLimits ?? rateLimits,
+		usage: error.usage,
+		fallbackSafe: false,
 		cause: error,
 	});
 }

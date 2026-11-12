@@ -105,7 +105,11 @@ function normalizeParallelResponse(payload: unknown, request: SearchRequest, met
 	const results: SearchResult[] = [];
 	let discarded = 0;
 	for (const value of root.results) {
-		const record = objectValue(value, "results[]", "parallel");
+		if (value === null || typeof value !== "object" || Array.isArray(value)) {
+			discarded += 1;
+			continue;
+		}
+		const record = value as Record<string, unknown>;
 		const parsed = httpSource(record.url, "parallel");
 		if (parsed === undefined) {
 			discarded += 1;

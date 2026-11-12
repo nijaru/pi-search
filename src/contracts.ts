@@ -161,6 +161,8 @@ export interface ProviderCapabilities {
 	readonly social?: boolean;
 	/** Supports provider-enforced social-handle filters. */
 	readonly handleFilter?: boolean;
+	/** Supports including and excluding social handles in the same request. */
+	readonly combinedHandleFilters?: boolean;
 	/** Supports provider-side image/video understanding during search. */
 	readonly mediaUnderstanding?: boolean;
 	/** Uses a model's native grounding/search tool. */
