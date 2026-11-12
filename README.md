@@ -271,7 +271,26 @@ Long posts retain their full supplied text. Articles preserve headings, links,
 lists, and embedded code. Threads use at most two public API calls and retain at
 most 100 connected author posts. Missing/deleted posts and upstream omissions
 mean **thread completeness is never guaranteed**, separately from output
-truncation. Use `offset`/`nextOffset` for long output.
+truncation. Use `offset`/`nextOffset` for long output. Offsets and character
+limits use UTF-16 units; use `maxLength` of at least 2 for emoji and other
+astral characters.
+
+**Comments are opt-in.** To read a bounded public reply sample:
+
+```json
+{"url":"https://x.com/jack/status/20","xMode":"public","xReplies":10}
+```
+
+`xReplies` accepts 1–20. It makes one
+[FxTwitter conversation request](https://api.fxtwitter.com/2/openapi.json),
+returns replies separately from the author thread, and preserves source and
+parent-post links. Replies are ranked by likes; only replies with a parent chain
+back to the selected post are included. This is a sample, **not all comments**:
+hidden/deleted replies, missing parents, ranking, and upstream omissions limit
+coverage. No cursor crawl, media download, or paid API is used. Public reply
+samples require `xMode: "public"` and a publishing post URL, not a bare
+`/i/article/ARTICLEID` link. They never use the browser, and persistent direct-only
+policy rejects the request rather than silently dropping the reply option.
 
 For authenticated access, use your **existing signed-in browser**:
 
@@ -286,8 +305,9 @@ Automatic X reads now prefer your existing login. No separate profile or browser
 installation is needed, and cookies are never copied. Each new connection may
 require browser approval; the connection is reused during the Pi session.
 An authenticated failure does **not** send the target to FxTwitter. Sign in to
-X normally if your login expires, or explicitly choose public mode. Only loaded
-author posts are returned, not an exhaustive reply crawl. If multiple profiles
+X normally if your login expires, or explicitly choose public mode. Browser and direct HTML reads return only the selected post or Article:
+adjacent posts by the same author do not prove a thread relationship. They do
+not fetch comments or crawl threads. If multiple profiles
 have X tabs open, close the other profiles' X tabs before reading.
 
 - `/search-x status` reports the mode and authorization state.

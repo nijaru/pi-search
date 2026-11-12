@@ -13,6 +13,7 @@ export interface XReadResult {
 	content: string;
 	warnings: readonly string[];
 	postCount: number;
+	replyCount?: number;
 }
 
 const ID = /^\d{2,20}$/;
@@ -129,9 +130,9 @@ function postUrl(post: ObjectValue): string {
 	return `https://x.com/${handle && HANDLE.test(handle) ? handle : "i/web"}/status/${post.id}`;
 }
 
-async function fetchPayload(postId: string, endpoint: "thread" | "status", read: Reader): Promise<ObjectValue> {
+async function fetchPayload(postId: string, endpoint: "thread" | "status" | "conversation", read: Reader): Promise<ObjectValue> {
 	let response: Awaited<ReturnType<Reader>>;
-	try { response = await read(`https://api.fxtwitter.com/2/${endpoint}/${postId}`); }
+	try { response = await read(`https://api.fxtwitter.com/2/${endpoint}/${postId}${endpoint === "conversation" ? "?ranking_mode=likes" : ""}`); }
 	catch (error) {
 		if (error instanceof SafeFetchError) throw new SafeFetchError({ kind: error.kind, status: error.status, message: "FxTwitter public X request failed", retryable: error.retryable });
 		throw extraction("FxTwitter public X request failed");
@@ -144,6 +145,7 @@ async function fetchPayload(postId: string, endpoint: "thread" | "status", read:
 	const payload = object(value);
 	if (payload?.code !== 200 || !usablePost(payload.status) || payload.status.id !== postId) throw extraction();
 	if (payload.thread !== undefined && payload.thread !== null && !Array.isArray(payload.thread)) throw extraction();
+	if (endpoint === "conversation" && payload.replies !== null && !Array.isArray(payload.replies)) throw extraction("FxTwitter did not provide reply data");
 	return payload;
 }
 
@@ -356,14 +358,16 @@ function orderedThread(posts: Map<string, ObjectValue>, focal: ObjectValue): Obj
 	return result;
 }
 
-export async function readFxTwitter(target: XUrl, read: Reader): Promise<XReadResult> {
+export async function readFxTwitter(target: XUrl, read: Reader, maxReplies?: number): Promise<XReadResult> {
+	if (maxReplies !== undefined && (!Number.isInteger(maxReplies) || maxReplies < 1 || maxReplies > 20)) throw new SafeFetchError({ kind: "invalidRequest", message: "xReplies must be between 1 and 20" });
 	if (!target.postId) throw extraction("Article link requires public /handle/article/POSTID or publishing post URL");
 	const parsed = parseXUrl(target.url);
 	if (!ID.test(target.postId) || !parsed || parsed.postId !== target.postId || parsed.kind !== target.kind || target.articleId !== undefined) throw extraction("Invalid public X post target");
-	const payload = await fetchPayload(target.postId, target.kind === "article" ? "status" : "thread", read);
+	const payload = await fetchPayload(target.postId, maxReplies === undefined ? target.kind === "article" ? "status" : "thread" : "conversation", read);
 	const focal = payload.status as ObjectValue;
 	if (target.kind === "article" && !object(focal.article)) throw extraction("FxTwitter did not provide the full Article body");
 	const warnings = new Set<string>(focal.article ? [] : ["Thread completeness is unknown; FxTwitter may omit posts."]);
+	if (maxReplies === undefined) warnings.add("Other users' replies are not included; use xMode public with xReplies for a bounded comment sample.");
 	const posts = new Map<string, ObjectValue>([[target.postId, focal]]);
 	const merge = (response: ObjectValue): void => {
 		for (const entry of (response.thread as unknown[] | null | undefined) ?? []) {
@@ -376,7 +380,7 @@ export async function readFxTwitter(target: XUrl, read: Reader): Promise<XReadRe
 	};
 	if (!focal.article && target.kind === "post") merge(payload);
 	let ordered = orderedThread(posts, focal);
-	if (!focal.article && ordered.length > 1 && ordered.length < MAX_POSTS) {
+	if (maxReplies === undefined && !focal.article && ordered.length > 1 && ordered.length < MAX_POSTS) {
 		const tail = ordered[ordered.length - 1];
 		if (tail.id !== target.postId) {
 			try { merge(await fetchPayload(String(tail.id), "thread", read)); }
@@ -390,7 +394,40 @@ export async function readFxTwitter(target: XUrl, read: Reader): Promise<XReadRe
 	if (ordered.length === MAX_POSTS) warnings.add("Partial thread: the 100-post limit was reached.");
 	if (ordered.some((post) => parentId(post) && !posts.has(parentId(post)!))) warnings.add("Partial thread: a parent post is missing.");
 	if (ordered.length < MAX_POSTS && [...posts.values()].some((post) => !ordered.includes(post))) warnings.add("Partial thread: disconnected posts were omitted because their parents are missing.");
-	const content = ordered.map((post) => renderPost(post, warnings)).join("\n\n---\n\n");
+	let content = ordered.map((post) => renderPost(post, warnings)).join("\n\n---\n\n");
+	let replyCount: number | undefined;
+	if (maxReplies !== undefined) {
+		warnings.add("Reply sample is ranked by likes and is not exhaustive; only one upstream page is read, and replies may be hidden, deleted, or omitted.");
+		const candidates = new Map<string, ObjectValue>();
+		const threadIds = new Set(ordered.map((post) => String(post.id)));
+		for (const entry of (payload.replies as unknown[] | null) ?? []) {
+			if (!usablePost(entry)) { warnings.add("Partial reply sample: one or more replies are unavailable."); continue; }
+			if (!threadIds.has(String(entry.id)) && !candidates.has(String(entry.id))) candidates.set(String(entry.id), entry);
+		}
+		// Accept only replies whose parent chain reaches the requested focal post,
+		// not replies to unrelated ancestors returned by the conversation endpoint.
+		const connected = (post: ObjectValue): boolean => {
+			const seen = new Set<string>([String(post.id)]);
+			for (let parent = parentId(post); parent; parent = parentId(candidates.get(parent)!)) {
+				if (parent === target.postId) return true;
+				if (seen.has(parent) || !candidates.has(parent)) return false;
+				seen.add(parent);
+			}
+			return false;
+		};
+		const replies: string[] = [];
+		for (const entry of candidates.values()) {
+			if (!connected(entry)) { warnings.add("Partial reply sample: replies with unverified parent relationships were omitted."); continue; }
+			if (replies.length >= maxReplies) break;
+			try { replies.push(`${link("Reply to", `https://x.com/i/web/status/${parentId(entry)}`)}\n\n${renderPost(entry, warnings)}`); }
+			catch (error) {
+				if (!(error instanceof SafeFetchError) || error.kind !== "extraction") throw error;
+				warnings.add("Partial reply sample: an unrenderable reply was omitted.");
+			}
+		}
+		replyCount = replies.length;
+		content += `\n\n# Replies (sample; ranked by likes)\n\n${replies.length ? replies.join("\n\n---\n\n") : "No readable replies were supplied for this sample; this does not establish that the post has no comments."}`;
+	}
 	const title = string(object(focal.article)?.title) ?? `X post by @${string(object(focal.author)?.screen_name) ?? "unknown"}`;
-	return { url: parsed.url, title: clean(title), content, warnings: [...warnings], postCount: ordered.length };
+	return { url: parsed.url, title: clean(title), content, warnings: [...warnings], postCount: ordered.length, ...(replyCount === undefined ? {} : { replyCount }) };
 }

@@ -6,12 +6,12 @@ const target = { url: "https://x.com/alice/status/123", postId: "123" };
 const post = (author: string, id: string, text: string) => `<article data-testid="tweet"><a href="/${author}/status/${id}"><time datetime="2026-01-01">date</time></a><div data-testid="tweetText">${text}</div></article>`;
 
 describe("fixed X DOM extraction", () => {
-	it("selects the focal post rather than its ancestors or replies and bounds author continuation", () => {
+	it("selects only the focal post; adjacent same-author posts do not prove a thread relationship", () => {
 		const { document } = parseHTML(`<html><body>${post("bob", "111", "ancestor")}${post("alice", "123", "selected")}${post("alice", "124", "continuation")}${post("bob", "125", "reply")}${post("alice", "126", "later reply")}</body></html>`);
 		const result = extractXDom(document, target)!;
-		expect(result.postCount).toBe(2);
+		expect(result.postCount).toBe(1);
 		expect(result.html).toContain("selected");
-		expect(result.html).toContain("continuation");
+		expect(result.html).not.toContain("continuation");
 		expect(result.html).not.toContain("ancestor");
 		expect(result.html).not.toContain("later reply");
 	});
@@ -19,7 +19,8 @@ describe("fixed X DOM extraction", () => {
 		const photo = '<article data-testid="tweet"><a href="/alice/status/123"><time>date</time></a><div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/example.jpg" alt="Evidence photo"></div></article>';
 		const { document } = parseHTML(`<html><body>${photo}${post("alice", "124", "follow-up")}</body></html>`);
 		const result = extractXDom(document, target)!;
-		expect(result.postCount).toBe(2);
+		expect(result.postCount).toBe(1);
+		expect(result.html).not.toContain("follow-up");
 		expect(result.html).toContain("/status/123");
 		expect(result.html).toContain("Evidence photo");
 		const unsupported = photo.replace(/<div data-testid="tweetPhoto">[\s\S]*<\/div>/, "");

@@ -57,10 +57,12 @@ function canceled(): SafeFetchError {
 
 function boundedCommand(command: string, args: readonly string[], maxOutputBytes: number): { command: string; args: readonly string[]; options: Record<string, unknown> } {
 	if (process.platform === "win32") return { command, args, options: { stdio: ["ignore", "ignore", "pipe"] } };
-	const blocks = Math.max(1, Math.ceil(maxOutputBytes / 512));
+	// POSIX sh counts 512-byte blocks; bash-backed /bin/sh counts 1024.
+	const posixBlocks = Math.max(1, Math.ceil(maxOutputBytes / 512));
+	const bashBlocks = Math.max(1, Math.ceil(maxOutputBytes / 1024));
 	return {
 		command: "/bin/sh",
-		args: ["-c", `ulimit -f ${blocks}; exec "$@"`, "pi-search-yt-dlp", command, ...args],
+		args: ["-c", `if [ -n "\${BASH_VERSION-}" ]; then ulimit -f ${bashBlocks}; else ulimit -f ${posixBlocks}; fi || exit; exec "$@"`, "pi-search-yt-dlp", command, ...args],
 		options: { stdio: ["ignore", "ignore", "pipe"], detached: true },
 	};
 }

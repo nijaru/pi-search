@@ -85,16 +85,34 @@ describe("X fetch routing and bounds", () => {
 		await expect(fetchContent({ url }, controller.signal, options)).rejects.toMatchObject({ kind: "canceled" });
 	});
 
-	it("keeps every direct-thread post in text output and rejects collapsed previews", async () => {
+	it("returns only the verified direct focal post and rejects collapsed previews", async () => {
 		let html = '<html><body><article data-testid="tweet"><a href="/alice/status/123"><time>date</time></a><div data-testid="tweetText">First evidence</div></article><article data-testid="tweet"><a href="/alice/status/124"><time>date</time></a><div data-testid="tweetText">Second evidence</div></article></body></html>';
 		const source: DirectTransport = async () => ({ status: 200, statusText: "OK", headers: new Headers({ "content-type": "text/html" }), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(html); } } });
 		const result = await fetchContent({ url, xMode: "direct", format: "text" }, undefined, { lookup, transport: source });
 		expect(result.content).toContain("First evidence");
-		expect(result.content).toContain("Second evidence");
+		expect(result.content).not.toContain("Second evidence");
 		html = html.replace("First evidence", 'Preview<span data-testid="tweet-text-show-more-link">Show more</span>');
 		await expect(fetchContent({ url, xMode: "direct" }, undefined, { lookup, transport: source })).rejects.toMatchObject({ kind: "extraction" });
 	});
 
+	it("fetches opt-in public reply samples and never bypasses direct-only policy", async () => {
+		const calls: string[] = [];
+		const replies = [{ ...post, id: "200", text: "Public comment", author: { id: "43", screen_name: "bob" }, replying_to: { status: "123" } }];
+		const options = { lookup, transport: transport({ code: 200, status: post, replies }, calls), xBrowser: reader(async () => { throw new Error("must not use browser"); }) };
+		const result = await fetchContent({ url, xMode: "public", xReplies: 2 }, undefined, options);
+		expect(calls).toEqual(["https://api.fxtwitter.com/2/conversation/123?ranking_mode=likes"]);
+		expect(result.content).toContain("Public comment");
+		expect(result.warnings.some((warning) => warning.message.includes("not exhaustive"))).toBe(true);
+		calls.length = 0;
+		await expect(fetchContent({ url, xMode: "public", xReplies: 2 }, undefined, { ...options, xBrowser: reader(async () => undefined, "direct") })).rejects.toMatchObject({ kind: "invalidRequest" });
+		for (const request of [
+			{ url, xReplies: 2 }, { url, xMode: "browser" as const, xReplies: 2 },
+			{ url: "https://example.com", xMode: "public" as const, xReplies: 2 },
+			{ url: "https://x.com/i/article/456", xMode: "public" as const, xReplies: 2 },
+			{ url, xMode: "public" as const, xReplies: 21 },
+		]) await expect(fetchContent(request, undefined, options)).rejects.toMatchObject({ kind: "invalidRequest" });
+		expect(calls).toEqual([]);
+	});
 	it("extracts full server-rendered Articles even inside hidden streaming containers", async () => {
 		const articleUrl = "https://x.com/i/article/456";
 		const documents = [

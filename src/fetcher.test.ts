@@ -227,6 +227,21 @@ describe("direct content fetch", () => {
 		expect(`${first.content}${second.content}`).toBe("A🙂");
 	});
 
+	it("rejects a page too small for an astral character instead of returning a non-advancing cursor", async () => {
+		await expect(fetchContent({ ...baseRequest, maxLength: 1 }, undefined, {
+			lookup: publicLookup, transport: transportFor("🙂XYZ", "text/plain"),
+		})).rejects.toMatchObject({ kind: "invalidRequest", message: expect.stringContaining("maxLength of at least 2") });
+	});
+	it("stops at a surrogate pair crossing the maximum paging boundary", async () => {
+		const content = "x".repeat(MAX_FETCH_OFFSET - 1) + "🙂tail";
+		const result = await fetchContent({ ...baseRequest, offset: MAX_FETCH_OFFSET - 1, maxLength: 2 }, undefined, {
+			lookup: publicLookup, transport: transportFor(content, "text/plain"),
+		});
+		expect(result.content).toBe("");
+		expect(result.truncated).toBe(true);
+		expect(result.nextOffset).toBeUndefined();
+		expect(result.warnings.some((warning) => warning.message.includes("maximum paging offset"))).toBe(true);
+	});
 	it("advances a caller offset that lands inside a surrogate pair", async () => {
 		const result = await fetchContent(
 			{ ...baseRequest, format: "text", offset: 2, maxLength: 2 },

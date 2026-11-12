@@ -45,12 +45,13 @@ function extractContent(sourceText, mimeType, request) {
 		const selected = extractXDom(document, { url: request.url, postId: sourceUrl.pathname.match(/\/status\/(\d+)/)?.[1] });
 		if (!selected) throw extractionError("X returned no readable post or Article body; login pages and previews are not evidence");
 		if (selected.collapsedPostIds?.length) throw extractionError("X returned collapsed post previews, not full text");
-		if (request.format === "html") return { content: selected.html, outputFormat: "html", extraction: "x-article", title: selected.title };
+		const extraction = /\/article\//.test(sourceUrl.pathname) ? "x-article" : "x-post";
+		if (request.format === "html") return { content: selected.html, outputFormat: "html", extraction, title: selected.title };
 		if (request.format === "text") {
 			const { document: selectedDocument } = parseHTML(`<html><body>${selected.html}</body></html>`);
-			return { content: selectedDocument.documentElement.textContent.trim(), outputFormat: "text", extraction: "x-article", title: selected.title };
+			return { content: selectedDocument.documentElement.textContent.trim(), outputFormat: "text", extraction, title: selected.title };
 		}
-		return { content: turndown.turndown(selected.html), outputFormat: "markdown", extraction: "x-article", title: selected.title };
+		return { content: turndown.turndown(selected.html), outputFormat: "markdown", extraction, title: selected.title };
 	}
 
 	let article;

@@ -189,6 +189,36 @@ describe("readFxTwitter", () => {
 		expect(result.warnings.join(" ")).toContain("100-post limit");
 		expect(fixture.calls).toHaveLength(1);
 	});
+	it("returns an opt-in bounded reply sample separately from the author thread in one call", async () => {
+		const reply = (id: string, parent = "100", text = `Comment ${id}`) => post(id, parent, { text, author: { id: "43", screen_name: "reader" } });
+		const fixture = reader({ ...payload(post(), [post(), post("101", "100")]), replies: [
+			reply("200"), reply("201", "200"), reply("200"), reply("202", "999", "Unrelated"),
+			reply("203", "100", "Extra comment"), { type: "tombstone", id: "204" },
+		], cursor: { bottom: "opaque" } });
+		const result = await readFxTwitter(target(), fixture.read, 2);
+		expect(fixture.calls).toEqual(["https://api.fxtwitter.com/2/conversation/100?ranking_mode=likes"]);
+		expect(result.postCount).toBe(2);
+		expect(result.replyCount).toBe(2);
+		expect(result.content).toContain("# Replies (sample; ranked by likes)");
+		expect(result.content).toContain("Comment 200");
+		expect(result.content).toContain("Comment 201");
+		expect(result.content).toContain("[Reply to](<https://x.com/i/web/status/200>)");
+		expect(result.content.match(/Comment 200/g)).toHaveLength(1);
+		expect(result.content).not.toContain("Unrelated");
+		expect(result.content).not.toContain("Extra comment");
+		expect(result.warnings.join(" ")).toContain("not exhaustive");
+	});
+	it("does not misreport missing reply data as zero comments and validates reply limits before dispatch", async () => {
+		await expect(readFxTwitter(target(), reader(payload()).read, 2)).rejects.toMatchObject({ kind: "extraction" });
+		for (const limit of [0, -1, 21, 1.5, NaN]) {
+			const fixture = reader();
+			await expect(readFxTwitter(target(), fixture.read, limit)).rejects.toMatchObject({ kind: "invalidRequest" });
+			expect(fixture.calls).toEqual([]);
+		}
+		const result = await readFxTwitter(target(), reader({ ...payload(), replies: null }).read, 2);
+		expect(result.replyCount).toBe(0);
+		expect(result.warnings.join(" ")).toContain("not exhaustive");
+	});
 	it("bounds tree depth, Article block counts and inline range counts", async () => {
 		let nested: unknown = "leaf";
 		for (let index = 0; index < 40; index++) nested = { nested };

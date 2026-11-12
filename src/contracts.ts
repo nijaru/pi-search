@@ -499,10 +499,12 @@ export interface FetchRequest {
 	readonly allowRawHtmlFallback?: boolean;
 	/** X retrieval: authorized browser first, otherwise free FxTwitter. Direct bypasses both. */
 	readonly xMode?: XReadMode;
+	/** Opt-in sample of 1–20 replies ranked by likes. Requires xMode public and a post ID. */
+	readonly xReplies?: number;
 }
 
 export type FetchOutputFormat = "markdown" | "text" | "html";
-export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript" | "fxtwitter" | "x-browser" | "x-article";
+export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" | "document" | "pdf" | "youtube-transcript" | "fxtwitter" | "x-browser" | "x-post" | "x-article";
 
 export interface FetchWarning {
 	readonly code: "truncated" | "raw-fallback" | "partial" | "authenticated";

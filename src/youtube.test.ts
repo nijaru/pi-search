@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { extractYouTubeTranscript, parseVtt, parseYouTubeUrl } from "./youtube";
 
 function captionSpawn(caption: string, seen: { args?: readonly string[] }) {
@@ -38,6 +39,22 @@ describe("local YouTube captions", () => {
 		expect(parseVtt("WEBVTT\n\n00:00.000 --> 00:01.000\n2025\nNOTE\nThis --> stays\n")).toBe("2025\nNOTE\nThis --> stays");
 	});
 
+	it.skipIf(process.platform === "win32")("enforces the real shell's file-size limit in bytes, including bash-backed /bin/sh", async () => {
+		let written = 0;
+		await expect(extractYouTubeTranscript("https://youtu.be/abc12345678", {
+			signal: new AbortController().signal, maxOutputBytes: 4_096,
+			spawnImpl: (command, args, options) => {
+				const output = String(args[args.indexOf("--output") + 1]).replace("%(ext)s", "en.vtt");
+				// Reuse the production limit/exec wrapper, replacing only yt-dlp with
+				// a local writer. No network or caption credentials are involved.
+				const child = spawn(command, [...args.slice(0, 3), "/bin/sh", "-c", 'ulimit -c 0; head -c 6000 /dev/zero > "$1"', "writer", output], options);
+				child.once("close", () => { written = statSync(output).size; });
+				return child;
+			},
+		})).rejects.toBeDefined();
+		expect(written).toBeGreaterThan(0);
+		expect(written).toBeLessThanOrEqual(4_096);
+	});
 	it("extracts captions with yt-dlp flags and cleans temporary files", async () => {
 		const seen: { args?: readonly string[] } = {};
 		const result = await extractYouTubeTranscript("https://www.youtube.com/watch?v=abc12345678", {

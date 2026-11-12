@@ -29,10 +29,6 @@ export function extractXDom(document, target, maxCharacters = 1_000_000) {
 		return { html, title: ((document.querySelector('[data-testid="twitter-article-title"]') || document.querySelector('h1'))?.textContent?.trim() || document.title || 'X Article').slice(0, 512), postCount: 1 };
 	}
 	if (!target.postId) return null;
-	const posts = [];
-	const collapsedPostIds = [];
-	let author;
-	let found = false;
 	for (const element of document.querySelectorAll('article[data-testid="tweet"]')) {
 		const stamp = element.querySelector('time');
 		const href = stamp?.closest('a')?.getAttribute('href');
@@ -41,19 +37,15 @@ export function extractXDom(document, target, maxCharacters = 1_000_000) {
 		if (!['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(permalink.hostname) || permalink.username || permalink.password || permalink.port) continue;
 		const match = permalink.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d{2,20})(?:\/|$)/);
 		if (!match) continue;
-		if (!found) {
-			if (match[2] !== target.postId) continue;
-			found = true;
-			author = match[1].toLowerCase();
-		} else if (match[1].toLowerCase() !== author) break;
+		if (match[2] !== target.postId) continue;
+		const author = match[1].toLowerCase();
+		// Adjacency and author identity do not establish reply relationships. Only
+		// the structured public API can safely unroll a thread; DOM reads stay focal.
 		const text = element.querySelector('[data-testid="tweetText"]');
 		const photos = element.querySelectorAll('[data-testid="tweetPhoto"] img');
 		const video = element.querySelector('video, [data-testid="videoPlayer"]');
-		if (!text?.textContent?.trim() && !photos.length && !video) {
-			if (!posts.length) return null;
-			break;
-		}
-		if (element.querySelector('[data-testid="tweet-text-show-more-link"]')) collapsedPostIds.push(match[2]);
+		if (!text?.textContent?.trim() && !photos.length && !video) return null;
+		const collapsedPostIds = element.querySelector('[data-testid="tweet-text-show-more-link"]') ? [match[2]] : [];
 		const url = `https://x.com/${match[1]}/status/${match[2]}`;
 		const part = document.createElement('section');
 		const source = document.createElement('a');
@@ -67,11 +59,9 @@ export function extractXDom(document, target, maxCharacters = 1_000_000) {
 			notice.textContent = 'Video attached; media was not downloaded or transcribed.';
 			part.appendChild(notice);
 		}
-		posts.push(clean(part));
-		if (posts.length >= 100) break;
+		const html = clean(part);
+		if (html.length > maxCharacters) throw new Error('X post exceeds the extraction limit');
+		return { html, title: `@${author} on X`, postCount: 1, ...(collapsedPostIds.length ? { collapsedPostIds } : {}) };
 	}
-	if (!posts.length) return null;
-	const html = posts.join('\n<hr>\n');
-	if (html.length > maxCharacters) throw new Error('X thread exceeds the extraction limit');
-	return { html, title: `@${author} on X`, postCount: posts.length, ...(collapsedPostIds.length ? { collapsedPostIds } : {}) };
+	return null;
 }

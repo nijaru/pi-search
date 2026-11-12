@@ -26,10 +26,12 @@ export const DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 export const MAX_FETCH_RESPONSE_BYTES = 20 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 500;
 const MAX_OUTPUT_BYTES = 32_000;
+const FOCAL_X_WARNING: FetchWarning = { code: "partial", message: "Only the selected post is included; DOM adjacency cannot verify a thread. Other users' replies are not included" };
 
 type NormalizedFetchRequest = Required<Pick<FetchRequest, "url" | "maxLength" | "offset" | "format" | "readable" | "allowRawHtmlFallback" | "captionLanguage">> & {
 	readonly maxPages: number | undefined;
 	readonly xMode: XReadMode | undefined;
+	readonly xReplies: number | undefined;
 };
 
 interface ExtractedContent {
@@ -87,6 +89,7 @@ export async function fetchContent(
 		const xDefaultMode = xTarget ? xBrowser?.mode ?? "auto" : "direct";
 		// A persistent user-selected direct-only policy cannot be overridden by a tool call.
 		const xMode = xDefaultMode === "direct" ? "direct" : normalized.xMode ?? xDefaultMode;
+		if (normalized.xReplies !== undefined && xMode !== "public") throw new SafeFetchError({ kind: "invalidRequest", message: "X replies require public mode; your direct-only policy must be changed with /search-x public first" });
 		if (xTarget && xMode !== "direct") {
 			return await fetchXContent(xTarget, xMode, normalized, controller.signal, options, maxResponseBytes, xBrowser);
 		}
@@ -179,6 +182,7 @@ function finishContent(
 		totalCharacters: extracted.content.length,
 		warnings: [
 			...notices,
+			...(extracted.extraction === "x-post" ? [FOCAL_X_WARNING] : []),
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
 			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
 		],
@@ -200,7 +204,7 @@ async function fetchXContent(
 				url: target.url, status: 200, redirectCount: 0, bytesRead: browser.bytesRead, contentType: "text/html",
 			}, options.now, [
 				{ code: "authenticated", message: "Read in your authorized browser using its existing session; content may not be public and was not sent to FxTwitter" },
-				...(target.kind === "post" ? [{ code: "partial" as const, message: "Only loaded author posts are included; thread completeness is unknown" }] : []),
+				...(target.kind === "post" ? [FOCAL_X_WARNING] : []),
 			]);
 		}
 		if (mode === "browser") throw new SafeFetchError({ kind: "extraction", message: "X browser is not authorized. Run /search-x connect once, or use public mode for free FxTwitter reads" });
@@ -238,7 +242,7 @@ async function fetchXContent(
 		if (extracted.extraction !== "x-article") throw new SafeFetchError({ kind: "extraction", message: "X Article body is unavailable. Provide its /handle/article/POSTID or publishing post URL, or authorize the browser with /search-x connect" });
 		return finishContent(extracted, request, { url: page.url, contentType: "text/html", status: page.status, bytesRead, redirectCount: redirects }, options.now);
 	}
-	const result = await readFxTwitter(target, read);
+	const result = await readFxTwitter(target, read, request.xReplies);
 	return finishContent({ content: result.content, title: result.title, outputFormat: "markdown", extraction: "fxtwitter" }, request, {
 		url: result.url, contentType: "application/json", status: 200, redirectCount: redirects, bytesRead,
 	}, options.now, result.warnings.map((message) => ({ code: "partial", message })));
@@ -267,6 +271,11 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 	if (request.xMode !== undefined && !["auto", "public", "browser", "direct"].includes(request.xMode)) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "xMode is not supported" });
 	}
+	const xReplies = request.xReplies;
+	if (xReplies !== undefined) {
+		if (!Number.isInteger(xReplies) || xReplies < 1 || xReplies > 20) throw new SafeFetchError({ kind: "invalidRequest", message: "xReplies must be between 1 and 20" });
+		if (request.xMode !== "public" || !parseXUrl(url)?.postId) throw new SafeFetchError({ kind: "invalidRequest", message: "xReplies requires xMode public and an X publishing post URL, not a bare Article ID" });
+	}
 	const maxPages = request.maxPages;
 	if (maxPages !== undefined && (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 500)) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "maxPages must be between 1 and 500" });
@@ -285,6 +294,7 @@ export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequ
 		maxPages,
 		captionLanguage,
 		xMode: request.xMode,
+		xReplies,
 	};
 }
 
@@ -392,8 +402,8 @@ async function extractWithDeadline(
 		const onAbort = (): void => fail(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" }));
 		signal.addEventListener("abort", onAbort, { once: true });
 		worker.once("error", (error) => fail(new SafeFetchError({ kind: "extraction", message: "Local content extraction failed", cause: error })));
-		worker.once("exit", (code) => {
-			if (!finished && code !== 0) fail(new SafeFetchError({ kind: "extraction", message: "Local content extraction stopped" }));
+		worker.once("exit", () => {
+			if (!finished) fail(new SafeFetchError({ kind: "extraction", message: "Local content extraction stopped without a result" }));
 		});
 		worker.once("message", (message: { ok: boolean; result?: ExtractedContent; error?: { kind: string; message: string } }) => {
 			if (!message.ok || message.result === undefined) {
@@ -459,8 +469,8 @@ function isLowSurrogate(code: number): boolean {
 }
 
 /** Keep a slice boundary out of the middle of a UTF-16 surrogate pair. */
-function safeSliceEnd(value: string, end: number): number {
-	return end > 0 && end < value.length && isHighSurrogate(value.charCodeAt(end - 1)) ? end - 1 : end;
+export function safeSliceEnd(value: string, end: number): number {
+	return end > 0 && end < value.length && isHighSurrogate(value.charCodeAt(end - 1)) && isLowSurrogate(value.charCodeAt(end)) ? end - 1 : end;
 }
 
 function sliceOutput(content: string, requestedOffset: number, maxLength: number): { content: string; offset: number; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
@@ -470,12 +480,16 @@ function sliceOutput(content: string, requestedOffset: number, maxLength: number
 		? requestedOffset + 1
 		: requestedOffset;
 	if (offset >= content.length) return { content: "", offset, truncated: false };
-	const requestedEnd = Math.min(content.length, offset + maxLength, MAX_FETCH_OFFSET);
-	const candidate = content.slice(offset, safeSliceEnd(content, requestedEnd));
+	const pagingEnd = safeSliceEnd(content, Math.min(content.length, MAX_FETCH_OFFSET));
+	if (offset >= pagingEnd) return { content: "", offset, truncated: true, pagingLimitReached: true };
+	const requestedEnd = Math.min(content.length, offset + maxLength, pagingEnd);
+	const end = safeSliceEnd(content, requestedEnd);
+	if (end === offset) throw new SafeFetchError({ kind: "invalidRequest", message: "This character requires a maxLength of at least 2 UTF-16 units" });
+	const candidate = content.slice(offset, end);
 	const bounded = boundUtf8(candidate, MAX_OUTPUT_BYTES);
 	const consumed = offset + bounded.length;
 	const truncated = consumed < content.length;
-	const pagingLimitReached = truncated && consumed >= MAX_FETCH_OFFSET;
+	const pagingLimitReached = truncated && consumed >= pagingEnd;
 	return {
 		content: bounded,
 		offset,
