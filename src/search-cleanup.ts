@@ -84,6 +84,14 @@ function optionalTimestamp(value: unknown): string | undefined {
 	return candidate !== undefined && Number.isFinite(Date.parse(candidate)) ? candidate : undefined;
 }
 
+/** Inclusive UTC day boundaries for date-only bounds; exact instants otherwise. */
+function dateBoundaryMs(value: string | undefined, endOfDay: boolean): number | undefined {
+	if (value === undefined) return undefined;
+	const milliseconds = Date.parse(value);
+	if (!Number.isFinite(milliseconds)) return undefined;
+	return endOfDay && !value.includes("T") ? milliseconds + 86_400_000 - 1 : milliseconds;
+}
+
 function optionalScore(value: unknown): number | undefined {
 	if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
 	return Math.max(0, Math.min(1, value));
@@ -202,10 +210,56 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 			message: `Search removed ${domainDiscarded} result entr${domainDiscarded === 1 ? "y" : "ies"} outside the requested domain constraints`,
 		});
 	}
-	const normalizedResults = [...results.values()].slice(0, request.maxResults ?? 10);
+	// Date filters are centralized because some providers widen date operators
+	// to protect inclusive boundary days. Enforce the exact inclusive range on
+	// results whose publication date is known, and keep undated evidence with an
+	// explicit warning rather than silently claiming the constraint held. Answer
+	// citations are normalized from the filtered list below, so removing a
+	// source cannot leave a citation pointing at a discarded URL.
+	const fromMs = dateBoundaryMs(request.dateRange?.from, false);
+	const toMs = dateBoundaryMs(request.dateRange?.to, true);
+	let datedResults = [...results.values()];
+	let dateDiscarded = 0;
+	let dateUnverified = 0;
+	if (fromMs !== undefined || toMs !== undefined) {
+		const kept: SearchResult[] = [];
+		for (const result of datedResults) {
+			const publishedMs = result.publishedAt === undefined ? Number.NaN : Date.parse(result.publishedAt);
+			if (!Number.isFinite(publishedMs)) {
+				dateUnverified += 1;
+				kept.push(result);
+				continue;
+			}
+			if ((fromMs !== undefined && publishedMs < fromMs) || (toMs !== undefined && publishedMs > toMs)) {
+				dateDiscarded += 1;
+				continue;
+			}
+			kept.push(result);
+		}
+		datedResults = kept;
+		// A provider that already enforced and reported the same range (DeepSeek)
+		// must not produce a second indistinguishable warning at this boundary.
+		const dateWarningReported = warnings.some((item) => /publication date|requested date range/i.test(item.message));
+		if (dateDiscarded > 0) {
+			warnings.push({
+				code: "partial-results",
+				message: `Search removed ${dateDiscarded} result entr${dateDiscarded === 1 ? "y" : "ies"} outside the requested date range`,
+			});
+		}
+		if (dateUnverified > 0 && !dateWarningReported) {
+			warnings.push({
+				code: "partial-results",
+				message: `Search could not verify the publication date of ${dateUnverified} result entr${dateUnverified === 1 ? "y" : "ies"} against the requested date range`,
+			});
+		}
+	}
+	const normalizedResults = datedResults.slice(0, request.maxResults ?? 10);
 	const appliedOptions = [...response.appliedOptions];
 	if ((request.domains?.include?.length ?? 0) > 0 || (request.domains?.exclude?.length ?? 0) > 0) {
 		if (!appliedOptions.includes("domains")) appliedOptions.push("domains");
+	}
+	if ((fromMs !== undefined || toMs !== undefined) && !appliedOptions.includes("dateRange")) {
+		appliedOptions.push("dateRange");
 	}
 	const answer = normalizeAnswer(response.answer, provider, normalizedResults, request, () => {
 		warnings.push({

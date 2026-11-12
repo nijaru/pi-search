@@ -430,6 +430,60 @@ describe("web_research", () => {
 		expect(rendered).toContain("content truncated; continue at offset 5");
 	});
 
+	it("classifies the research deadline as a timeout rather than a cancellation", async () => {
+		let abortReason: unknown;
+		const hanging: Provider = {
+			...provider(),
+			search: async (_request, signal) => await new Promise<SearchResponse>((_resolve, reject) => {
+				signal.addEventListener("abort", () => {
+					abortReason = signal.reason;
+					reject(new Error("aborted"));
+				}, { once: true });
+			}),
+		};
+		const result = await executeResearch(
+			{ question: "main", budget: { ...budget, timeoutMs: 100 } },
+			() => hanging,
+			context(),
+			{ searchTimeoutMs: 5_000 },
+		);
+		expect(result.stopReason).toBe("deadline");
+		expect(abortReason).toBeInstanceOf(DOMException);
+		expect((abortReason as DOMException).name).toBe("TimeoutError");
+		expect(result.warnings.some((item) => item.message.includes("WEB_SEARCH_CANCELED"))).toBe(false);
+		expect(result.warnings.some((item) => item.message.includes("WEB_SEARCH_TIMEOUT"))).toBe(true);
+	});
+
+	it("bounds adversarial usage metadata without losing reported cost", async () => {
+		const selected: Provider = {
+			...provider(),
+			search: async (request) => ({
+				query: request.query,
+				results: [{ url: "https://example.com/1", provider: "openai", searchQuery: request.query }],
+				provider: "openai",
+				appliedOptions: [],
+				warnings: [],
+				usage: {
+					costUsd: 0.25,
+					billedUnits: 3,
+					billedUnit: "u".repeat(200_000),
+					rateLimits: {
+						windows: Array.from({ length: 5_000 }, () => ({ limit: 10, remaining: 9, scope: "s".repeat(10_000) })),
+						retryAfterMs: 250,
+					},
+				},
+			}),
+		};
+		const result = await executeResearch({ question: "main", budget: { ...budget, maxProviderCalls: 1 } }, () => selected, context());
+		expect(result.usage?.costUsd).toBe(0.25);
+		expect(result.usage?.billedUnit?.length).toBeLessThanOrEqual(100);
+		expect(result.usage?.rateLimits?.windows.length).toBeLessThanOrEqual(8);
+		expect(result.usage?.rateLimits?.retryAfterMs).toBe(250);
+		expect(result.usage?.rateLimits?.windows.every((window) => (window.scope?.length ?? 0) <= 32)).toBe(true);
+		expect(result.results).toHaveLength(1);
+		expect(new TextEncoder().encode(JSON.stringify(result)).byteLength).toBeLessThanOrEqual(256_000);
+	});
+
 	it("keeps the complete model-visible research result within its budget", async () => {
 		const tool = createWebResearchTool(() => provider());
 		const result = await tool.execute("call-1", { question: "q".repeat(2_000), budget: { ...budget, maxOutputChars: 1_000 } }, undefined, undefined, context());

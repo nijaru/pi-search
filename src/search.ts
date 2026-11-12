@@ -171,19 +171,43 @@ function normalizeSocial(value: SearchRequest["social"]): SearchRequest["social"
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalidRequest("Search social must be an object");
 	if (value.understandImages !== undefined && typeof value.understandImages !== "boolean") throw invalidRequest("Search social.understandImages must be a boolean");
 	if (value.understandVideos !== undefined && typeof value.understandVideos !== "boolean") throw invalidRequest("Search social.understandVideos must be a boolean");
-	const includeHandles = normalizeHandles(value.includeHandles, "social.includeHandles");
-	const excludeHandles = normalizeHandles(value.excludeHandles, "social.excludeHandles");
+	const includeList = normalizeHandles(value.includeHandles, "social.includeHandles");
+	const excludeList = normalizeHandles(value.excludeHandles, "social.excludeHandles");
+	const includeHandles = includeList !== undefined && includeList.length > 0 ? includeList : undefined;
+	const excludeHandles = excludeList !== undefined && excludeList.length > 0 ? excludeList : undefined;
 	if (includeHandles !== undefined && excludeHandles !== undefined) {
 		const excluded = new Set(excludeHandles);
 		const overlap = includeHandles.find((handle) => excluded.has(handle));
 		if (overlap !== undefined) throw invalidRequest(`Search social handle cannot be both included and excluded: ${overlap}`);
 	}
-	if (includeHandles === undefined && excludeHandles === undefined && value.understandImages === undefined && value.understandVideos === undefined) return undefined;
+	// `false` is the documented default for media understanding, but provider
+	// adapters still validate the raw normalized object. The execution boundary
+	// strips these no-ops before dispatch so a false-only object does not force a
+	// provider capability requirement or reach a provider that rejects it.
+	const understandImages = value.understandImages;
+	const understandVideos = value.understandVideos;
+	if (includeHandles === undefined && excludeHandles === undefined && understandImages === undefined && understandVideos === undefined) return undefined;
 	return {
 		...(includeHandles === undefined ? {} : { includeHandles }),
 		...(excludeHandles === undefined ? {} : { excludeHandles }),
-		...(value.understandImages === undefined ? {} : { understandImages: value.understandImages }),
-		...(value.understandVideos === undefined ? {} : { understandVideos: value.understandVideos }),
+		...(understandImages === undefined ? {} : { understandImages }),
+		...(understandVideos === undefined ? {} : { understandVideos }),
+	};
+}
+
+/** Remove social fields that request nothing; a false media flag is the default. */
+function dispatchSocial(value: SearchRequest["social"]): SearchRequest["social"] | undefined {
+	if (value === undefined) return undefined;
+	const includeHandles = value.includeHandles === undefined || value.includeHandles.length === 0 ? undefined : value.includeHandles;
+	const excludeHandles = value.excludeHandles === undefined || value.excludeHandles.length === 0 ? undefined : value.excludeHandles;
+	const understandImages = value.understandImages === true ? true : undefined;
+	const understandVideos = value.understandVideos === true ? true : undefined;
+	if (includeHandles === undefined && excludeHandles === undefined && understandImages === undefined && understandVideos === undefined) return undefined;
+	return {
+		...(includeHandles === undefined ? {} : { includeHandles }),
+		...(excludeHandles === undefined ? {} : { excludeHandles }),
+		...(understandImages === undefined ? {} : { understandImages }),
+		...(understandVideos === undefined ? {} : { understandVideos }),
 	};
 }
 
@@ -201,8 +225,13 @@ export function normalizeSearchFilters(domains: SearchRequest["domains"], dateRa
 	) {
 		throw invalidRequest("Search domains must be an object");
 	}
-	const include = normalizeDomainList(domains?.include, "domains.include");
-	const exclude = normalizeDomainList(domains?.exclude, "domains.exclude");
+	const includeList = normalizeDomainList(domains?.include, "domains.include");
+	const excludeList = normalizeDomainList(domains?.exclude, "domains.exclude");
+	// An empty list is the same request as an omitted list. Collapsing it keeps
+	// router capability checks and provider payload builders from treating an
+	// empty filter object as a hard constraint.
+	const include = includeList !== undefined && includeList.length > 0 ? includeList : undefined;
+	const exclude = excludeList !== undefined && excludeList.length > 0 ? excludeList : undefined;
 	if (include !== undefined && exclude !== undefined) {
 		const excluded = new Set(exclude);
 		const overlap = include.find((domain) => excluded.has(domain));
@@ -211,9 +240,9 @@ export function normalizeSearchFilters(domains: SearchRequest["domains"], dateRa
 		}
 	}
 	return {
-		...(include === undefined && exclude === undefined
-			? { domains }
-			: { domains: { ...(include === undefined ? {} : { include }), ...(exclude === undefined ? {} : { exclude }) } }),
+		domains: include === undefined && exclude === undefined
+			? undefined
+			: { ...(include === undefined ? {} : { include }), ...(exclude === undefined ? {} : { exclude }) },
 		dateRange: normalizeDateRange(dateRange),
 	};
 }
@@ -335,6 +364,7 @@ export async function executeSearch(
 	options: ExecuteSearchOptions = {},
 ): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
+	const dispatchRequest: SearchRequest = { ...normalized, social: dispatchSocial(normalized.social) };
 	const timeoutMs = searchTimeoutMs(provider.id, options);
 	if (options.signal?.aborted) {
 		throw toSearchToolError(
@@ -390,10 +420,10 @@ export async function executeSearch(
 		}, timeoutMs);
 	});
 
-	const providerCall = Promise.resolve().then(() => provider.search(normalized, controller.signal, options.context ?? {}));
+	const providerCall = Promise.resolve().then(() => provider.search(dispatchRequest, controller.signal, options.context ?? {}));
 	try {
 		const response = await Promise.race([providerCall, timedOut, canceled]);
-		return cleanupSearchResponse(response, normalized, provider.id);
+		return cleanupSearchResponse(response, dispatchRequest, provider.id);
 	} catch (error) {
 		throw toSearchToolError(error, provider.id);
 	} finally {
@@ -443,7 +473,14 @@ export async function executeSearchSelection(
 			if (index === 0) firstError = toolError;
 			if (index === 0 && selection.automatic && selection.fallbacks.length > 0 && canUseAutomaticFallback(toolError)) continue;
 			if (firstError !== undefined && index > 0) {
-				throw new SearchToolError(toolError.code, `${toolError.message}; primary provider ${selection.provider.id} also failed: ${firstError.message}`, {
+				// SearchToolError messages already start with their stable code. Strip
+				// that prefix before composing the combined diagnostic so the tool does
+				// not expose `WEB_SEARCH_X: WEB_SEARCH_X: ...`.
+				const detail = (error: SearchToolError): string => {
+					const prefix = `${error.code}: `;
+					return error.message.startsWith(prefix) ? error.message.slice(prefix.length) : error.message;
+				};
+				throw new SearchToolError(toolError.code, `${detail(toolError)}; primary provider ${selection.provider.id} also failed: ${detail(firstError)}`, {
 					provider: toolError.provider,
 					kind: toolError.kind,
 					retryable: toolError.retryable,

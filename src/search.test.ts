@@ -1,5 +1,5 @@
 import { describe, expect, it, setSystemTime } from "bun:test";
-import type { FetchedContent, Provider, SearchResponse } from "./contracts";
+import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
 import { createWebSearchTool, renderSearchResponse, renderSearchResult } from "./search-tool";
@@ -78,6 +78,29 @@ describe("search boundary", () => {
 		await executeSearchSelection(route(request, {} as never), request);
 	});
 
+	it("normalizes empty domain and handle lists and strips false-only media flags before dispatch", async () => {
+		const normalized = validateSearchRequest({
+			query: "q",
+			domains: { include: [] },
+			social: { includeHandles: [], excludeHandles: [] },
+		});
+		expect(normalized.domains).toBeUndefined();
+		expect(normalized.social).toBeUndefined();
+		expect(validateSearchRequest({ query: "q", domains: {} }).domains).toBeUndefined();
+		expect(validateSearchRequest({ query: "q", social: { includeHandles: ["@xai"], understandImages: true } }).social).toEqual({
+			includeHandles: ["xai"],
+			understandImages: true,
+		});
+
+		let dispatched: SearchRequest | undefined;
+		const provider = makeProvider(async (received) => {
+			dispatched = received;
+			return successResponse();
+		});
+		await executeSearch(provider, { query: "q", social: { understandImages: false, understandVideos: false } });
+		expect(dispatched?.social).toBeUndefined();
+	});
+
 	it("retains billed fallback failures in the Pi tool result", async () => {
 		const usage = { inputTokens: 10, outputTokens: 2, totalTokens: 12, costUsd: 0.1 };
 		const primary = makeProvider(async () => {
@@ -90,6 +113,59 @@ describe("search boundary", () => {
 		await expect(executeSearchSelection(selection, { query: "q" })).rejects.toMatchObject({ provider: "exa", requestId: "billed", usage });
 		const result = await createWebSearchTool(() => selection).execute("call", { query: "q" }, undefined, undefined, {} as never);
 		expect(result).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } } });
+	});
+
+	it("does not duplicate a stable error code when the automatic fallback also fails", async () => {
+		const primary = makeProvider(async () => {
+			throw createProviderError({ provider: "brave", kind: "auth", message: "primary unavailable", retryable: false, fallbackSafe: true });
+		});
+		const fallback: Provider = {
+			...makeProvider(async () => {
+				throw createProviderError({ provider: "exa", kind: "malformed", message: "bad payload", retryable: false });
+			}),
+			id: "exa",
+		};
+		const error = await executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" }).then(
+			() => { throw new Error("expected the automatic fallback to fail"); },
+			(failure: unknown) => failure as Error & { code: string },
+		);
+		expect(error.code).toBe("WEB_SEARCH_MALFORMED_RESPONSE");
+		expect(error.message.match(/WEB_SEARCH_/g)).toHaveLength(1);
+		expect(error.message).toContain("bad payload");
+		expect(error.message).toContain("primary provider brave also failed: primary unavailable");
+	});
+
+	it("strips terminal controls from remote TUI identifiers and the error fallback", async () => {
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+		const base = successResponse();
+		const expanded = renderSearchResult({
+			...base,
+			requestId: "req\u001b]52;c;SGVsbG8=\u0007",
+			results: [{
+				...base.results[0]!,
+				sourceId: "source\u001b[31m red",
+				publishedAt: "2026-01-02\u001b[0m",
+			}],
+		}, true, theme);
+		expect(expanded).not.toContain("\u001b");
+		expect(expanded).toContain("Source ID: source red");
+		expect(expanded).toContain("Request ID: req");
+
+		const tool = createWebSearchTool(makeProvider(async () => {
+			throw new Error("provider\u001b]52;c;SGVsbG8=\u0007 failed");
+		}));
+		const failure = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never).then(
+			() => { throw new Error("expected the provider failure to reject"); },
+			(error: unknown) => error as Error,
+		);
+		const rendered = tool.renderResult!(
+			{ content: [{ type: "text", text: failure.message }] } as never,
+			{ expanded: false, isPartial: false },
+			theme,
+			{ isError: true } as never,
+		).render(160).join("\n");
+		expect(rendered).not.toContain("\u001b");
+		expect(rendered).toContain("provider failed");
 	});
 
 	it("propagates caller cancellation as a stable tool error", async () => {

@@ -12,7 +12,7 @@ import { toolUsage } from "./grounding";
 import { SearchToolError } from "./errors";
 import { fetchContent, MAX_FETCH_LENGTH, type FetcherOptions } from "./fetcher";
 import { executeSearch, MAX_EXECUTION_MODEL_LENGTH, normalizeSearchFilters, type NormalizedSearchFilters } from "./search";
-import { compactUsage, providerContextFromPi, SearchDateRangeSchema, SearchDomainsSchema } from "./search-tool";
+import { compactUsage, boundedUsage, providerContextFromPi, SearchDateRangeSchema, SearchDomainsSchema } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
 import { searchUrlIdentity } from "./search-cleanup";
 import { renderModelUrl, renderSafeUrl } from "./url-rendering";
@@ -327,7 +327,10 @@ export async function executeResearch(
 	}
 	const deadline = Date.now() + normalized.budget.timeoutMs;
 	const deadlineController = new AbortController();
-	const timeoutId = setTimeout(() => deadlineController.abort(), normalized.budget.timeoutMs);
+	// Tag the deadline abort so executeSearch classifies it as a timeout rather
+	// than a caller cancellation. Without a reason, a provider that rejects on
+	// abort yields WEB_SEARCH_CANCELED while research still reports `deadline`.
+	const timeoutId = setTimeout(() => deadlineController.abort(new DOMException("Research deadline exceeded", "TimeoutError")), normalized.budget.timeoutMs);
 	const onAbort = (): void => deadlineController.abort(signal?.reason);
 	signal?.addEventListener("abort", onAbort, { once: true });
 	let stepsCompleted = 0;
@@ -383,15 +386,20 @@ export async function executeResearch(
 		if (usage?.searchQueries !== undefined) searchQueries += usage.searchQueries;
 		if (usage?.rateLimits !== undefined) latestRateLimits = usage.rateLimits;
 	};
-	const currentUsage = (): ProviderUsage => ({
-		...(costUsd > 0 ? { costUsd } : {}),
-		...(hasInputTokens ? { inputTokens } : {}),
-		...(hasOutputTokens ? { outputTokens } : {}),
-		...(hasTotalTokens ? { totalTokens } : {}),
-		...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
-		...(searchQueries > 0 ? { searchQueries } : {}),
-		...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
-	});
+	const currentUsage = (): ProviderUsage =>
+		// Rate-limit windows, scopes, and the billing unit are provider-controlled.
+		// Bound them before they reach serialized details so an adversarial or
+		// verbose provider cannot defeat the 256-KB details bound after research
+		// has already paid for its calls. The numeric cost/token fields survive.
+		boundedUsage({
+			...(costUsd > 0 ? { costUsd } : {}),
+			...(hasInputTokens ? { inputTokens } : {}),
+			...(hasOutputTokens ? { outputTokens } : {}),
+			...(hasTotalTokens ? { totalTokens } : {}),
+			...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
+			...(searchQueries > 0 ? { searchQueries } : {}),
+			...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
+		}) ?? {};
 	const currentResponse = (): ResearchResponse => {
 		const usage = currentUsage();
 		return {
@@ -574,7 +582,7 @@ export function createWebResearchTool(
 			const details = result.details;
 			if (details === undefined) {
 				const content = result.content.find((item) => item.type === "text");
-				return new Text(theme.fg(context.isError ? "error" : "dim", content?.type === "text" ? content.text : "No research output"), 0, 0);
+				return new Text(theme.fg(context.isError ? "error" : "dim", content?.type === "text" ? sanitizeBlock(content.text, 4_000) : "No research output"), 0, 0);
 			}
 			return new Text(renderResearchResult(details, expanded, theme), 0, 0);
 		},

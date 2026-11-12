@@ -164,4 +164,70 @@ describe("search result cleanup", () => {
 		expect(result.answer?.text).toHaveLength(MAX_SEARCH_ANSWER_LENGTH);
 		expect(result.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("truncated") }));
 	});
+
+	it("applies inclusive date bounds centrally and warns about undated evidence", () => {
+		const request = validateSearchRequest({ query: "q", dateRange: { from: "2026-01-02", to: "2026-01-03" } });
+		const result = (url: string, publishedAt?: string) => ({ url, provider: "brave" as const, searchQuery: "q", ...(publishedAt === undefined ? {} : { publishedAt }) });
+		const cleaned = cleanupSearchResponse({
+			query: "q",
+			provider: "brave",
+			results: [
+				result("https://example.com/start", "2026-01-02T00:00:00.000Z"),
+				result("https://example.com/end", "2026-01-03T23:59:59.999Z"),
+				result("https://example.com/before", "2026-01-01T23:59:59.999Z"),
+				result("https://example.com/after", "2026-01-04T00:00:00.000Z"),
+				result("https://example.com/undated"),
+			],
+			appliedOptions: [],
+			warnings: [],
+		}, request, "brave");
+
+		expect(cleaned.results.map((item) => item.url)).toEqual([
+			"https://example.com/start",
+			"https://example.com/end",
+			"https://example.com/undated",
+		]);
+		expect(cleaned.appliedOptions).toContain("dateRange");
+		expect(cleaned.warnings).toContainEqual({ code: "partial-results", message: "Search removed 2 result entries outside the requested date range" });
+		expect(cleaned.warnings).toContainEqual({ code: "partial-results", message: "Search could not verify the publication date of 1 result entry against the requested date range" });
+	});
+
+	it("keeps answer citations aligned when date filtering removes a source", () => {
+		const request = validateSearchRequest({ query: "q", dateRange: { from: "2026-01-02T06:00:00Z", to: "2026-01-02T12:00:00Z" } });
+		const cleaned = cleanupSearchResponse({
+			query: "q",
+			provider: "brave",
+			results: [
+				{ url: "https://example.com/keep", provider: "brave", searchQuery: "q", publishedAt: "2026-01-02T07:00:00.000Z" },
+				{ url: "https://example.com/late", provider: "brave", searchQuery: "q", publishedAt: "2026-01-02T12:00:00.001Z" },
+			],
+			answer: {
+				text: "First claim. Second claim.",
+				contentTrust: "untrusted",
+				provider: "brave",
+				citations: [
+					{ url: "https://example.com/keep", startIndex: 0, endIndex: 12 },
+					{ url: "https://example.com/late", startIndex: 13, endIndex: 26 },
+				],
+			},
+			appliedOptions: [],
+			warnings: [],
+		}, request, "brave");
+
+		expect(cleaned.results.map((item) => item.url)).toEqual(["https://example.com/keep"]);
+		expect(cleaned.answer?.citations.map((citation) => citation.url)).toEqual(["https://example.com/keep"]);
+		expect(cleaned.answer?.citations[0]).toMatchObject({ startIndex: 0, endIndex: 12 });
+	});
+
+	it("does not duplicate a provider's own date-range warning", () => {
+		const request = validateSearchRequest({ query: "q", dateRange: { from: "2026-01-02" } });
+		const cleaned = cleanupSearchResponse({
+			query: "q",
+			provider: "deepseek",
+			results: [{ url: "https://example.com/undated", provider: "deepseek", searchQuery: "q" }],
+			appliedOptions: ["dateRange"],
+			warnings: [{ code: "partial-results", message: "DeepSeek could not verify the publication date of 1 result entry against the requested date range" }],
+		}, request, "deepseek");
+		expect(cleaned.warnings.filter((item) => item.message.startsWith("Search could not verify"))).toHaveLength(0);
+	});
 });

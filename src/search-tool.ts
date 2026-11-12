@@ -185,7 +185,7 @@ function resolveProvider(provider: WebSearchProvider, request: SearchRequest, co
 	return { provider: resolved, fallbacks: [], automatic: false };
 }
 
-function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] | undefined {
+export function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] | undefined {
 	if (usage === undefined) return undefined;
 	return {
 		...(usage.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
@@ -271,7 +271,7 @@ export function renderSearchResponse(response: SearchResponse): string {
 			if (notes !== undefined) lines.push(`Source note: ${compactText(notes, 500)}`);
 		}
 	}
-	if (response.appliedOptions.length > 0) lines.push(`Applied: ${response.appliedOptions.join(", ")}`);
+	if (response.appliedOptions.length > 0) lines.push(`Applied: ${response.appliedOptions.map((option) => compactText(option, 100)).join(", ")}`);
 	for (const warning of response.warnings) lines.push(`Warning [${warning.code}]: ${compactText(warning.message, 1_000)}`);
 	if (response.requestId !== undefined) lines.push(`Request ID: ${compactText(response.requestId, 500)}`);
 	const usage = compactUsage(response.usage);
@@ -295,10 +295,10 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 	for (const result of response.results.slice(0, limit)) {
 		text += `\n${theme.fg("accent", compactText(result.title ?? result.domain ?? renderSafeUrl(result.url), 180))}`;
 		text += `\n${theme.fg("dim", `  ${renderSafeUrl(result.url)}`)}`;
-		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${result.domain}`)}`;
+		if (expanded && result.domain !== undefined) text += `\n${theme.fg("muted", `  Domain: ${compactText(result.domain, 500)}`)}`;
 		if (expanded && result.sourcePageUrl !== undefined) text += `\n${theme.fg("muted", `  Source page: ${renderSafeUrl(result.sourcePageUrl)}`)}`;
-		if (expanded && result.publishedAt !== undefined) text += `\n${theme.fg("muted", `  Published: ${result.publishedAt}`)}`;
-		if (expanded && result.sourceId !== undefined) text += `\n${theme.fg("muted", `  Source ID: ${result.sourceId}`)}`;
+		if (expanded && result.publishedAt !== undefined) text += `\n${theme.fg("muted", `  Published: ${compactText(result.publishedAt, 100)}`)}`;
+		if (expanded && result.sourceId !== undefined) text += `\n${theme.fg("muted", `  Source ID: ${compactText(result.sourceId, 500)}`)}`;
 		if (result.excerpt !== undefined) text += `\n${theme.fg("muted", `  ${compactText(result.excerpt, expanded ? 400 : 240)}`)}`;
 	}
 	if (!expanded && count > limit) text += `\n${theme.fg("muted", `… ${count - limit} more; expand for details`)}`;
@@ -313,8 +313,8 @@ export function renderSearchResult(response: SearchResponse, expanded: boolean, 
 			if (sourceContents.length > 4) text += `\n${theme.fg("muted", `  … ${sourceContents.length - 4} more source pages`)}`;
 		}
 		for (const warning of response.warnings) text += `\n${theme.fg("warning", `Warning: ${compactText(warning.message, 300)}`)}`;
-		if (response.appliedOptions.length > 0) text += `\n${theme.fg("dim", `Applied: ${response.appliedOptions.join(", ")}`)}`;
-		if (response.requestId !== undefined) text += `\n${theme.fg("dim", `Request ID: ${response.requestId}`)}`;
+		if (response.appliedOptions.length > 0) text += `\n${theme.fg("dim", `Applied: ${response.appliedOptions.map((option) => compactText(option, 100)).join(", ")}`)}`;
+		if (response.requestId !== undefined) text += `\n${theme.fg("dim", `Request ID: ${compactText(response.requestId, 500)}`)}`;
 		const usage = compactUsage(response.usage);
 		if (usage !== undefined) text += `\n${theme.fg("dim", `Usage: ${usage}`)}`;
 	}
@@ -569,7 +569,7 @@ export function createWebSearchTool(
 			const details = result.details;
 			if (details === undefined) {
 				const content = result.content.find((item) => item.type === "text");
-				return new Text(theme.fg(context.isError ? "error" : "dim", content?.type === "text" ? content.text : "No search output"), 0, 0);
+				return new Text(theme.fg(context.isError ? "error" : "dim", content?.type === "text" ? sanitizeBlock(content.text, 4_000) : "No search output"), 0, 0);
 			}
 			return new Text(renderSearchResult(details, expanded, theme), 0, 0);
 		},

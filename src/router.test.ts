@@ -53,6 +53,21 @@ describe("search provider router", () => {
 		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("xai", "openai-responses")).provider.id).toBe("exa");
 	});
 
+	it("does not treat false-only social media flags as a hard constraint", () => {
+		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		expect(route({ query: "q", social: { understandImages: false, understandVideos: false } }, context("anthropic")).provider.id).toBe("brave");
+	});
+
+	it("does not select the xAI X tool for combined include and exclude handles", () => {
+		const xaiX = provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry");
+		const route = createSearchRouter({ xai: nativeXAI, xaiX });
+		expect(route({ query: "q", social: { includeHandles: ["one"] } }, context("xai", "openai-responses")).provider.id).toBe("xai-x");
+		expect(() => route({ query: "q", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context("xai", "openai-responses")))
+			.toThrow(/xAI X search cannot satisfy the requested social\/X constraints/);
+		expect(() => route({ query: "q", providerHint: "xai-x", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context("xai", "openai-responses")))
+			.toThrow(/xAI X search cannot satisfy/);
+	});
+
 	it("uses an authenticated registry OpenAI model before direct search", () => {
 		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		const selected = route({ query: "q" }, context("openrouter", "openai-completions", [availableModel("openai", "openai-responses")]));

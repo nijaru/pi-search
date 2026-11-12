@@ -54,9 +54,21 @@ function canServe(provider: Provider, request: SearchRequest): boolean {
 	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return false;
 	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return false;
 	if (request.social !== undefined) {
-		if (provider.capabilities.social !== true) return false;
-		if ((request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined) && provider.capabilities.handleFilter !== true) return false;
-		if ((request.social.understandImages === true || request.social.understandVideos === true) && provider.capabilities.mediaUnderstanding !== true) return false;
+		// A false media flag or empty handle list requests nothing. Ignoring it
+		// here keeps an otherwise plain query eligible for providers without
+		// social/media capabilities; executeSearch strips the no-ops before
+		// dispatch so adapters never see them.
+		const hasHandles = request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined;
+		const needsMedia = request.social.understandImages === true || request.social.understandVideos === true;
+		if (hasHandles || needsMedia) {
+			if (provider.capabilities.social !== true) return false;
+			if (hasHandles && provider.capabilities.handleFilter !== true) return false;
+			// xAI's X grounding tool accepts allowed_x_handles or excluded_x_handles,
+			// not both. The provider adapter rejects the combination, so do not select
+			// it for a request that carries both lists.
+			if (provider.id === "xai-x" && request.social.includeHandles !== undefined && request.social.excludeHandles !== undefined) return false;
+			if (needsMedia && provider.capabilities.mediaUnderstanding !== true) return false;
+		}
 	}
 	if (request.searchContextSize !== undefined && provider.capabilities.searchContextSize !== true) return false;
 	if (request.returnTokenBudget !== undefined && provider.capabilities.returnTokenBudget !== true) return false;
@@ -293,21 +305,26 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		// instead of making the user configure a provider manually. When the
 		// active model's native tool cannot honor a hard constraint, continue to
 		// the next eligible path rather than failing after dispatch.
+		let nativeRejected: Provider | undefined;
 		for (const id of ACTIVE_NATIVE_IDS) {
 			if (!nativeModelCompatible(id, context.model)) continue;
 			const candidate = activeNativeProvider(id, normalized, options);
-			if (candidate !== undefined && canServe(candidate, normalized)) {
+			if (candidate === undefined) continue;
+			if (canServe(candidate, normalized)) {
 				return selection(candidate, true, directFallback(candidate, normalized, options, policy));
 			}
+			nativeRejected = candidate;
 		}
 
 		// Preserve Pi's built-in search when an authenticated same-provider model
 		// exists, even if the active model is OpenRouter, Anthropic, or local.
 		for (const id of REGISTRY_NATIVE_IDS) {
 			const candidate = options[NATIVE_REGISTRY[id]!.option];
-			if (candidate !== undefined && availableNativeModel(id, context) && canServe(candidate, normalized)) {
+			if (candidate === undefined || !availableNativeModel(id, context)) continue;
+			if (canServe(candidate, normalized)) {
 				return selection(candidate, true, directFallback(candidate, normalized, options, policy));
 			}
+			nativeRejected ??= candidate;
 		}
 
 		const exaConfigured = options.exaConfigured === true;
@@ -356,6 +373,13 @@ export function createSearchRouter(options: SearchRouterOptions): SearchProvider
 		if (braveConfigured && options.brave !== undefined) {
 			const unmet = unmetConstraintNames(normalized);
 			return unavailable(`Brave cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, "brave");
+		}
+		// Report a configured native tool that was skipped for a hard constraint
+		// instead of claiming no provider is configured.
+		if (nativeRejected !== undefined) {
+			const unmet = unmetConstraintNames(normalized);
+			const label = nativeEntry(nativeRejected.id)?.label ?? nativeRejected.id;
+			return unavailable(`${label} search cannot satisfy the requested ${unmet.join(", ") || "search constraints"}`, nativeRejected.id);
 		}
 		return unavailable("No eligible search provider is configured; configure a provider or use an active grounded model", "router");
 	};
