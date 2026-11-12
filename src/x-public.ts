@@ -136,13 +136,20 @@ function postUrl(post: ObjectValue): string {
 	return `https://x.com/${handle && HANDLE.test(handle) ? handle : "i/web"}/status/${post.id}`;
 }
 
+/** Once earlier evidence is validated, these page failures must not discard it. */
+function isRecoverablePageFailure(error: unknown): error is SafeFetchError {
+	return error instanceof SafeFetchError && ["http", "network", "extraction", "redirect", "responseTooLarge"].includes(error.kind);
+}
+
 async function fetchPayload(postId: string, endpoint: "thread" | "status" | "conversation", read: Reader, signal?: AbortSignal, cursor?: string): Promise<ObjectValue> {
+	if (signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 	let response: Awaited<ReturnType<Reader>>;
 	try { response = await read(`https://api.fxtwitter.com/2/${endpoint}/${postId}${endpoint === "conversation" ? `?ranking_mode=likes${cursor === undefined ? "" : `&cursor=${encodeURIComponent(cursor)}`}` : ""}`, signal); }
 	catch (error) {
 		if (error instanceof SafeFetchError) throw new SafeFetchError({ kind: error.kind, status: error.status, message: "FxTwitter public X request failed", retryable: error.retryable });
 		throw extraction("FxTwitter public X request failed");
 	}
+	if (signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 	if (response.status < 200 || response.status >= 300) throw new SafeFetchError({ kind: "http", status: response.status, message: "FxTwitter public X request failed" });
 	let value: unknown;
 	try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(response.bytes)); }
@@ -368,37 +375,51 @@ async function readAuthorThread(target: XUrl & { postId: string }, read: Reader,
 	const payload = await fetchPayload(target.postId, target.kind === "article" ? "status" : "thread", read, signal);
 	const focal = payload.status as ObjectValue;
 	if (target.kind === "article" && !object(focal.article)) throw extraction("FxTwitter did not provide the full Article body");
-	const warnings = new Set<string>(focal.article ? [] : ["Thread completeness is unknown; FxTwitter may omit posts."]);
-	warnings.add("Other users' replies are excluded by xReplies: 0.");
-	const posts = new Map<string, ObjectValue>([[target.postId, focal]]);
-	const merge = (response: ObjectValue): void => {
-		for (const entry of (response.thread as unknown[] | null | undefined) ?? []) {
+	const assemble = (response: ObjectValue, previous?: { posts: Map<string, ObjectValue>; warnings: Set<string> }) => {
+		const posts = new Map(previous?.posts ?? [[target.postId, focal]]);
+		const warnings = new Set(previous?.warnings ?? [
+			...(focal.article ? [] : ["Thread completeness is unknown; FxTwitter may omit posts."]),
+			"Other users' replies are excluded by xReplies: 0.",
+		]);
+		if (!focal.article && target.kind === "post") for (const entry of (response.thread as unknown[] | null | undefined) ?? []) {
 			if (!usablePost(entry)) { warnings.add("Partial thread: one or more posts are unavailable."); continue; }
 			if (authorKey(entry) !== authorKey(focal)) continue;
-			// Keep bounded-tree candidates until relationships are resolved: capping the
-			// incoming array first can discard the root's children in reverse-order feeds.
+			// Resolve relationships before capping; reverse-order feeds can put the
+			// root's children after many descendants.
 			if (!posts.has(String(entry.id))) posts.set(String(entry.id), entry);
 		}
+		const expanded = orderedThread(posts, focal, MAX_POSTS + 1);
+		const limited = expanded.length > MAX_POSTS;
+		const ordered = limited ? orderedThread(posts, focal) : expanded;
+		const parts: string[] = [];
+		let characters = 0;
+		for (const post of ordered) {
+			const body = renderPost(post, warnings);
+			characters += body.length + (parts.length === 0 ? 0 : 7);
+			if (characters > MAX_CONVERSATION_CHARACTERS) throw new SafeFetchError({ kind: "responseTooLarge", message: "X author thread exceeds the conversation character limit" });
+			parts.push(body);
+		}
+		const content = parts.join("\n\n---\n\n");
+		return { posts, warnings, ordered, content, limited };
 	};
-	if (!focal.article && target.kind === "post") merge(payload);
-	let ordered = orderedThread(posts, focal);
-	if (!focal.article && ordered.length > 1 && ordered.length < MAX_POSTS) {
-		const tail = ordered[ordered.length - 1];
+	let state = assemble(payload);
+	if (!focal.article && state.ordered.length > 1 && state.ordered.length < MAX_POSTS) {
+		const tail = state.ordered[state.ordered.length - 1];
 		if (tail.id !== target.postId) {
-			try { merge(await fetchPayload(String(tail.id), "thread", read, signal)); }
-			catch (error) {
-				if (!(error instanceof SafeFetchError) || !["http", "extraction"].includes(error.kind)) throw error;
-				warnings.add("Partial thread: the tail continuation could not be read.");
+			try {
+				// Fetch, merge, validate, and render before committing a continuation.
+				state = assemble(await fetchPayload(String(tail.id), "thread", read, signal), state);
+			} catch (error) {
+				if (!isRecoverablePageFailure(error)) throw error;
+				state.warnings.add(`Partial thread: the tail continuation could not be read (${error.kind}); earlier evidence was retained.`);
 			}
-			ordered = orderedThread(posts, focal);
 		}
 	}
-	if (ordered.length === MAX_POSTS) warnings.add("Partial thread: the 100-post limit was reached.");
-	if (ordered.some((post) => parentId(post) && !posts.has(parentId(post)!))) warnings.add("Partial thread: a parent post is missing.");
-	if (ordered.length < MAX_POSTS && [...posts.values()].some((post) => !ordered.includes(post))) warnings.add("Partial thread: disconnected posts were omitted because their parents are missing.");
-	const content = ordered.map((post) => renderPost(post, warnings)).join("\n\n---\n\n");
+	if (state.limited) state.warnings.add("Partial thread: the 100-post limit was reached.");
+	if (state.ordered.some((post) => parentId(post) && !state.posts.has(parentId(post)!))) state.warnings.add("Partial thread: a parent post is missing.");
+	if (state.ordered.length < MAX_POSTS && [...state.posts.values()].some((post) => !state.ordered.includes(post))) state.warnings.add("Partial thread: disconnected posts were omitted because their parents are missing.");
 	const title = string(object(focal.article)?.title) ?? `X post by @${string(object(focal.author)?.screen_name) ?? "unknown"}`;
-	return { url: target.url, title: clean(title), content, warnings: [...warnings], postCount: ordered.length };
+	return { url: target.url, title: clean(title), content: state.content, warnings: [...state.warnings], postCount: state.ordered.length };
 }
 
 /** Connected descendants in parent-before-child order, preserving upstream sibling order. */
@@ -471,7 +492,7 @@ function renderConversation(posts: Map<string, ObjectValue>, focal: ObjectValue,
 		const body = threadBodies.get(String(post.id));
 		return body === undefined ? [] : [body];
 	}).join("\n\n---\n\n") + "\n\n# Replies (public conversation; parents before children)\n\n" +
-		(replies.length ? replies.join("\n\n---\n\n") : "No readable replies were supplied; this does not establish that the post has no comments.");
+		(replies.length ? replies.join("\n\n---\n\n") : "No replies were included in this bounded output; this does not establish that the post has no comments.");
 	return { content, replyCount: replies.length, threadPostCount: threadBodies.size, contentLimited, replyLimited, unverified: connected.unverified, thread, threadLimited: completeThread.length > thread.length };
 }
 
@@ -522,7 +543,6 @@ export async function readFxTwitter(target: XUrl, read: Reader, options: XPublic
 			let payload: ObjectValue;
 			try {
 				payload = await fetchPayload(target.postId, "conversation", read, controller.signal, cursor);
-				if (controller.signal.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 			} catch (error) {
 				if (options.signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 				if (timedOut) {
@@ -530,7 +550,7 @@ export async function readFxTwitter(target: XUrl, read: Reader, options: XPublic
 					stopReason = "timeout";
 					break;
 				}
-				if (rendered === undefined || !(error instanceof SafeFetchError) || !["http", "network", "extraction", "redirect", "responseTooLarge"].includes(error.kind)) throw error;
+				if (rendered === undefined || !isRecoverablePageFailure(error)) throw error;
 				stopReason = error.kind === "responseTooLarge" ? "byte-limit" : "upstream-error";
 				warnings.add(`Partial conversation: a later page failed${error.status === undefined ? "" : ` (HTTP ${error.status})`}; earlier evidence was retained.`);
 				break;
@@ -573,7 +593,7 @@ export async function readFxTwitter(target: XUrl, read: Reader, options: XPublic
 		if (!focal || !rendered) throw extraction();
 		if (options.signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "X read canceled" });
 		if (rendered.unverified > 0) warnings.add("Partial conversation: posts with missing or cyclic parent relationships were omitted.");
-		if (rendered.thread.length === MAX_POSTS) warnings.add("Partial thread: the 100-post author-thread limit was reached.");
+		if (rendered.threadLimited) warnings.add("Partial thread: the 100-post author-thread limit was reached.");
 		if (rendered.thread.some((post) => parentId(post) && !posts.has(parentId(post)!))) warnings.add("Partial thread: a parent post is missing.");
 		if (stopReason !== "exhausted") warnings.add(`Partial conversation: retrieval stopped (${stopReason}); this is not a complete conversation.`);
 		const title = string(object(focal.article)?.title) ?? `X post by @${string(object(focal.author)?.screen_name) ?? "unknown"}`;

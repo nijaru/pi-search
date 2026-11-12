@@ -510,6 +510,7 @@ export type FetchExtraction = "readability" | "raw" | "plain-text" | "markdown" 
 
 export interface XConversationMetadata {
 	readonly pagesRead: number;
+	/** Replies included in assembled content, before model-visible text paging. */
 	readonly replyCount: number;
 	readonly threadPostCount: number;
 	/** Only upstream pagination exhaustion, never proof that every X reply was found. */

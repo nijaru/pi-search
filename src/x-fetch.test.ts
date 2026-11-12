@@ -65,16 +65,20 @@ describe("X fetch routing and bounds", () => {
 		expect(result.extraction).toBe("plain-text");
 	});
 
-	it("counts bytes across both public thread requests", async () => {
+	it("enforces aggregate author-thread byte limits without losing the first page", async () => {
 		const second = { ...post, id: "124", text: "continued", replying_to: { status: "123" } };
 		const payload = { code: 200, status: post, thread: [post, second] };
 		const bytes = new TextEncoder().encode(JSON.stringify(payload));
-		let calls = 0;
-		await expect(fetchContent({ url, xMode: "public", xReplies: 0 }, undefined, {
+		let calls = 0, closed = 0;
+		const result = await fetchContent({ url, xMode: "public", xReplies: 0 }, undefined, {
 			lookup, maxResponseBytes: bytes.byteLength + 10,
-			transport: async () => { calls++; return { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield bytes; } } }; },
-		})).rejects.toMatchObject({ kind: "responseTooLarge" });
+			transport: async () => { calls++; return { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield bytes; }, async cancel() { closed++; } } }; },
+		});
 		expect(calls).toBe(2);
+		expect(closed).toBe(2);
+		expect(result.bytesRead).toBe(bytes.byteLength * 2);
+		expect(result.content).toContain("continued");
+		expect(result.warnings).toContainEqual({ code: "partial", message: expect.stringContaining("responseTooLarge") });
 	});
 
 	it("retains validated conversation pages and closes a later response at the aggregate byte limit", async () => {
@@ -122,16 +126,20 @@ describe("X fetch routing and bounds", () => {
 	});
 
 	it("blocks public API redirects and recovers earlier evidence only after a validated page", async () => {
-		for (const hasFirstPage of [false, true]) {
+		for (const xReplies of [undefined, 0]) for (const hasFirstPage of [false, true]) {
 			let calls = 0, closed = false;
-			const pending = fetchContent({ url }, undefined, { lookup, transport: async (target) => {
+			const pending = fetchContent({ url, ...(xReplies === 0 ? { xMode: "public" as const, xReplies } : {}) }, undefined, { lookup, transport: async (target) => {
 				expect(target.url.origin).toBe("https://api.fxtwitter.com");
 				calls++;
 				return hasFirstPage && calls === 1
-					? { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify({ code: 200, status: post, thread: null, replies: [], cursor: { bottom: "next" } })); } } }
+					? { status: 200, statusText: "OK", headers: new Headers(), body: { async *[Symbol.asyncIterator]() { yield new TextEncoder().encode(JSON.stringify({ code: 200, status: post, thread: [{ ...post, id: "124", text: "Continuation", replying_to: { status: "123" } }], replies: [], cursor: { bottom: "next" } })); } } }
 					: { status: 302, statusText: "Found", headers: new Headers({ location: "https://elsewhere.example/" }), body: { async *[Symbol.asyncIterator]() { throw new Error("must not consume redirect body"); }, async cancel() { closed = true; } } };
 			} });
-			if (hasFirstPage) expect((await pending).xConversation).toMatchObject({ pagesRead: 1, stopReason: "upstream-error", paginationExhausted: false });
+			if (hasFirstPage) {
+				const result = await pending;
+				if (xReplies === 0) expect(result.warnings).toContainEqual({ code: "partial", message: expect.stringContaining("earlier evidence was retained") });
+				else expect(result.xConversation).toMatchObject({ pagesRead: 1, stopReason: "upstream-error", paginationExhausted: false });
+			}
 			else await expect(pending).rejects.toMatchObject({ kind: "redirect" });
 			expect(calls).toBe(hasFirstPage ? 2 : 1);
 			expect(closed).toBe(true);

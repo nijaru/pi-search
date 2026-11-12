@@ -290,9 +290,11 @@ and SSRF failures still reject the request.
 
 Posts are deduplicated, nested replies are connected across pages, and parents
 appear before children. Source and parent-post links are retained. Upstream
-pages are ranked by likes; posts with unverified parent relationships are omitted
-with a warning. `xConversation` metadata reports pages read, author/reply counts,
-the stop reason, and whether upstream pagination ended. **Exhausted pagination
+pages are ranked by likes; reply branches whose parent chains cannot be verified
+are omitted with a warning. An invalid selected post or contradictory first-page
+author chain still fails rather than guessing which source data is correct.
+`xConversation` metadata reports pages read, author/reply counts, the stop reason,
+and whether upstream pagination ended. **Exhausted pagination
 does not prove that every X reply was returned**: hidden, deleted, protected,
 nested, or upstream-omitted replies may still be missing.
 

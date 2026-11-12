@@ -172,13 +172,71 @@ describe("readFxTwitter", () => {
 		expect(result.warnings.join(" ")).toContain("continuation could not be read");
 		expect(fixture.calls).toHaveLength(2);
 	});
-	it("retains cancellation rather than treating it as a partial continuation", async () => {
-		let calls = 0;
-		const fixture = reader(payload(post(), [post(), post("101", "100")]));
+	it("retains validated author-thread evidence when the tail is unavailable", async () => {
+		for (const kind of ["network", "redirect", "responseTooLarge"] as const) {
+			let calls = 0;
+			const first = reader(payload(post(), [post(), post("101", "100")]));
+			const result = await readFxTwitter(target(), async (url) => {
+				if (++calls === 2) throw new SafeFetchError({ kind, message: "tail failed" });
+				return first.read(url);
+			}, { maxReplies: 0 });
+			expect(calls).toBe(2);
+			expect(result.postCount).toBe(2);
+			expect(result.content).toContain("Post 101");
+			expect(result.warnings.join(" ")).toContain("earlier evidence was retained");
+		}
+	});
+	it("does not let an invalid tail corrupt already validated author-thread evidence", async () => {
+		const cases = [
+			reader(payload(post("100", "101"), [post("102", "100")]), payload(post("102", "100"), [post("101", "100")])),
+			reader(payload(post(), [post("101", "100")]), payload(post("101", "100"), [post("102", "101", { article: { preview_text: "not a body" } })])),
+		];
+		for (const fixture of cases) {
+			const result = await readFxTwitter(target(), fixture.read, { maxReplies: 0 });
+			expect(result.postCount).toBe(2);
+			expect(result.content).toContain("Post 100");
+			expect(result.warnings.join(" ")).toContain("earlier evidence was retained");
+			expect(fixture.calls).toHaveLength(2);
+		}
+	});
+	it("bounds author-only assembly and keeps earlier evidence when the tail would exceed it", async () => {
+		const large = "x".repeat(1_600_000);
+		const oversized = reader(payload(post("100", undefined, { text: large }), [post("101", "100", { text: large })]));
+		await expect(readFxTwitter(target(), oversized.read, { maxReplies: 0 })).rejects.toMatchObject({ kind: "responseTooLarge" });
+		expect(oversized.calls).toHaveLength(1);
+		const fixture = reader(payload(post(), [post("101", "100")]), payload(post("101", "100"), [post("102", "101", { text: large }), post("103", "102", { text: large })]));
+		const result = await readFxTwitter(target(), fixture.read, { maxReplies: 0 });
+		expect(result.postCount).toBe(2);
+		expect(result.content).not.toContain("status/102>");
+		expect(result.warnings.join(" ")).toContain("responseTooLarge");
+	});
+	it("does not imply truncation for an exactly 100-post exhausted author thread", async () => {
+		const chain = Array.from({ length: 100 }, (_, index) => post(String(100 + index), index ? String(99 + index) : undefined));
+		for (const options of [{}, { maxReplies: 0 }]) {
+			const fixture = reader(payload(chain[0], chain));
+			const result = await readFxTwitter(target(), fixture.read, options);
+			expect(result.postCount).toBe(100);
+			expect(result.warnings.some((warning) => warning.includes("100-post"))).toBe(false);
+			expect(fixture.calls).toHaveLength(1);
+		}
+	});
+	it("does not return author-only evidence when the reader completes after cancellation", async () => {
+		const controller = new AbortController();
+		const fixture = reader(payload());
 		await expect(readFxTwitter(target(), async (url) => {
-			if (++calls === 2) throw new SafeFetchError({ kind: "canceled", message: "private URL" });
+			controller.abort();
 			return fixture.read(url);
-		}, { maxReplies: 0 })).rejects.toMatchObject({ kind: "canceled", message: "FxTwitter public X request failed" });
+		}, { maxReplies: 0, signal: controller.signal })).rejects.toMatchObject({ kind: "canceled" });
+	});
+	it("keeps cancellation and SSRF failures fatal during author-thread continuation", async () => {
+		for (const kind of ["canceled", "ssrf"] as const) {
+			let calls = 0;
+			const fixture = reader(payload(post(), [post(), post("101", "100")]));
+			await expect(readFxTwitter(target(), async (url) => {
+				if (++calls === 2) throw new SafeFetchError({ kind, message: "private URL" });
+				return fixture.read(url);
+			}, { maxReplies: 0 })).rejects.toMatchObject({ kind, message: "FxTwitter public X request failed" });
+		}
 	});
 	it("caps the author thread without reclassifying overflow as comments", async () => {
 		const chain = Array.from({ length: 150 }, (_, index) => post(String(100 + index), index ? String(99 + index) : undefined));

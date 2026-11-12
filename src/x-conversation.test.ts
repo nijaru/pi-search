@@ -96,6 +96,12 @@ describe("public X conversation pagination", () => {
 		expect(result.content).not.toContain("Comment 201");
 	});
 
+	it("rejects a contradictory selected author chain on the first page rather than guessing which parent is valid", async () => {
+		const fixture = reader({ ...page([reply("200")], null, [post("101", "100")]), status: post("100", "101") });
+		await expect(readFxTwitter(target, fixture.read)).rejects.toMatchObject({ kind: "extraction", message: "FxTwitter returned an invalid thread relationship" });
+		expect(fixture.calls).toHaveLength(1);
+	});
+
 	it("does not let a later cyclic author-thread page corrupt earlier evidence", async () => {
 		const fixture = reader({ ...page([reply("200")], "next"), status: post("100", "101") }, page([], null, [post("101", "100")]));
 		const result = await readFxTwitter(target, fixture.read);
@@ -155,10 +161,12 @@ describe("public X conversation pagination", () => {
 		const result = await readFxTwitter(target, fixture.read);
 		expect(result.conversation).toMatchObject({ replyCount: 1, stopReason: "content-limit" });
 		expect(result.content.length).toBeLessThanOrEqual(3_000_000);
-		const ancestor = reader({ ...page([], "next", [post("90", undefined, "x".repeat(3_000_000))]), status: post("100", "90", "Selected evidence") });
+		const ancestor = reader({ ...page([reply("300")], "next", [post("90", undefined, "x".repeat(3_000_000))]), status: post("100", "90", "Selected evidence") });
 		const selected = await readFxTwitter(target, ancestor.read);
 		expect(selected.content).toContain("Selected evidence");
-		expect(selected.conversation).toMatchObject({ threadPostCount: 1, stopReason: "content-limit" });
+		expect(selected.conversation).toMatchObject({ replyCount: 0, threadPostCount: 1, stopReason: "content-limit" });
+		expect(selected.content).toContain("No replies were included in this bounded output");
+		expect(selected.content).not.toContain("No readable replies were supplied");
 		await expect(readFxTwitter(target, reader({ ...page(), status: post("100", undefined, "x".repeat(3_000_000)) }).read)).rejects.toMatchObject({ kind: "responseTooLarge" });
 	});
 
