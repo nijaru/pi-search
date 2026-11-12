@@ -32,6 +32,18 @@ describe("GeminiProvider", () => {
 		}
 	});
 
+	it("preserves transport diagnostics on normalization failure without overriding root identifiers", async () => {
+		for (const responseId of [undefined, "root-id"]) {
+			const provider = createGeminiProvider({ fetchImpl: async () => response({
+				responseId, promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { totalTokenCount: 12 },
+			}, 200, { "x-request-id": "header-id", "x-ratelimit-limit": "10", "x-ratelimit-remaining": "9" }) });
+			await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({
+				requestId: responseId ?? "header-id", usage: { totalTokens: 12, rateLimits: { windows: [{ limit: 10, remaining: 9 }] } },
+				rateLimits: { windows: [{ limit: 10, remaining: 9 }] }, fallbackSafe: false,
+			});
+		}
+	});
+
 	it("skips malformed candidates, parts, and chunks without shifting citation indices", async () => {
 		const provider = createGeminiProvider({ fetchImpl: async () => response({ candidates: [null, [], { groundingMetadata: "bad" }, { content: { parts: [null, [], { text: "Answer" }] }, groundingMetadata: { groundingChunks: [null, { web: [] }, { web: { uri: "https://example.com/page" } }], groundingSupports: [{ groundingChunkIndices: [2] }] } }] }) });
 		const result = await provider.search({ query: "q", mode: "keyword" }, new AbortController().signal, context());

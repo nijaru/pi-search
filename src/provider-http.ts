@@ -28,15 +28,15 @@ export interface JsonResponse {
 
 function retryAfterMs(headers: Headers): number | undefined {
 	const milliseconds = headers.get("retry-after-ms");
-	if (milliseconds !== null && /^\d+(?:\.\d+)?$/.test(milliseconds.trim())) {
+	if (milliseconds !== null && milliseconds.length <= 4_096 && /^\d+(?:\.\d+)?$/.test(milliseconds.trim())) {
 		const value = Number(milliseconds);
 		if (Number.isFinite(value)) return Math.max(0, Math.round(value));
 	}
 	const retryAfter = headers.get("retry-after");
-	if (retryAfter === null) return undefined;
+	if (retryAfter === null || retryAfter.length > 4_096) return undefined;
 	if (/^\d+(?:\.\d+)?$/.test(retryAfter.trim())) {
-		const value = Number(retryAfter);
-		return Number.isFinite(value) ? Math.max(0, Math.round(value * 1_000)) : undefined;
+		const value = Number(retryAfter) * 1_000;
+		return Number.isFinite(value) ? Math.max(0, Math.round(value)) : undefined;
 	}
 	const date = Date.parse(retryAfter);
 	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
@@ -69,10 +69,13 @@ function resetFromHeader(value: string | null): Pick<ProviderRateLimitWindow, "r
 
 /** Parse standard quota headers without assuming provider-specific plans. */
 export function parseProviderRateLimits(headers: Headers): ProviderRateLimitInfo | undefined {
-	const header = (standard: string, xApi: string): string => headers.get(standard) ?? headers.get(xApi) ?? "";
-	const limits = header("x-ratelimit-limit", "x-rate-limit-limit").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
-	const remaining = header("x-ratelimit-remaining", "x-rate-limit-remaining").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
-	const resets = header("x-ratelimit-reset", "x-rate-limit-reset").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+	const header = (standard: string, xApi: string): string[] => {
+		const value = headers.get(standard) ?? headers.get(xApi) ?? "";
+		return value.length > 4_096 ? [] : value.split(",", 8).map((part) => part.trim());
+	};
+	const limits = header("x-ratelimit-limit", "x-rate-limit-limit");
+	const remaining = header("x-ratelimit-remaining", "x-rate-limit-remaining");
+	const resets = header("x-ratelimit-reset", "x-rate-limit-reset");
 	const windows: ProviderRateLimitWindow[] = [];
 	const count = Math.max(limits.length, remaining.length, resets.length);
 	for (let index = 0; index < count; index += 1) {

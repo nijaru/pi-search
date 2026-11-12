@@ -3,7 +3,6 @@ import type {
 	ProviderCapabilities,
 	ProviderContext,
 	ProviderRateLimitInfo,
-	ProviderRateLimitWindow,
 	ProviderProfile,
 	SearchOption,
 	SearchRequest,
@@ -14,6 +13,7 @@ import type {
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
+import { parseProviderRateLimits } from "./provider-http";
 import { matchesSearchDomain, normalizeSearchUrl } from "./search-cleanup";
 
 export const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
@@ -232,62 +232,6 @@ function resultFromPayload(value: unknown, query: string): SearchResult {
 	};
 }
 
-function parseNonNegative(value: string | null): number | undefined {
-	if (value === null || !/^\d+(?:\.\d+)?$/.test(value.trim())) return undefined;
-	const parsed = Number(value);
-	return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
-}
-
-function splitHeader(value: string | null): string[] {
-	return value === null || value.length > 4_096 ? [] : value.split(",", 8).map((part) => part.trim());
-}
-
-function parseReset(value: string | undefined): Pick<ProviderRateLimitWindow, "resetAt" | "resetAfterMs"> {
-	if (value === undefined) return {};
-	const numeric = parseNonNegative(value);
-	if (numeric === undefined) return {};
-	if (numeric >= 1_000_000_000_000) {
-		return numeric <= 8_640_000_000_000_000 ? { resetAt: new Date(numeric).toISOString() } : {};
-	}
-	if (numeric >= 1_000_000_000) {
-		return { resetAt: new Date(numeric * 1_000).toISOString() };
-	}
-	return { resetAfterMs: Math.round(numeric * 1_000) };
-}
-
-/** Parse common Brave quota headers without assuming a single plan window. */
-export function parseBraveRateLimits(headers: Headers): ProviderRateLimitInfo | undefined {
-	const limits = splitHeader(headers.get("x-ratelimit-limit"));
-	const remaining = splitHeader(headers.get("x-ratelimit-remaining"));
-	const resets = splitHeader(headers.get("x-ratelimit-reset"));
-	const count = Math.max(limits.length, remaining.length, resets.length);
-	const windows: ProviderRateLimitWindow[] = [];
-	for (let index = 0; index < count; index += 1) {
-		const limit = parseNonNegative(limits[index] ?? "");
-		const left = parseNonNegative(remaining[index] ?? "");
-		const reset = parseReset(resets[index]);
-		if (limit === undefined && left === undefined && Object.keys(reset).length === 0) continue;
-		windows.push({
-			...(limit === undefined ? {} : { limit }),
-			...(left === undefined ? {} : { remaining: left }),
-			...reset,
-			scope: `window-${index}`,
-		});
-	}
-	const retryAfter = headers.get("retry-after");
-	let retryAfterMs: number | undefined;
-	if (retryAfter !== null && retryAfter.length <= 4_096) {
-		const seconds = parseNonNegative(retryAfter);
-		if (seconds !== undefined) retryAfterMs = Math.round(seconds * 1_000);
-		else {
-			const date = Date.parse(retryAfter);
-			if (Number.isFinite(date)) retryAfterMs = Math.max(0, date - Date.now());
-		}
-	}
-	if (windows.length === 0 && retryAfterMs === undefined) return undefined;
-	return { windows, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) };
-}
-
 function domainQuery(request: SearchRequest): string {
 	const include = request.domains?.include ?? [];
 	const exclude = request.domains?.exclude ?? [];
@@ -439,7 +383,7 @@ export class BraveProvider implements Provider {
 			throw createProviderError({ provider: this.id, kind: "network", message: "Brave network request failed", retryable: true, cause: error });
 		}
 
-		const rateLimits = parseBraveRateLimits(response.headers);
+		const rateLimits = parseProviderRateLimits(response.headers);
 		this.capacityTracker?.observe(rateLimits);
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-brave-request-id") ?? undefined;
 		if (response.status === 401 || response.status === 403) {

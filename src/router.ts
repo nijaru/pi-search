@@ -54,21 +54,13 @@ function canServe(provider: Provider, request: SearchRequest): boolean {
 	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return false;
 	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return false;
 	if (request.social !== undefined) {
-		// A false media flag or empty handle list requests nothing. Ignoring it
-		// here keeps an otherwise plain query eligible for providers without
-		// social/media capabilities; executeSearch strips the no-ops before
-		// dispatch so adapters never see them.
+		// No-op lists and false media flags have already been normalized away.
 		const hasHandles = request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined;
 		const needsMedia = request.social.understandImages === true || request.social.understandVideos === true;
-		if (hasHandles || needsMedia) {
-			if (provider.capabilities.social !== true) return false;
-			if (hasHandles && provider.capabilities.handleFilter !== true) return false;
-			// xAI's X grounding tool accepts allowed_x_handles or excluded_x_handles,
-			// not both. The provider adapter rejects the combination, so do not select
-			// it for a request that carries both lists.
-			if (provider.id === "xai-x" && request.social.includeHandles !== undefined && request.social.excludeHandles !== undefined) return false;
-			if (needsMedia && provider.capabilities.mediaUnderstanding !== true) return false;
-		}
+		if (provider.capabilities.social !== true) return false;
+		if (hasHandles && provider.capabilities.handleFilter !== true) return false;
+		if (request.social.includeHandles !== undefined && request.social.excludeHandles !== undefined && provider.capabilities.combinedHandleFilters !== true) return false;
+		if (needsMedia && provider.capabilities.mediaUnderstanding !== true) return false;
 	}
 	if (request.searchContextSize !== undefined && provider.capabilities.searchContextSize !== true) return false;
 	if (request.returnTokenBudget !== undefined && provider.capabilities.returnTokenBudget !== true) return false;

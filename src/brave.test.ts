@@ -7,7 +7,6 @@ import {
 	buildBraveRequest,
 	createBraveProvider,
 	normalizeBraveResponse,
-	parseBraveRateLimits,
 } from "./brave";
 import type { SearchRequest } from "./contracts";
 
@@ -27,14 +26,6 @@ describe("BraveProvider", () => {
 			expect(() => normalizeBraveResponse({ web: { results } }, { query: "q" })).toThrow(expect.objectContaining({ kind: "malformed" }));
 		}
 		expect(normalizeBraveResponse({ web: { results: [] } }, { query: "q" }).results).toEqual([]);
-	});
-
-	it("bounds quota headers and windows and ignores invalid reset dates", () => {
-		const info = parseBraveRateLimits(new Headers({ "x-ratelimit-limit": "1,".repeat(1_000), "x-ratelimit-reset": "9".repeat(5_000), "retry-after": "9".repeat(5_000) }));
-		expect(info?.windows).toHaveLength(8);
-		expect(info?.retryAfterMs).toBeUndefined();
-		expect(parseBraveRateLimits(new Headers({ "x-ratelimit-limit": "1,".repeat(10_000) }))).toBeUndefined();
-		expect(parseBraveRateLimits(new Headers({ "x-ratelimit-reset": "99999999999999999999" }))).toBeUndefined();
 	});
 
 	it("builds one bounded request with safe domain operators and fresh mode", () => {
@@ -99,24 +90,6 @@ describe("BraveProvider", () => {
 			{ web: { results: [{ url: `https://example.com/${"a".repeat(8_200)}` }] } },
 			{ query: "q", maxResults: 10 },
 		)).toThrow("exceeds the supported length limit");
-	});
-
-	it("parses multiple quota windows and retry-after metadata", () => {
-		const info = parseBraveRateLimits(
-			new Headers({
-				"x-ratelimit-limit": "1, 2000",
-				"x-ratelimit-remaining": "0, 1999",
-				"x-ratelimit-reset": "1, 2592000",
-				"retry-after": "2",
-			}),
-		);
-		expect(info).toEqual({
-			windows: [
-				{ limit: 1, remaining: 0, resetAfterMs: 1000, scope: "window-0" },
-				{ limit: 2000, remaining: 1999, resetAfterMs: 2_592_000_000, scope: "window-1" },
-			],
-			retryAfterMs: 2000,
-		});
 	});
 
 	it("expires relative quota observations and treats zero limits as unlimited", async () => {

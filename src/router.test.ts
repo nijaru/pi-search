@@ -68,6 +68,14 @@ describe("search provider router", () => {
 			.toThrow(/xAI X search cannot satisfy/);
 	});
 
+	it("routes combined handle constraints by capability rather than provider identity", () => {
+		const request = { query: "q", providerHint: "x" as const, social: { includeHandles: ["one"], excludeHandles: ["two"] } };
+		const supported = provider("x", { social: true, handleFilter: true, combinedHandleFilters: true });
+		expect(createSearchRouter({ x: supported, xConfigured: true })(request, context()).provider).toBe(supported);
+		const unsupported = provider("x", { social: true, handleFilter: true });
+		expect(() => createSearchRouter({ x: unsupported, xConfigured: true })(request, context())).toThrow(/cannot satisfy/);
+	});
+
 	it("uses an authenticated registry OpenAI model before direct search", () => {
 		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
 		const selected = route({ query: "q" }, context("openrouter", "openai-completions", [availableModel("openai", "openai-responses")]));

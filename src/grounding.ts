@@ -10,7 +10,7 @@ import type {
 	SearchResponse,
 	SearchWarning,
 } from "./contracts";
-import { createProviderError } from "./errors";
+import { createProviderError, isProviderError } from "./errors";
 import { modelAuthHeaders, selectModelExecution, type ModelExecution } from "./model-selection";
 import { postJson, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
@@ -165,7 +165,22 @@ export async function executeGroundedSearch(options: GroundedSearchOptions): Pro
 		fetchImpl: options.fetchImpl,
 		maxResponseBytes: options.maxResponseBytes,
 	});
-	const response = await options.normalize(result.payload, normalized, { signal: options.signal });
+	let response: SearchResponse;
+	try {
+		response = await options.normalize(result.payload, normalized, { signal: options.signal });
+	} catch (error) {
+		if (!isProviderError(error)) throw error;
+		const rateLimits = error.rateLimits ?? result.rateLimits;
+		throw createProviderError({
+			...error, message: error.message,
+			requestId: error.requestId ?? result.requestId,
+			rateLimits,
+			retryAfterMs: error.retryAfterMs ?? result.retryAfterMs,
+			usage: usageWithRateLimits(error.usage, rateLimits),
+			fallbackSafe: false,
+			cause: error,
+		});
+	}
 	const usage = usageWithRateLimits(response.usage, result.rateLimits);
 	return {
 		...response,
