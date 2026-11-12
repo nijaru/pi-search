@@ -128,7 +128,7 @@ describe("search result cleanup", () => {
 		expect(cleaned.results[0]).toMatchObject({ sourceUrl: "https://EXAMPLE.com/page#section", provider: "cloudflare", upstreamProvider: "exa" });
 	});
 
-	it("removes nested percent-encoded path tails without decoding reserved characters", () => {
+	it("preserves opaque percent-encoded paths rather than inventing a different source URL", () => {
 		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
 		expect(cleanupSearchResponse({
 			query: "q",
@@ -137,12 +137,12 @@ describe("search result cleanup", () => {
 			appliedOptions: [],
 			warnings: [],
 		}, validateSearchRequest({ query: "q" }), "brave").results).toEqual([{
-			url: "https://help.openai.com/en/articles/20001106-codex-rate-card",
-			sourceUrl: nested,
+			url: nested,
 			domain: "help.openai.com",
 			provider: "brave",
 			searchQuery: "q",
 		}]);
+		expect(searchUrlIdentity("https://example.com/file%252525literal?signature=opaque")).toBe("https://example.com/file%252525literal?signature=opaque");
 		expect(searchUrlIdentity("https://example.com/%2525literal")).toBe("https://example.com/%2525literal");
 		expect(searchUrlIdentity("https://example.com/%2Freserved%3Fvalue")).toBe("https://example.com/%2Freserved%3Fvalue");
 	});

@@ -141,6 +141,7 @@ describe("search boundary", () => {
 		const expanded = renderSearchResult({
 			...base,
 			requestId: "req\u001b]52;c;SGVsbG8=\u0007",
+			usage: { billedUnits: 1, billedUnit: "unit\u001b]52;c;SGVsbG8=\u0007" },
 			results: [{
 				...base.results[0]!,
 				sourceId: "source\u001b[31m red",
@@ -325,9 +326,8 @@ describe("search boundary", () => {
 		} finally { setSystemTime(); }
 	});
 
-	it("canonicalizes nested percent-encoded source URLs before rendering and enrichment", async () => {
+	it("preserves opaque percent-encoded source URLs through rendering and enrichment", async () => {
 		const nested = "https://help.openai.com/en/articles/20001106-codex-rate-card%25252525252560.apk";
-		const canonical = "https://help.openai.com/en/articles/20001106-codex-rate-card";
 		let fetchedUrl = "";
 		const tool = createWebSearchTool(makeProvider(async (request) => ({
 			query: request.query,
@@ -339,17 +339,18 @@ describe("search boundary", () => {
 		})), {
 			fetcher: async (request) => {
 				fetchedUrl = request.url;
-				return { url: canonical, content: "Rate card", contentTrust: "untrusted", outputFormat: "markdown", extraction: "markdown", fetchedAt: "2026-01-01T00:00:00.000Z", status: 200, redirectCount: 0, bytesRead: 9, truncated: false, offset: 0, warnings: [] };
+				return { url: nested, content: "Rate card", contentTrust: "untrusted", outputFormat: "markdown", extraction: "markdown", fetchedAt: "2026-01-01T00:00:00.000Z", status: 200, redirectCount: 0, bytesRead: 9, truncated: false, offset: 0, warnings: [] };
 			},
 		});
 		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
-		expect(result.details?.results[0]).toMatchObject({ url: canonical, sourceUrl: nested });
-		expect(fetchedUrl).toBe(canonical);
+		expect(result.details?.results[0]).toMatchObject({ url: nested });
+		expect(result.details?.results[0]?.sourceUrl).toBeUndefined();
+		expect(fetchedUrl).toBe(nested);
 		const content = result.content[0];
 		expect(content.type).toBe("text");
 		if (content.type === "text") {
-			expect(content.text).toContain(canonical);
-			expect(content.text).not.toContain("%252525");
+			expect(content.text).toContain(nested);
+			expect(content.text).toContain("%252525");
 			expect(content.text).toContain("the rate card");
 		}
 	});

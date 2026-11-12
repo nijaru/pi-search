@@ -198,7 +198,10 @@ export function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["us
 		...(usage.rateLimits === undefined ? {} : {
 			rateLimits: {
 				windows: usage.rateLimits.windows.slice(0, 8).map((window) => ({
-					...window,
+					...(window.limit === undefined ? {} : { limit: window.limit }),
+					...(window.remaining === undefined ? {} : { remaining: window.remaining }),
+					...(window.resetAfterMs === undefined ? {} : { resetAfterMs: window.resetAfterMs }),
+					...(window.resetAt === undefined ? {} : { resetAt: window.resetAt.slice(0, 100) }),
 					...(window.scope === undefined ? {} : { scope: window.scope.slice(0, 32) }),
 				})),
 				...(usage.rateLimits.retryAfterMs === undefined ? {} : { retryAfterMs: usage.rateLimits.retryAfterMs }),
@@ -212,7 +215,7 @@ export function compactUsage(usage: SearchResponse["usage"]): string | undefined
 	if (usage === undefined) return undefined;
 	const parts: string[] = [];
 	if (usage.costUsd !== undefined) parts.push(`cost $${usage.costUsd.toFixed(6)}`.replace(/0+$/, "").replace(/\.$/, ""));
-	if (usage.billedUnits !== undefined && !(usage.billedUnit === "tokens" && usage.totalTokens === usage.billedUnits)) parts.push(`${usage.billedUnits} ${usage.billedUnit ?? "billed units"}`);
+	if (usage.billedUnits !== undefined && !(usage.billedUnit === "tokens" && usage.totalTokens === usage.billedUnits)) parts.push(`${usage.billedUnits} ${usage.billedUnit === undefined ? "billed units" : compactText(usage.billedUnit, 100)}`);
 	if (usage.totalTokens !== undefined) parts.push(`${usage.totalTokens} tokens`);
 	if (usage.searchQueries !== undefined) parts.push(`${usage.searchQueries} search quer${usage.searchQueries === 1 ? "y" : "ies"}`);
 	if (usage.rateLimits !== undefined) {

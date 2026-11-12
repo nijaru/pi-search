@@ -105,7 +105,7 @@ describe("CloudflareProvider", () => {
 		const cases: readonly Partial<SearchRequest>[] = [
 			{ domains: { include: ["example.com"] } }, { domains: { exclude: ["example.com"] } },
 			{ dateRange: { from: "2026-01-01" } }, { dateRange: { to: "2026-01-01" } },
-			{ social: { includeHandles: ["example"] } }, { social: { understandImages: false } },
+			{ social: { includeHandles: ["example"] } }, { social: { understandImages: true } },
 			{ executionModel: "model" }, { searchContextSize: "low" }, { returnTokenBudget: "default" },
 			{ externalWebAccess: false }, { externalWebAccess: true },
 			{ userLocation: { type: "approximate", country: "US" } },
@@ -118,6 +118,10 @@ describe("CloudflareProvider", () => {
 		expect(calls).toBe(0);
 	});
 
+	it("treats empty filters and disabled media understanding as no-op defaults", async () => {
+		const result = await search(provider(), { query: "q", domains: {}, social: { includeHandles: [], understandImages: false, understandVideos: false } });
+		expect(result.results).toHaveLength(1);
+	});
 	it("warns on mode hints without claiming to apply them", async () => {
 		for (const mode of ["keyword", "fresh"] as const) {
 			const result = await search(provider(), { query: "q", mode });

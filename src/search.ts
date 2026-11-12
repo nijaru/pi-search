@@ -180,26 +180,6 @@ function normalizeSocial(value: SearchRequest["social"]): SearchRequest["social"
 		const overlap = includeHandles.find((handle) => excluded.has(handle));
 		if (overlap !== undefined) throw invalidRequest(`Search social handle cannot be both included and excluded: ${overlap}`);
 	}
-	// `false` is the documented default for media understanding, but provider
-	// adapters still validate the raw normalized object. The execution boundary
-	// strips these no-ops before dispatch so a false-only object does not force a
-	// provider capability requirement or reach a provider that rejects it.
-	const understandImages = value.understandImages;
-	const understandVideos = value.understandVideos;
-	if (includeHandles === undefined && excludeHandles === undefined && understandImages === undefined && understandVideos === undefined) return undefined;
-	return {
-		...(includeHandles === undefined ? {} : { includeHandles }),
-		...(excludeHandles === undefined ? {} : { excludeHandles }),
-		...(understandImages === undefined ? {} : { understandImages }),
-		...(understandVideos === undefined ? {} : { understandVideos }),
-	};
-}
-
-/** Remove social fields that request nothing; a false media flag is the default. */
-function dispatchSocial(value: SearchRequest["social"]): SearchRequest["social"] | undefined {
-	if (value === undefined) return undefined;
-	const includeHandles = value.includeHandles === undefined || value.includeHandles.length === 0 ? undefined : value.includeHandles;
-	const excludeHandles = value.excludeHandles === undefined || value.excludeHandles.length === 0 ? undefined : value.excludeHandles;
 	const understandImages = value.understandImages === true ? true : undefined;
 	const understandVideos = value.understandVideos === true ? true : undefined;
 	if (includeHandles === undefined && excludeHandles === undefined && understandImages === undefined && understandVideos === undefined) return undefined;
@@ -364,7 +344,6 @@ export async function executeSearch(
 	options: ExecuteSearchOptions = {},
 ): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
-	const dispatchRequest: SearchRequest = { ...normalized, social: dispatchSocial(normalized.social) };
 	const timeoutMs = searchTimeoutMs(provider.id, options);
 	if (options.signal?.aborted) {
 		throw toSearchToolError(
@@ -420,10 +399,10 @@ export async function executeSearch(
 		}, timeoutMs);
 	});
 
-	const providerCall = Promise.resolve().then(() => provider.search(dispatchRequest, controller.signal, options.context ?? {}));
+	const providerCall = Promise.resolve().then(() => provider.search(normalized, controller.signal, options.context ?? {}));
 	try {
 		const response = await Promise.race([providerCall, timedOut, canceled]);
-		return cleanupSearchResponse(response, dispatchRequest, provider.id);
+		return cleanupSearchResponse(response, normalized, provider.id);
 	} catch (error) {
 		throw toSearchToolError(error, provider.id);
 	} finally {

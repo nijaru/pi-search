@@ -455,6 +455,7 @@ describe("web_research", () => {
 	});
 
 	it("bounds adversarial usage metadata without losing reported cost", async () => {
+		const hostileText = "s".repeat(10_000);
 		const selected: Provider = {
 			...provider(),
 			search: async (request) => ({
@@ -468,7 +469,7 @@ describe("web_research", () => {
 					billedUnits: 3,
 					billedUnit: "u".repeat(200_000),
 					rateLimits: {
-						windows: Array.from({ length: 5_000 }, () => ({ limit: 10, remaining: 9, scope: "s".repeat(10_000) })),
+						windows: Array.from({ length: 5_000 }, () => ({ limit: 10, remaining: 9, scope: hostileText, resetAt: hostileText, unexpected: hostileText })),
 						retryAfterMs: 250,
 					},
 				},
@@ -479,7 +480,8 @@ describe("web_research", () => {
 		expect(result.usage?.billedUnit?.length).toBeLessThanOrEqual(100);
 		expect(result.usage?.rateLimits?.windows.length).toBeLessThanOrEqual(8);
 		expect(result.usage?.rateLimits?.retryAfterMs).toBe(250);
-		expect(result.usage?.rateLimits?.windows.every((window) => (window.scope?.length ?? 0) <= 32)).toBe(true);
+		expect(result.usage?.rateLimits?.windows.every((window) => (window.scope?.length ?? 0) <= 32 && (window.resetAt?.length ?? 0) <= 100)).toBe(true);
+		expect(result.usage?.rateLimits?.windows[0]).not.toHaveProperty("unexpected");
 		expect(result.results).toHaveLength(1);
 		expect(new TextEncoder().encode(JSON.stringify(result)).byteLength).toBeLessThanOrEqual(256_000);
 	});
