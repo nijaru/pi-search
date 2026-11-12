@@ -404,16 +404,25 @@ export async function readFxTwitter(target: XUrl, read: Reader, maxReplies?: num
 			if (!usablePost(entry)) { warnings.add("Partial reply sample: one or more replies are unavailable."); continue; }
 			if (!threadIds.has(String(entry.id)) && !candidates.has(String(entry.id))) candidates.set(String(entry.id), entry);
 		}
-		// Accept only replies whose parent chain reaches the requested focal post,
-		// not replies to unrelated ancestors returned by the conversation endpoint.
+		// Resolve through both comments and author continuations, but never accept
+		// replies to unrelated ancestors. Memoization bounds traversal to the size
+		// of the graph even when many candidates share a deep or cyclic branch.
+		const connections = new Map<string, boolean>([[target.postId, true]]);
 		const connected = (post: ObjectValue): boolean => {
-			const seen = new Set<string>([String(post.id)]);
-			for (let parent = parentId(post); parent; parent = parentId(candidates.get(parent)!)) {
-				if (parent === target.postId) return true;
-				if (seen.has(parent) || !candidates.has(parent)) return false;
-				seen.add(parent);
+			const path = new Set<string>();
+			let current: ObjectValue | undefined = post;
+			let reachesFocal = false;
+			while (current) {
+				const postId = String(current.id);
+				const cached = connections.get(postId);
+				if (cached !== undefined) { reachesFocal = cached; break; }
+				if (path.has(postId)) break;
+				path.add(postId);
+				const parent = parentId(current);
+				current = parent === undefined ? undefined : candidates.get(parent) ?? posts.get(parent);
 			}
-			return false;
+			for (const postId of path) connections.set(postId, reachesFocal);
+			return reachesFocal;
 		};
 		const replies: string[] = [];
 		for (const entry of candidates.values()) {

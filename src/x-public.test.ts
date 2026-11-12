@@ -208,6 +208,17 @@ describe("readFxTwitter", () => {
 		expect(result.content).not.toContain("Extra comment");
 		expect(result.warnings.join(" ")).toContain("not exhaustive");
 	});
+	it("connects replies through author continuations but not through ancestors or cyclic branches", async () => {
+		const reply = (id: string, parent: string) => post(id, parent, { text: `Comment ${id}`, author: { id: "43", screen_name: "reader" } });
+		const fixture = reader({ ...payload(post("100", "90"), [post("90"), post("101", "100")]), replies: [
+			reply("200", "101"), reply("201", "90"), reply("202", "203"), reply("203", "202"), reply("204", "100"),
+		] });
+		const result = await readFxTwitter(target(), fixture.read, 10);
+		expect(result.replyCount).toBe(2);
+		expect(result.content).toContain("Comment 200");
+		expect(result.content).toContain("Comment 204");
+		for (const id of ["201", "202", "203"]) expect(result.content).not.toContain(`Comment ${id}`);
+	});
 	it("does not misreport missing reply data as zero comments and validates reply limits before dispatch", async () => {
 		await expect(readFxTwitter(target(), reader(payload()).read, 2)).rejects.toMatchObject({ kind: "extraction" });
 		for (const limit of [0, -1, 21, 1.5, NaN]) {
