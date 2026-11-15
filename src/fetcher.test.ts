@@ -109,16 +109,21 @@ describe("direct content fetch", () => {
 		).rejects.toMatchObject({ kind: "extraction" });
 	});
 
-	it("rejects binary and PDF content before reading it", async () => {
-		let read = false;
-		const binaryBody = body(["not read"], () => { read = true; });
-		const unsupported = fetchContent(baseRequest, undefined, {
+	it("rejects a mislabeled PDF after reading its invalid signature and closes the body", async () => {
+		let read = false, closed = false;
+		const invalidPdf: ResponseBody = {
+			...body([], () => { closed = true; }),
+			async *[Symbol.asyncIterator]() {
+				read = true;
+				yield new TextEncoder().encode("not a PDF");
+			},
+		};
+		await expect(fetchContent(baseRequest, undefined, {
 			lookup: publicLookup,
-			transport: transportFor("", "application/pdf", { body: binaryBody }),
-		});
-		await expect(unsupported).rejects.toMatchObject({ kind: "extraction" });
-		await expect(unsupported).rejects.toThrow("valid PDF header");
+			transport: transportFor("", "application/pdf", { body: invalidPdf }),
+		})).rejects.toMatchObject({ kind: "extraction", message: expect.stringContaining("valid PDF header") });
 		expect(read).toBe(true);
+		expect(closed).toBe(true);
 	});
 
 	it("uses bounded pdftotext for explicit PDF page limits", async () => {

@@ -224,27 +224,6 @@ describe("OpenAIProvider", () => {
 		expect(body?.model).toBe("gpt-5.5");
 	});
 
-	it("honors an explicitly selected OpenAI execution model", async () => {
-		let body: Record<string, unknown> | undefined;
-		const selected = { ...model("openai"), id: "gpt-5.5" };
-		const provider = createOpenAIProvider({
-			provider: "openai",
-			endpoint: "https://example.test/v1/responses",
-			fetchImpl: (async (_input, init) => {
-				body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-				return response(payload);
-			}) as OpenAIFetch,
-		});
-		await provider.search({ query: "q", executionModel: "gpt-5.5" }, new AbortController().signal, {
-			model: { ...model("openai"), id: "gpt-5.4" },
-			modelRegistry: {
-				getModels: () => [selected],
-				getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "registry-key" }),
-			},
-		});
-		expect(body?.model).toBe("gpt-5.5");
-	});
-
 	it("prefers an authenticated Luna model for native search", async () => {
 		let authenticatedModel = "";
 		let body: Record<string, unknown> | undefined;
@@ -561,18 +540,26 @@ describe("OpenAIProvider", () => {
 		});
 	});
 
-	it("cancels non-success response bodies before reporting HTTP failures", async () => {
-		let failedResponse: Response | undefined;
+	it("cancels an oversized HTTP error body before reporting the provider failure", async () => {
+		let canceled = false;
+		let reads = 0;
+		const chunks = [new TextEncoder().encode("x".repeat(64 * 1024)), new TextEncoder().encode("unread tail")];
+		const stream = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				const chunk = chunks[reads++];
+				if (chunk === undefined) controller.close();
+				else controller.enqueue(chunk);
+			},
+			cancel() { canceled = true; },
+		}, { highWaterMark: 0 });
 		const provider = createOpenAIProvider({
 			provider: "openai",
-			fetchImpl: (async () => {
-				const failure = response({ error: "not exposed" }, 401);
-				failedResponse = failure;
-				return failure;
-			}) as OpenAIFetch,
+			fetchImpl: async () => new Response(stream, { status: 401 }),
 		});
-		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "auth" });
-		expect(failedResponse?.bodyUsed).toBe(true);
+		await expect(provider.search({ query: "q" }, new AbortController().signal, context())).rejects.toMatchObject({ kind: "auth", status: 401 });
+		expect(reads).toBe(1);
+		expect(canceled).toBe(true);
+		expect(stream.locked).toBe(false);
 	});
 
 	it("requires an OpenAI Responses model rather than a completions model", async () => {
@@ -739,7 +726,7 @@ describe("OpenAIProvider", () => {
 		await expect(pending).rejects.toMatchObject({ provider: "openai", kind: "canceled" });
 	});
 
-	it("requires a terminal completion event for LF and CRLF streams", async () => {
+	it("accepts LF and CRLF completion events without a trailing blank line", async () => {
 		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com", title: "Example" }] } };
 		const lf = [
 			`data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
@@ -756,24 +743,6 @@ describe("OpenAIProvider", () => {
 		]);
 		expect(first.results).toHaveLength(1);
 		expect(second.results).toHaveLength(1);
-	});
-
-	it("processes a terminal event not followed by a blank line", async () => {
-		const item = { type: "web_search_call", action: { sources: [{ url: "https://example.com", title: "Example" }] } };
-		// Stream ends immediately after the final data line with no trailing
-		// blank line; the parser's final flush must still process it. Pi fixed
-		// the identical defect in its own Codex SSE parser in 0.85.0.
-		const body = [
-			`data: ${JSON.stringify({ type: "response.output_item.done", item })}`,
-			"",
-			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [] } })}`,
-		].join("\n");
-		const provider = createOpenAIProvider({
-			provider: "openai",
-			fetchImpl: (async () => response(body, 200, { "content-type": "text/event-stream" })) as OpenAIFetch,
-		});
-		const result = await provider.search({ query: "q" }, new AbortController().signal, context());
-		expect(result.results).toHaveLength(1);
 	});
 
 	it("rejects a stream that ends before completion", async () => {

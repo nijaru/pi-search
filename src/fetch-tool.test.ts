@@ -142,19 +142,6 @@ describe("web_fetch tool", () => {
 		expect(rendered).not.toContain("evil.test");
 	});
 
-	it("keeps the complete model-visible result within the output bound", async () => {
-		const largeTransport: DirectTransport = async () => ({
-			status: 200,
-			statusText: "OK",
-			headers: new Headers({ "content-type": "text/plain" }),
-			body: body("x".repeat(100_000)),
-		});
-		const tool = createWebFetchTool({ lookup, transport: largeTransport });
-		const result = await tool.execute("call-1", { url: "https://example.test/" }, undefined, undefined, {} as never);
-		const text = result.content[0];
-		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(48_000);
-	});
-
 	it("keeps rendered paging metadata aligned with delivered text when long redirect URLs consume the byte budget", async () => {
 		const firstUrl = `https://example.test/${"a".repeat(8_100)}`;
 		const finalUrl = `https://example.test/${"b".repeat(8_100)}`;

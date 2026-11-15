@@ -3,6 +3,7 @@ import { parseHTML } from "linkedom";
 import { extractXDom } from "./x-dom.mjs";
 
 const target = { url: "https://x.com/alice/status/123", postId: "123" };
+const articleTarget = { url: "https://x.com/alice/article/123", postId: "123" };
 const post = (author: string, id: string, text: string) => `<article data-testid="tweet"><a href="/${author}/status/${id}"><time datetime="2026-01-01">date</time></a><div data-testid="tweetText">${text}</div></article>`;
 
 describe("fixed X DOM extraction", () => {
@@ -34,7 +35,6 @@ describe("fixed X DOM extraction", () => {
 
 	it("keeps Article code but strips active HTML and unsafe links", () => {
 		const { document } = parseHTML('<html><body><div hidden><h1>Title</h1><div class="x-article-body"><pre><code>answer(42)</code></pre><p onclick="evil()">text<a href="javascript:evil()">unsafe</a><a href="/alice/status/123">source</a></p><script>evil()</script></div></div></body></html>');
-		const articleTarget = { url: "https://x.com/alice/article/123", postId: "123" };
 		const result = extractXDom(document, articleTarget)!;
 		expect(result.title).toBe("Title");
 		expect(result.html).toContain("<pre><code>answer(42)</code></pre>");
@@ -45,8 +45,12 @@ describe("fixed X DOM extraction", () => {
 		expect(extractXDom(document, target)).toBeNull();
 	});
 	it("rejects login chrome, unrelated posts, and ambiguous Article bodies", () => {
-		for (const html of ["<p>Sign in to X</p>", post("alice", "124", "unrelated"), '<div class="x-article-body">one</div><div class="x-article-body">two</div>']) {
-			expect(extractXDom(parseHTML(html).document, target)).toBeNull();
+		for (const [html, selected] of [
+			["<p>Sign in to X</p>", target],
+			[post("alice", "124", "unrelated"), target],
+			['<div class="x-article-body">one</div><div class="x-article-body">two</div>', articleTarget],
+		] as const) {
+			expect(extractXDom(parseHTML(html).document, selected)).toBeNull();
 		}
 	});
 });

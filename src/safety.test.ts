@@ -67,14 +67,23 @@ test("search and research report nested usage to Pi", async () => {
 	expect(research.usage).toMatchObject({ input: 20, output: 4, totalTokens: 24, cost: { total: 0.2 } });
 });
 
-test("output bounds cover citations and preserve source alignment", async () => {
+test("output bounds retain aligned cited answers and drop summaries whose sources were removed", async () => {
 	const results = Array.from({ length: 20 }, (_, i) => ({ url: `https://example.com/${i}/${"a".repeat(7900)}`, provider: "exa" as const, searchQuery: "q", title: "x".repeat(500) }));
-	const tool = createWebSearchTool(adapter(async () => ({ ...evidence, results, answer: { text: "Answer", contentTrust: "untrusted", provider: "exa", citations: results.map(({ url, title }) => ({ url, title })) } })));
-	const result = await tool.execute("call", { query: "q", maxResults: 20 }, signal, undefined, {} as never);
-	expect(Buffer.byteLength(JSON.stringify(result.details, null, 2))).toBeLessThanOrEqual(45000);
-	expect(Buffer.byteLength(result.content.map(item => item.type === "text" ? item.text : "").join(""))).toBeLessThanOrEqual(45000);
-	const urls = new Set(result.details?.results.map(source => source.url));
-	for (const citation of result.details?.answer?.citations ?? []) expect(urls.has(citation.url)).toBe(true);
+	for (const cited of [[results[0]!], results]) {
+		const citations = cited.map(({ url, title }) => ({ url, title }));
+		const tool = createWebSearchTool(adapter(async () => ({ ...evidence, results, answer: { text: "Answer", contentTrust: "untrusted", provider: "exa", citations } })));
+		const result = await tool.execute("call", { query: "q", maxResults: 20, advanced: { answerMode: "auto" } }, signal, undefined, {} as never);
+		expect(Buffer.byteLength(JSON.stringify(result.details, null, 2))).toBeLessThanOrEqual(45000);
+		expect(Buffer.byteLength(result.content.map(item => item.type === "text" ? item.text : "").join(""))).toBeLessThanOrEqual(45000);
+		expect(result.details!.results.length).toBeGreaterThan(0);
+		expect(result.details!.results.length).toBeLessThan(results.length);
+		if (cited.length === 1) {
+			expect(result.details!.answer).toMatchObject({ text: "Answer", citations });
+			expect(result.details!.results.map(source => source.url)).toContain(cited[0]!.url);
+		} else {
+			expect(result.details!.answer).toBeUndefined();
+		}
+	}
 });
 
 test("Codex accepts header-only auth and preserves explicit account identity", async () => {
