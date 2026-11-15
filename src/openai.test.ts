@@ -445,38 +445,32 @@ describe("OpenAIProvider", () => {
 		expect(() => buildOpenAIRequest({ query: "q", social: { includeHandles: ["xai"] } }, "openai")).toThrow(/social\/X/);
 	});
 
-	it("cancels a pending error body when the caller aborts", async () => {
-		let canceled = false;
-		let fetchStartedResolve!: () => void;
-		const fetchStarted = new Promise<void>((resolve) => { fetchStartedResolve = resolve; });
-		let closeTimer: ReturnType<typeof setTimeout> | undefined;
-		const stream = new ReadableStream<Uint8Array>({
-			start(controller) {
-				controller.enqueue(new TextEncoder().encode("{"));
-				closeTimer = setTimeout(() => controller.close(), 200);
-			},
-			cancel() {
-				canceled = true;
-				if (closeTimer !== undefined) clearTimeout(closeTimer);
-			},
-		});
-		const provider = createOpenAIProvider({
-			provider: "openai",
-			fetchImpl: (async () => {
-				fetchStartedResolve();
-				return new Response(stream, { status: 503 });
-			}) as OpenAIFetch,
-		});
-		const controller = new AbortController();
-		const pending = provider.search({ query: "q" }, controller.signal, context());
-		await fetchStarted;
-		controller.abort();
-		const settled = await Promise.race([
-			pending.then(() => true, () => true),
-			Bun.sleep(100).then(() => false),
-		]);
-		expect(settled).toBe(true);
-		expect(canceled).toBe(true);
+	it("classifies cancellation during HTTP error diagnostics without losing response metadata", async () => {
+		for (const status of [401, 429, 503]) {
+			let reading!: () => void;
+			const started = new Promise<void>(resolve => { reading = resolve; });
+			let canceled = false;
+			const stream = new ReadableStream<Uint8Array>({
+				pull() { reading(); },
+				cancel() { canceled = true; },
+			}, { highWaterMark: 0 });
+			const provider = createOpenAIProvider({
+				provider: "openai",
+				fetchImpl: async () => new Response(stream, { status, headers: {
+					"x-request-id": "cancel-id", "retry-after": "2", "x-ratelimit-remaining": "4",
+				} }),
+			});
+			const controller = new AbortController();
+			const pending = provider.search({ query: "q" }, controller.signal, context()).catch((error: unknown) => error);
+			await started;
+			controller.abort(new Error("private abort reason"));
+			expect(await pending).toMatchObject({
+				provider: "openai", kind: "canceled", message: "Search canceled", retryable: false, fallbackSafe: false,
+				status, requestId: "cancel-id", retryAfterMs: 2_000, rateLimits: { windows: [{ remaining: 4 }] },
+			});
+			expect(canceled).toBe(true);
+			expect(stream.locked).toBe(false);
+		}
 	});
 
 	it("preserves success rate-limit metadata and failure request IDs", async () => {

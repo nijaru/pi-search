@@ -1,4 +1,4 @@
-import { describe, expect, it, setSystemTime } from "bun:test";
+import { describe, expect, it, jest, setSystemTime } from "bun:test";
 import type { FetchedContent, Provider, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
@@ -264,46 +264,69 @@ describe("search boundary", () => {
 	});
 
 	it("gives a primary the full deadline instead of halving it for an unused fallback", async () => {
-		let fallbackCalls = 0;
-		const primary: Provider = {
-			id: "openai",
-			capabilities: {},
-			profile: { auth: "modelRegistry", costModel: "unknown" },
-			search: async () => {
-				await Bun.sleep(1_300);
-				return successResponse();
-			},
-		};
-		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
-		const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_400 });
-		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
-		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
-		expect(fallbackCalls).toBe(0);
+		jest.useFakeTimers({ now: 0 });
+		try {
+			let primaryStarted!: () => void;
+			const started = new Promise<void>(resolve => { primaryStarted = resolve; });
+			let fallbackCalls = 0;
+			const primary: Provider = {
+				...makeProvider(async () => {
+					const delay = new Promise<void>(resolve => setTimeout(resolve, 1_300));
+					primaryStarted();
+					await delay;
+					return successResponse();
+				}),
+				id: "openai",
+			};
+			const fallback: Provider = { ...makeProvider(async () => { fallbackCalls++; return successResponse(); }), id: "exa" };
+			const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_400 });
+			const outcome = tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)
+				.then(result => ({ result }), error => ({ error }));
+			await started;
+			jest.advanceTimersByTime(1_300);
+			expect(await outcome).toMatchObject({ result: { details: { provider: "openai", attemptedProviders: ["openai"] } } });
+			expect(fallbackCalls).toBe(0);
+			expect(jest.getTimerCount()).toBe(0);
+		} finally { jest.useRealTimers(); }
 	});
 
 	it("can safely fall back after the primary exceeds half the overall budget", async () => {
-		let fallbackCalls = 0;
-		const primary: Provider = {
-			id: "openai",
-			capabilities: {},
-			profile: { auth: "modelRegistry", costModel: "unknown" },
-			search: async () => {
-				await Bun.sleep(1_400);
-				throw createProviderError({ provider: "openai", kind: "auth", fallbackSafe: true, message: "primary unavailable", retryable: false });
-			},
-		};
-		const fallback: Provider = {
-			...makeProvider(async (request) => {
-				fallbackCalls += 1;
-				await Bun.sleep(200);
-				return successResponse(request.query);
-			}),
-			id: "exa",
-		};
-		const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_600 });
-		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
-		expect(fallbackCalls).toBe(1);
-		expect(result.details).toMatchObject({ provider: "exa", attemptedProviders: ["openai", "exa"] });
+		jest.useFakeTimers({ now: 0 });
+		try {
+			let primaryStarted!: () => void, fallbackStarted!: () => void;
+			const started = new Promise<void>(resolve => { primaryStarted = resolve; });
+			const fallbackReady = new Promise<void>(resolve => { fallbackStarted = resolve; });
+			let fallbackCalls = 0;
+			const primary: Provider = {
+				...makeProvider(async () => {
+					const delay = new Promise<void>(resolve => setTimeout(resolve, 1_400));
+					primaryStarted();
+					await delay;
+					throw createProviderError({ provider: "openai", kind: "auth", fallbackSafe: true, message: "primary unavailable", retryable: false });
+				}),
+				id: "openai",
+			};
+			const fallback: Provider = {
+				...makeProvider(async request => {
+					fallbackCalls++;
+					const delay = new Promise<void>(resolve => setTimeout(resolve, 200));
+					fallbackStarted();
+					await delay;
+					return successResponse(request.query);
+				}),
+				id: "exa",
+			};
+			const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_600 });
+			const outcome = tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)
+				.then(result => ({ result }), error => ({ error }));
+			await started;
+			jest.advanceTimersByTime(1_400);
+			await Promise.race([fallbackReady, outcome]);
+			jest.advanceTimersByTime(200);
+			expect(await outcome).toMatchObject({ result: { details: { provider: "exa", attemptedProviders: ["openai", "exa"] } } });
+			expect(fallbackCalls).toBe(1);
+			expect(jest.getTimerCount()).toBe(0);
+		} finally { jest.useRealTimers(); }
 	});
 
 	it("does not dispatch a safe fallback after the shared deadline expires", async () => {

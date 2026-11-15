@@ -129,13 +129,16 @@ function sanitizeErrorDiagnostic(body: string, secrets: readonly string[] = []):
 }
 
 async function readErrorDiagnostic(response: Response, secrets: readonly string[] = [], signal?: AbortSignal): Promise<string | undefined> {
+	let diagnostic: string | undefined;
 	try {
 		const body = await readBoundedResponseText(response, MAX_ERROR_BODY_BYTES, signal);
-		return sanitizeErrorDiagnostic(body, secrets);
+		diagnostic = sanitizeErrorDiagnostic(body, secrets);
 	} catch {
 		await cancelResponseBody(response);
-		return undefined;
 	}
+	// Diagnostics are best effort; cancellation must not become an HTTP rejection.
+	if (signal?.aborted) throw createProviderError({ provider: "openai", kind: "canceled", message: "Search canceled", status: response.status, retryable: false, cause: signal.reason });
+	return diagnostic;
 }
 
 function objectValue(value: unknown, label: string, provider: ProviderId = "openai"): Record<string, unknown> {
@@ -778,17 +781,14 @@ export class OpenAIProvider implements Provider {
 		const requestId = response.headers.get("x-request-id") ?? response.headers.get("x-openai-request-id") ?? undefined;
 		const retryAfterMs = parseRetryAfter(response.headers);
 		const responseRateLimits = parseProviderRateLimits(response.headers);
-		if (response.status === 401 || response.status === 403) {
-			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: "auth", fallbackSafe: true, message: `OpenAI web search authentication failed (HTTP ${response.status})${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: false });
-		}
-		if (response.status === 429) {
-			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: "rateLimit", message: `OpenAI web search rate limit exceeded${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: true });
-		}
 		if (response.status < 200 || response.status >= 300) {
-			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal);
-			throw createProviderError({ provider: this.id, kind: response.status === 400 || response.status === 422 ? "badRequest" : "http", message: `OpenAI web search failed with HTTP ${response.status}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status: response.status, requestId, retryAfterMs, rateLimits: responseRateLimits, retryable: response.status === 408 || response.status === 425 || response.status >= 500 });
+			const status = response.status;
+			const diagnostic = await readErrorDiagnostic(response, diagnosticSecrets, signal)
+				.catch(error => addResponseMetadata(error, this.id, requestId, retryAfterMs, responseRateLimits));
+			const kind = status === 401 || status === 403 ? "auth" : status === 429 ? "rateLimit" : status === 400 || status === 422 ? "badRequest" : "http";
+			const description = kind === "auth" ? `authentication failed (HTTP ${status})` : kind === "rateLimit" ? "rate limit exceeded" : `failed with HTTP ${status}`;
+			throw createProviderError({ provider: this.id, kind, fallbackSafe: kind === "auth", message: `OpenAI web search ${description}${diagnostic === undefined ? "" : `: ${diagnostic}`}`, status, requestId, retryAfterMs, rateLimits: responseRateLimits,
+				retryable: kind === "rateLimit" || status === 408 || status === 425 || status >= 500 });
 		}
 
 		try {
