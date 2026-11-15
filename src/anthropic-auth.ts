@@ -47,7 +47,7 @@ export class AnthropicSearchAuth {
 		// a bearer header. Do not dispatch an incomplete subscription request.
 		if ((apiKey?.startsWith("sk-ant-oat") && !headers.has("authorization") && !headers.has("x-api-key"))
 			|| /^Bearer\s+sk-ant-oat/i.test(headers.get("authorization") ?? "")) {
-			throw createProviderError({ provider: "anthropic", kind: "unsupported", message: "Anthropic subscription search is not supported; use an API key, API bearer credential, or workload identity", retryable: false });
+			throw createProviderError({ provider: "anthropic", kind: "unsupported", fallbackSafe: true, message: "Anthropic subscription search is not supported; use an API key, API bearer credential, or workload identity", retryable: false });
 		}
 		if (apiKey?.trim() && !hasExplicitHeader(sources, "x-api-key") && !headers.has("authorization")) {
 			headers.set("x-api-key", apiKey);

@@ -4,7 +4,7 @@ import { createProviderError } from "./errors";
 import { SafeFetchError } from "./fetch-errors";
 import { createWebSearchTool, renderSearchResponse, renderSearchResult } from "./search-tool";
 import { createSearchRouter } from "./router";
-import { executeSearch, executeSearchSelection, validateSearchRequest } from "./search";
+import { executeSearch, executeSearchPlan, validateSearchRequest } from "./search";
 
 function makeProvider(search: Provider["search"]): Provider {
 	return {
@@ -72,7 +72,7 @@ describe("search boundary", () => {
 			return successResponse();
 		});
 		const route = createSearchRouter({ providers: [provider], braveFreeCapacityConfigured: true });
-		await executeSearchSelection(route(request, {} as never), request);
+		await executeSearchPlan(route(request, {} as never), request);
 	});
 
 	it("normalizes empty domain and handle lists and strips false-only media flags before dispatch", async () => {
@@ -106,8 +106,8 @@ describe("search boundary", () => {
 		const fallback: Provider = { ...primary, id: "exa", search: async () => {
 			throw createProviderError({ provider: "exa", kind: "malformed", message: "no sources", retryable: false, requestId: "billed", usage });
 		} };
-		const selection = { provider: primary, fallbacks: [fallback], automatic: true };
-		await expect(executeSearchSelection(selection, { query: "q" })).rejects.toMatchObject({ provider: "exa", requestId: "billed", usage });
+		const selection = { providers: [primary, fallback] as const };
+		await expect(executeSearchPlan(selection, { query: "q" })).rejects.toMatchObject({ provider: "exa", requestId: "billed", usage });
 		const result = await createWebSearchTool(() => selection).execute("call", { query: "q" }, undefined, undefined, {} as never);
 		expect(result).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } } });
 	});
@@ -122,14 +122,14 @@ describe("search boundary", () => {
 			}),
 			id: "exa",
 		};
-		const error = await executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" }).then(
+		const error = await executeSearchPlan({ providers: [primary, fallback] as const }, { query: "q" }).then(
 			() => { throw new Error("expected the automatic fallback to fail"); },
 			(failure: unknown) => failure as Error & { code: string },
 		);
 		expect(error.code).toBe("WEB_SEARCH_MALFORMED_RESPONSE");
 		expect(error.message.match(/WEB_SEARCH_/g)).toHaveLength(1);
 		expect(error.message).toContain("bad payload");
-		expect(error.message).toContain("primary provider brave also failed: primary unavailable");
+		expect(error.message).toContain("earlier attempts: brave: primary unavailable");
 	});
 
 	it("strips terminal controls from remote TUI identifiers and the error fallback", async () => {
@@ -227,11 +227,11 @@ describe("search boundary", () => {
 			...makeProvider(async (request) => { fallbackCalls += 1; return successResponse(request.query); }),
 			id: "exa",
 		};
-		const response = await executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" });
+		const response = await executeSearchPlan({ providers: [primary, fallback] as const }, { query: "q" });
 		expect(fallbackCalls).toBe(1);
 		expect(response.provider).toBe("exa");
 		expect(response.attemptedProviders).toEqual(["openai", "exa"]);
-		expect(response.warnings).toContainEqual(expect.objectContaining({ code: "provider-fallback", message: expect.stringContaining("bounded automatic fallback") }));
+		expect(response.warnings).toContainEqual(expect.objectContaining({ code: "provider-fallback", message: expect.stringContaining("Used exa after safe failures") }));
 	});
 
 	it("does not fallback after an outcome-unknown network failure", async () => {
@@ -243,7 +243,7 @@ describe("search boundary", () => {
 			search: async () => { throw createProviderError({ provider: "openai", kind: "network", message: "request outcome unknown", retryable: true }); },
 		};
 		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
-		await expect(executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" })).rejects.toMatchObject({ provider: "openai", kind: "network" });
+		await expect(executeSearchPlan({ providers: [primary, fallback] as const }, { query: "q" })).rejects.toMatchObject({ provider: "openai", kind: "network" });
 		expect(fallbackCalls).toBe(0);
 	});
 
@@ -258,7 +258,7 @@ describe("search boundary", () => {
 			}),
 		};
 		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
-		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 100 });
+		const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 100 });
 		await expect(tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never)).rejects.toMatchObject({ code: "WEB_SEARCH_TIMEOUT" });
 		expect(fallbackCalls).toBe(0);
 	});
@@ -275,7 +275,7 @@ describe("search boundary", () => {
 			},
 		};
 		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls += 1; return successResponse(); }), id: "exa" };
-		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 2_400 });
+		const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_400 });
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
 		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
 		expect(fallbackCalls).toBe(0);
@@ -300,7 +300,7 @@ describe("search boundary", () => {
 			}),
 			id: "exa",
 		};
-		const tool = createWebSearchTool(() => ({ provider: primary, fallbacks: [fallback], automatic: true }), { timeoutMs: 2_600 });
+		const tool = createWebSearchTool(() => ({ providers: [primary, fallback] as const }), { timeoutMs: 2_600 });
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {} as never);
 		expect(fallbackCalls).toBe(1);
 		expect(result.details).toMatchObject({ provider: "exa", attemptedProviders: ["openai", "exa"] });
@@ -318,7 +318,7 @@ describe("search boundary", () => {
 		const fallback: Provider = { ...makeProvider(async () => { fallbackCalls++; return successResponse(); }), id: "exa" };
 		try {
 			setSystemTime(started);
-			await expect(executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" }, { timeoutMs: 2_000 })).rejects.toMatchObject({ kind: "timeout" });
+			await expect(executeSearchPlan({ providers: [primary, fallback] as const }, { query: "q" }, { timeoutMs: 2_000 })).rejects.toMatchObject({ kind: "timeout" });
 			expect(fallbackCalls).toBe(0);
 		} finally { setSystemTime(); }
 	});

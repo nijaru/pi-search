@@ -49,7 +49,8 @@ const budget = { maxSteps: 3, maxProviderCalls: 2, maxFetches: 0, timeoutMs: 5_0
 
 describe("web_research", () => {
 	it("runs only caller-supplied queries under one provider and explicit bounds", async () => {
-		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget }, () => provider(false, undefined, ["https://example.com/1", "https://example.com/2"]), context());
+		const selected = provider(false, undefined, ["https://example.com/1", "https://example.com/2"]);
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget }, () => selected, context());
 		expect(result).toMatchObject({ question: "main", providerCalls: 2, stepsCompleted: 2, fetchesCompleted: 0, fetchAttempts: 0, stopReason: "completed" });
 		expect(result.results.map((item) => item.searchQuery)).toEqual(["one", "two"]);
 	});

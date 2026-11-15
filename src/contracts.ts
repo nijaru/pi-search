@@ -431,7 +431,7 @@ export type ResearchStopReason = "completed" | "partial" | "budget" | "deadline"
 
 export interface ResearchResponse {
 	readonly question: string;
-	/** The single adapter selected for the whole research invocation. */
+	/** Last successful backend, or the preferred backend if no search succeeded. */
 	readonly provider: ProviderId;
 	/** Search backend behind a gateway adapter, when applicable. */
 	readonly upstreamProvider?: ProviderId;
@@ -441,11 +441,15 @@ export interface ResearchResponse {
 	readonly fetched: readonly FetchedContent[];
 	readonly stepsCompleted: number;
 	readonly providerCalls: number;
+	/** All extension search attempts in order, including safe rejected fallbacks. */
+	readonly attemptedProviders?: readonly ProviderId[];
 	readonly fetchesCompleted: number;
 	readonly fetchAttempts: number;
 	readonly stopReason: ResearchStopReason;
 	/** Reconciled planning total, including unconfirmed estimates for failed calls. */
 	readonly estimatedCostUsd?: number;
+	/** Executed backends whose cost was neither estimated nor reported. */
+	readonly unknownCostProviders?: readonly ProviderId[];
 	/** Provider-reported usage only; estimates are never reported as billed cost. */
 	readonly usage?: ProviderUsage;
 	readonly warnings: readonly SearchWarning[];
@@ -578,12 +582,9 @@ export interface FetchedContent {
 
 // ─── Provider interface ────────────────────────────────────────────────────
 
-/** A bounded provider choice produced by automatic routing. */
-export interface SearchProviderSelection {
-	readonly provider: Provider;
-	/** At most one alternative; explicit provider hints always leave this empty. */
-	readonly fallbacks: readonly Provider[];
-	readonly automatic: boolean;
+/** Ordered eligible backends. Strict per-call overrides contain exactly one. */
+export interface SearchPlan {
+	readonly providers: readonly [Provider, ...Provider[]];
 }
 
 /**
@@ -675,6 +676,8 @@ export interface Provider {
 	readonly id: ProviderId;
 	readonly capabilities: ProviderCapabilities;
 	readonly profile: ProviderProfile;
+	/** Pure adapter-specific constraint checks; never resolve credentials or perform I/O. */
+	readonly validateRequest?: (request: SearchRequest) => void;
 	/**
 	 * Execute a search. Adapters must:
 	 * - apply supported options and list them in `appliedOptions`;

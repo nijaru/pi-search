@@ -1,4 +1,4 @@
-import type { Provider, ProviderContext, ProviderId, SearchProviderSelection, SearchRequest, SearchResponse } from "./contracts";
+import type { Provider, ProviderContext, ProviderId, SearchPlan, SearchRequest, SearchResponse } from "./contracts";
 import { createProviderError, SearchToolError, toSearchToolError } from "./errors";
 import { cleanupSearchResponse, MAX_SEARCH_DOMAIN_LENGTH } from "./search-cleanup";
 
@@ -297,6 +297,19 @@ export interface ExecuteSearchOptions {
 }
 
 function searchTimeoutMs(provider: ProviderId, options: ExecuteSearchOptions): number {
+	if (options.signal?.aborted) {
+		const timedOut = options.signal.reason instanceof DOMException && options.signal.reason.name === "TimeoutError";
+		throw toSearchToolError(
+			createProviderError({
+				provider,
+				kind: timedOut ? "timeout" : "canceled",
+				message: timedOut ? "Search deadline exceeded" : "Search canceled",
+				retryable: timedOut,
+			}),
+			provider,
+		);
+	}
+
 	const remainingMs = options.deadline === undefined ? undefined : options.deadline - Date.now();
 	if (remainingMs !== undefined && remainingMs <= 0) {
 		throw toSearchToolError(
@@ -326,17 +339,7 @@ export async function executeSearch(
 ): Promise<SearchResponse> {
 	const normalized = validateSearchRequest(request);
 	const timeoutMs = searchTimeoutMs(provider.id, options);
-	if (options.signal?.aborted) {
-		throw toSearchToolError(
-			createProviderError({
-				provider: provider.id,
-				kind: "canceled",
-				message: "Search canceled",
-				retryable: false,
-			}),
-			provider.id,
-		);
-	}
+	const deadline = Date.now() + timeoutMs;
 
 	const controller = new AbortController();
 	let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -365,7 +368,7 @@ export async function executeSearch(
 	const timedOut = new Promise<never>((_, reject) => {
 		rejectTimedOut = reject;
 		timeoutId = setTimeout(() => {
-			controller.abort();
+			controller.abort(new DOMException("Search deadline exceeded", "TimeoutError"));
 			rejectTimedOut?.(
 				toSearchToolError(
 					createProviderError({
@@ -380,7 +383,10 @@ export async function executeSearch(
 		}, timeoutMs);
 	});
 
-	const providerCall = Promise.resolve().then(() => provider.search(normalized, controller.signal, options.context ?? {}));
+	const providerCall = Promise.resolve().then(() => {
+		searchTimeoutMs(provider.id, { ...options, deadline, signal: controller.signal });
+		return provider.search(normalized, controller.signal, options.context ?? {});
+	});
 	try {
 		const response = await Promise.race([providerCall, timedOut, canceled]);
 		return cleanupSearchResponse(response, normalized, provider.id);
@@ -394,65 +400,49 @@ export async function executeSearch(
 	}
 }
 
-function canUseAutomaticFallback(error: unknown): boolean {
-	if (!(error instanceof SearchToolError)) return false;
-	// A successful provider request can be billed before a network, timeout, or
-	// 5xx error reaches us. Only failures that are known to have been rejected
-	// or prevented from dispatching may consume the bounded alternative.
-	if (error.usage !== undefined) return false;
+export function canUseSearchFallback(error: unknown): boolean {
+	if (!(error instanceof SearchToolError) || error.usage !== undefined) return false;
+	if (error.kind !== undefined && ["network", "timeout", "canceled", "malformed", "http", "unknown"].includes(error.kind)) return false;
 	return error.fallbackSafe || ((error.kind === "auth" || error.kind === "rateLimit") && (error.status === 401 || error.status === 403 || error.status === 429));
 }
 
-/** Execute an automatic selection with one shared deadline and at most one visible alternative. */
-export async function executeSearchSelection(
-	selection: SearchProviderSelection,
+/** Single-provider adapters and router plans share the same execution boundary. */
+export function searchPlan(source: Provider | SearchPlan): SearchPlan {
+	return "providers" in source ? source : { providers: [source] };
+}
+
+export type SearchAttempt = typeof executeSearch;
+
+/** Sequential safe fallback, with one deadline and no backend attempted twice by a router plan. */
+export async function executeSearchPlan(
+	plan: SearchPlan,
 	request: SearchRequest,
 	options: ExecuteSearchOptions = {},
-): Promise<SearchResponse> {
+	attempt: SearchAttempt = executeSearch,
+): Promise<SearchResponse & { readonly attemptedProviders: readonly ProviderId[] }> {
 	const normalized = validateSearchRequest(request);
-	const deadline = options.deadline ?? (options.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs);
-	const attemptOptions: ExecuteSearchOptions = deadline === undefined ? options : { ...options, deadline };
-	const candidates = [selection.provider, ...(selection.automatic ? selection.fallbacks.slice(0, 1) : [])];
-	let firstError: SearchToolError | undefined;
-	for (let index = 0; index < candidates.length; index += 1) {
-		const candidate = candidates[index]!;
+	const deadline = options.deadline ?? Date.now() + (options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS);
+	const attemptedProviders: ProviderId[] = [];
+	const failures: string[] = [];
+	for (const candidate of plan.providers) {
+		attemptedProviders.push(candidate.id);
 		try {
-			const response = await executeSearch(candidate, normalized, attemptOptions);
-			const attemptedProviders = candidates.slice(0, index + 1).map((provider) => provider.id);
-			if (index === 0) return { ...response, attemptedProviders };
+			const response = await attempt(candidate, normalized, { ...options, deadline });
 			return {
-				...response,
-				attemptedProviders,
-				warnings: [
+				...response, attemptedProviders,
+				warnings: failures.length === 0 ? response.warnings : [
 					...response.warnings,
-					{ code: "provider-fallback", message: `Provider ${candidates[0]!.id} failed; used ${candidate.id} as the bounded automatic fallback` },
+					{ code: "provider-fallback", message: `Used ${candidate.id} after safe failures: ${failures.join("; ")}` },
 				],
 			};
 		} catch (error) {
-			const toolError = error instanceof SearchToolError ? error : toSearchToolError(error, candidate.id);
-			if (index === 0) firstError = toolError;
-			if (index === 0 && selection.automatic && selection.fallbacks.length > 0 && canUseAutomaticFallback(toolError)) continue;
-			if (firstError !== undefined && index > 0) {
-				// SearchToolError messages already start with their stable code. Strip
-				// that prefix before composing the combined diagnostic so the tool does
-				// not expose `WEB_SEARCH_X: WEB_SEARCH_X: ...`.
-				const detail = (error: SearchToolError): string => {
-					const prefix = `${error.code}: `;
-					return error.message.startsWith(prefix) ? error.message.slice(prefix.length) : error.message;
-				};
-				throw new SearchToolError(toolError.code, `${detail(toolError)}; primary provider ${selection.provider.id} also failed: ${detail(firstError)}`, {
-					provider: toolError.provider,
-					kind: toolError.kind,
-					retryable: toolError.retryable,
-					status: toolError.status,
-					requestId: toolError.requestId,
-					retryAfterMs: toolError.retryAfterMs,
-					rateLimits: toolError.rateLimits,
-					usage: toolError.usage,
-				});
+			const failure = toSearchToolError(error, candidate.id);
+			const detail = failure.message.slice(failure.code.length + 2);
+			if (!canUseSearchFallback(failure) || candidate === plan.providers.at(-1)) {
+				throw failures.length === 0 ? failure : new SearchToolError(failure.code, `${detail}; earlier attempts: ${failures.join("; ")}`, failure);
 			}
-			throw toolError;
+			failures.push(`${candidate.id}: ${detail}`);
 		}
 	}
-	throw firstError ?? new SearchToolError("WEB_SEARCH_UNKNOWN", "Search failed");
+	throw new Error("Search plan must contain a provider");
 }

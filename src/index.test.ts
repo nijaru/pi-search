@@ -11,7 +11,7 @@ const envNames = [
 	"PI_SEARCH_ENABLE_BRAVE_ANSWERS", "PI_SEARCH_ENABLE_PARALLEL_RESPONSES",
 	"PI_SEARCH_ALLOW_METERED", "PI_SEARCH_PREFER_FREE", "PI_SEARCH_BRAVE_FREE_ONLY",
 	"PI_SEARCH_CLOUDFLARE_GATEWAY_ID", "PI_SEARCH_CLOUDFLARE_BYOK_ALIAS",
-	"PI_SEARCH_PROVIDER", "PI_SEARCH_MODEL", "PI_SEARCH_FALLBACK_PROVIDER", "PI_SEARCH_ENABLE_RESEARCH",
+	"PI_SEARCH_PROVIDER", "PI_SEARCH_MODEL", "PI_SEARCH_FALLBACK_PROVIDERS", "PI_SEARCH_ENABLE_RESEARCH",
 ] as const;
 
 const shutdowns: (() => Promise<void>)[] = [];
@@ -161,7 +161,7 @@ describe("extension registration", () => {
 		await writeFile(join(dir, "pi-search", "credentials.json"), JSON.stringify({ EXA_API_KEY: "!exit 7" }));
 		process.env.DEEPSEEK_API_KEY = "test-fallback-key";
 		process.env.PI_SEARCH_PROVIDER = "exa";
-		process.env.PI_SEARCH_FALLBACK_PROVIDER = "deepseek";
+		process.env.PI_SEARCH_FALLBACK_PROVIDERS = "deepseek";
 		let calls = 0;
 		globalThis.fetch = (async () => { calls++; return Response.json({ results: [{ url: "https://example.com/", snippet: "Evidence" }] }); }) as unknown as typeof fetch;
 		const { tools, search } = await register();
@@ -169,6 +169,23 @@ describe("extension registration", () => {
 		expect(response.details).toMatchObject({ provider: "deepseek", attemptedProviders: ["exa", "deepseek"] });
 		expect(calls).toBe(1);
 		await expect(search("exa")).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH", fallbackSafe: true });
+		expect(calls).toBe(1);
+	});
+
+	it("preserves pure adapter preflight through lazy wrappers without resolving rejected providers' credentials", async () => {
+		await mkdir(join(dir, "pi-search"));
+		await writeFile(join(dir, "pi-search", "credentials.json"), JSON.stringify({ PARALLEL_API_KEY: "!exit 7", DEEPSEEK_API_KEY: "!exit 7" }));
+		process.env.EXA_API_KEY = "test-key";
+		process.env.PI_SEARCH_FALLBACK_PROVIDERS = "parallel,deepseek,exa";
+		let calls = 0;
+		globalThis.fetch = (async (url: unknown) => {
+			expect(String(url)).toBe("https://api.exa.ai/search");
+			calls++;
+			return Response.json({ results: [{ url: "https://example.com/", title: "Evidence" }] });
+		}) as unknown as typeof fetch;
+		const { tools } = await register();
+		const response = await tools.get("web_search")!.execute("call", { query: "q".repeat(129), dateRange: { to: "2026-01-01" } }, undefined, undefined, { modelRegistry: { getAvailable: () => [] } } as never);
+		expect(response.details).toMatchObject({ provider: "exa", attemptedProviders: ["exa"] });
 		expect(calls).toBe(1);
 	});
 
@@ -212,7 +229,8 @@ describe("extension registration", () => {
 		expect(requests).toBe(2);
 	});
 
-	it("executes registry-backed Codex search independently of the active model and preserves resolved routing/auth", async () => {
+	it("honors a configured Codex override independently of chat and preserves resolved routing/auth", async () => {
+		process.env.PI_SEARCH_PROVIDER = "openai-codex";
 		const models = [
 			{ id: "search-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://catalog.invalid/backend-api/codex" },
 			{ id: "pinned-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://catalog.invalid/backend-api/codex" },
@@ -241,7 +259,55 @@ describe("extension registration", () => {
 		expect(requests.at(-1)?.model).toBe("pinned-model");
 	});
 
-	it("does not use configured direct credentials as an implicit fallback; a named fallback is bounded and visible", async () => {
+	it("tracks active authentication per call instead of routing API GPT, Gemini, or Grok through a cached Codex login", async () => {
+		process.env.PI_SEARCH_FALLBACK_PROVIDERS = "";
+		const models = [
+			{ id: "gpt-subscription", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://subscription.example/backend-api/codex" },
+			{ id: "gpt-api", provider: "openai", api: "openai-responses", baseUrl: "https://api.example/v1" },
+			{ id: "gemini-chat", provider: "google", api: "google-generative-ai", baseUrl: "https://google.example/v1beta" },
+			{ id: "grok-chat", provider: "xai", api: "openai-responses", baseUrl: "https://xai.example/v1" },
+			{ id: "gpt-5-pro", provider: "openai", api: "openai-responses", baseUrl: "https://api.example/v1" },
+		];
+		const urls: string[] = [];
+		const authModels: string[] = [];
+		const authIds: string[] = [];
+		globalThis.fetch = (async (url: unknown) => { urls.push(String(url)); return new Response("rejected", { status: 401 }); }) as unknown as typeof fetch;
+		const modelRegistry = {
+			getAvailable: () => models,
+			find: (provider: string, id: string) => models.find(model => model.provider === provider && model.id === id),
+			getApiKeyAndHeaders: async (selected: typeof models[number]) => { authModels.push(selected.provider); authIds.push(selected.id); return { ok: true as const, apiKey: "test-token", baseUrl: selected.baseUrl }; },
+		};
+		const { tools } = await register();
+		for (const active of models) {
+			await expect(tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, { model: active, modelRegistry } as never)).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH" });
+		}
+		expect(authModels).toEqual(models.map(model => model.provider));
+		expect(authIds).toEqual(["gpt-subscription", "gpt-api", "gemini-chat", "grok-chat", "gpt-api"]);
+		expect(urls).toEqual([
+			"https://subscription.example/backend-api/codex/alpha/search", "https://api.example/v1/responses",
+			"https://google.example/v1beta/models/gemini-chat:generateContent", "https://xai.example/v1/responses", "https://api.example/v1/responses",
+		]);
+		await expect(tools.get("web_search")!.execute("proxy", { query: "q" }, undefined, undefined, { model: { ...models[1], provider: "custom-proxy" }, modelRegistry } as never)).rejects.toMatchObject({ code: "WEB_SEARCH_PROVIDER_UNAVAILABLE" });
+		expect(urls).toHaveLength(5);
+	});
+
+	it("falls back from unsupported Anthropic subscription auth before making a native paid request", async () => {
+		process.env.BRAVE_API_KEY = "test-key";
+		const selected = { id: "claude-chat", provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com" };
+		const calls: string[] = [];
+		globalThis.fetch = (async (url: unknown) => {
+			calls.push(String(url));
+			if (!String(url).startsWith("https://api.search.brave.com/")) throw new Error("Unsupported subscription must never dispatch Anthropic search");
+			return Response.json({ web: { results: [{ url: "https://example.com/", title: "Evidence" }] } });
+		}) as unknown as typeof fetch;
+		const ctx = { model: selected, modelRegistry: { getAvailable: () => [selected], find: () => selected, getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "sk-ant-oat-test" }) } } as never;
+		const { tools } = await register();
+		const response = await tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, ctx);
+		expect(response.details).toMatchObject({ provider: "brave", attemptedProviders: ["anthropic", "brave"] });
+		expect(calls).toHaveLength(1);
+	});
+
+	it("keeps automatic fallback within spending permission and honors an explicit ordered allowlist", async () => {
 		process.env.EXA_API_KEY = "test-exa";
 		const calls: string[] = [];
 		globalThis.fetch = (async (url: unknown) => {
@@ -251,11 +317,11 @@ describe("extension registration", () => {
 				: Response.json({ results: [{ url: "https://example.com/", highlights: ["Search evidence"] }] });
 		}) as unknown as typeof fetch;
 		const selected = { id: "search-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://chatgpt.example/backend-api/codex" };
-		const ctx = { modelRegistry: { getAvailable: () => [selected], find: () => selected, getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-token" }) } } as never;
+		const ctx = { model: selected, modelRegistry: { getAvailable: () => [selected], find: () => selected, getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-token" }) } } as never;
 		const initial = await register();
 		await expect(initial.tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, ctx)).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH" });
 		expect(calls).toHaveLength(1);
-		process.env.PI_SEARCH_FALLBACK_PROVIDER = "exa";
+		process.env.PI_SEARCH_FALLBACK_PROVIDERS = "exa";
 		const configured = await register();
 		const result = await configured.tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, ctx);
 		expect(calls).toHaveLength(3);
@@ -264,7 +330,7 @@ describe("extension registration", () => {
 	});
 
 	it("rejects invalid or unavailable installation preferences before registering tools", async () => {
-		for (const [name, value] of [["PI_SEARCH_PROVIDER", "unknown"], ["PI_SEARCH_PROVIDER", "exa"], ["PI_SEARCH_FALLBACK_PROVIDER", "exa"], ["PI_SEARCH_MODEL", "unqualified"], ["PI_SEARCH_ENABLE_RESEARCH", "true"]]) {
+		for (const [name, value] of [["PI_SEARCH_PROVIDER", "unknown"], ["PI_SEARCH_PROVIDER", "exa"], ["PI_SEARCH_FALLBACK_PROVIDERS", "unknown"], ["PI_SEARCH_MODEL", "unqualified"], ["PI_SEARCH_ENABLE_RESEARCH", "true"]]) {
 			process.env[name] = value;
 			let registered = false;
 			await expect(extension({ registerTool() { registered = true; } } as never)).rejects.toThrow();

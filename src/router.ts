@@ -1,55 +1,53 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Provider, ProviderId, SearchProviderHintId, SearchProviderSelection, SearchRequest } from "./contracts";
-import { createProviderError } from "./errors";
+import type { Provider, ProviderContext, ProviderId, SearchProviderHintId, SearchPlan, SearchRequest } from "./contracts";
+import { createProviderError, isProviderError } from "./errors";
 import type { BraveCapacityTracker } from "./brave";
 import { validateSearchRequest } from "./search";
 import { supportsOpenAISearchModel } from "./openai";
 
-/** Admission for automatic API-key search; subscription billing remains unknown. */
+/** Off-provider automatic spending; the active provider keeps its own authentication. */
 export type SearchBillingPolicy = "free-only" | "prefer-free" | "allow-configured-metered";
 
 export interface SearchRouterOptions {
-	/** Only configured/enabled adapters belong here. Credentials remain lazy. */
 	readonly providers: readonly Provider[];
-	/** An explicit installation preference, independent of the active chat model. */
 	readonly primary?: SearchProviderHintId;
 	readonly executionModel?: string;
-	/** No fallback unless the user deliberately names one. */
-	readonly fallback?: SearchProviderHintId;
+	/** Explicit ordered allowlist replaces defaults; empty disables alternatives. */
+	readonly fallbacks?: readonly SearchProviderHintId[];
 	readonly billingPolicy?: SearchBillingPolicy;
 	readonly braveFreeCapacityConfigured?: boolean;
 	readonly braveCapacity?: BraveCapacityTracker;
 }
 
-export type SearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => SearchProviderSelection;
+export type SearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => SearchPlan;
 
 function unavailable(message: string, provider: ProviderId = "router"): never {
-	throw createProviderError({ provider, kind: "unavailable", message, retryable: false });
+	throw createProviderError({ provider, kind: "unavailable", fallbackSafe: true, message, retryable: false });
 }
 
-function canServe(provider: Provider, request: SearchRequest): boolean {
-	if ((request.domains?.include?.length || request.domains?.exclude?.length) && provider.capabilities.domainFilter !== true) return false;
-	if (request.domains?.include?.length && request.domains?.exclude?.length && provider.capabilities.combinedDomainFilters === false) return false;
-	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return false;
-	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return false;
+function unsupportedConstraint(provider: Provider, request: SearchRequest): string | undefined {
+	if ((request.domains?.include?.length || request.domains?.exclude?.length) && provider.capabilities.domainFilter !== true) return "domain filters";
+	if (request.domains?.include?.length && request.domains?.exclude?.length && provider.capabilities.combinedDomainFilters === false) return "combined domain filters";
+	if (request.executionModel !== undefined && provider.profile.auth !== "modelRegistry") return "an execution model";
+	if (request.dateRange !== undefined && provider.capabilities.dateFilter !== true) return "a date range";
 	if (request.social !== undefined) {
 		const hasHandles = request.social.includeHandles !== undefined || request.social.excludeHandles !== undefined;
 		const needsMedia = request.social.understandImages === true || request.social.understandVideos === true;
-		if (provider.capabilities.social !== true) return false;
-		if (hasHandles && provider.capabilities.handleFilter !== true) return false;
-		if (request.social.includeHandles !== undefined && request.social.excludeHandles !== undefined && provider.capabilities.combinedHandleFilters !== true) return false;
-		if (needsMedia && provider.capabilities.mediaUnderstanding !== true) return false;
+		if (provider.capabilities.social !== true) return "social/X constraints";
+		if (hasHandles && provider.capabilities.handleFilter !== true) return "social/X handle filters";
+		if (request.social.includeHandles !== undefined && request.social.excludeHandles !== undefined && provider.capabilities.combinedHandleFilters !== true) return "combined social/X handle filters";
+		if (needsMedia && provider.capabilities.mediaUnderstanding !== true) return "social/X media understanding";
 	}
-	if (request.searchContextSize !== undefined && provider.capabilities.searchContextSize !== true) return false;
-	if (request.returnTokenBudget !== undefined && provider.capabilities.returnTokenBudget !== true) return false;
-	if (request.externalWebAccess !== undefined && provider.capabilities.externalWebAccess !== true) return false;
-	if (request.userLocation !== undefined && provider.capabilities.userLocation !== true) return false;
-	if (request.searchContentTypes !== undefined && provider.capabilities.searchContentTypes !== true) return false;
-	if (request.imageSettings !== undefined && provider.capabilities.imageSettings !== true) return false;
-	return true;
+	if (request.searchContextSize !== undefined && provider.capabilities.searchContextSize !== true) return "search context size";
+	if (request.returnTokenBudget !== undefined && provider.capabilities.returnTokenBudget !== true) return "a returned-token budget";
+	if (request.externalWebAccess !== undefined && provider.capabilities.externalWebAccess !== true) return "live-access selection";
+	if (request.userLocation !== undefined && provider.capabilities.userLocation !== true) return "a user location";
+	if (request.searchContentTypes !== undefined && provider.capabilities.searchContentTypes !== true) return "content-type selection";
+	if (request.imageSettings !== undefined && provider.capabilities.imageSettings !== true) return "image result settings";
+	return undefined;
 }
 
-/** These are protocol identities, not model names or credential lookups. */
+/** Protocol identities keep authentication selection out of model-name heuristics. */
 const MODEL_BACKENDS: Partial<Record<SearchProviderHintId, { provider: string; api: string }>> = {
 	openai: { provider: "openai", api: "openai-responses" },
 	"openai-codex": { provider: "openai-codex", api: "openai-codex-responses" },
@@ -60,6 +58,15 @@ const MODEL_BACKENDS: Partial<Record<SearchProviderHintId, { provider: string; a
 	meta: { provider: "meta", api: "openai-responses" },
 };
 
+function activeBackend(context: ExtensionContext, request: SearchRequest): SearchProviderHintId | undefined {
+	const active = context.model;
+	const id = (Object.keys(MODEL_BACKENDS) as SearchProviderHintId[]).find(id => {
+		const backend = MODEL_BACKENDS[id]!;
+		return id !== "xai-x" && active?.provider === backend.provider && active.api === backend.api;
+	});
+	return id === "xai" && request.social !== undefined ? "xai-x" : id;
+}
+
 function hasModel(id: SearchProviderHintId, context: ExtensionContext, modelId?: string): boolean {
 	const backend = MODEL_BACKENDS[id];
 	if (backend === undefined) return true;
@@ -68,117 +75,93 @@ function hasModel(id: SearchProviderHintId, context: ExtensionContext, modelId?:
 		&& (id !== "openai" || supportsOpenAISearchModel(model, modelId !== undefined)));
 }
 
-/** Pin the search execution context, never borrow the active chat model. */
-function searchExecution(provider: Provider, modelId?: string): Provider {
-	if (provider.profile.auth !== "modelRegistry") return provider;
-	return {
-		id: provider.id,
-		profile: provider.profile,
-		capabilities: provider.capabilities,
-		search: (request, signal, context) => provider.search(
-			modelId === undefined ? request : { ...request, executionModel: modelId },
-			signal,
-			{ modelRegistry: context.modelRegistry },
-		),
-	};
-}
-
-function constraints(request: SearchRequest): string {
-	const names: string[] = [];
-	if (request.domains !== undefined) names.push("domain filters");
-	if (request.dateRange !== undefined) names.push("a date range");
-	if (request.social !== undefined) names.push("social/X constraints");
-	if (request.executionModel !== undefined) names.push("an execution model");
-	if (request.searchContextSize !== undefined) names.push("search context size");
-	if (request.returnTokenBudget !== undefined) names.push("a returned-token budget");
-	if (request.externalWebAccess !== undefined) names.push("live-access selection");
-	if (request.userLocation !== undefined) names.push("a user location");
-	if (request.searchContentTypes !== undefined) names.push("content-type selection");
-	if (request.imageSettings !== undefined) names.push("image result settings");
-	return names.join(", ") || "search constraints";
-}
-
 export function createSearchRouter(options: SearchRouterOptions): SearchProviderResolver {
 	const providers = new Map(options.providers.map(provider => [provider.id, provider]));
 	if (providers.size !== options.providers.length) throw new Error("Search providers must have unique identities");
+	if (options.primary !== undefined && !providers.has(options.primary)) throw new Error(`Search provider ${options.primary} is not configured or enabled`);
+	if (options.executionModel !== undefined && (options.primary === undefined || !MODEL_BACKENDS[options.primary])) throw new Error("PI_SEARCH_MODEL requires an explicit model-mediated PI_SEARCH_PROVIDER");
 	const policy = options.billingPolicy ?? "free-only";
-	for (const id of [options.primary, options.fallback]) {
-		if (id !== undefined && !providers.has(id)) throw new Error(`Search provider ${id} is not configured or enabled`);
-	}
-	if (options.executionModel !== undefined && (options.primary === undefined || !MODEL_BACKENDS[options.primary])) {
-		throw new Error("PI_SEARCH_MODEL requires an explicit model-mediated PI_SEARCH_PROVIDER");
-	}
-	if (options.primary !== undefined && options.primary === options.fallback) throw new Error("Search primary and fallback must differ");
+	const braveAllowed = () => (policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true) && options.braveCapacity?.canAttempt() !== false;
 
-	const checkBrave = (): void => {
-		if (policy !== "allow-configured-metered" && options.braveFreeCapacityConfigured !== true) {
-			unavailable("Brave free-mode admission is disabled; set PI_SEARCH_BRAVE_FREE_ONLY=1 or PI_SEARCH_ALLOW_METERED=1", "brave");
-		}
-		if (options.braveCapacity?.canAttempt() === false) {
-			const info = options.braveCapacity.snapshot();
-			throw createProviderError({ provider: "brave", kind: "rateLimit", message: "Brave quota window is exhausted", retryable: true, rateLimits: info, retryAfterMs: info?.retryAfterMs });
-		}
-	};
-	const resolve = (id: SearchProviderHintId, request: SearchRequest, context: ExtensionContext, modelId?: string): Provider => {
-		const provider = providers.get(id) ?? unavailable(`Search provider ${id} is not configured or enabled`, id);
-		const executionRequest = modelId === undefined ? request : { ...request, executionModel: modelId };
-		if (!canServe(provider, executionRequest)) unavailable(`${id} cannot satisfy the requested ${constraints(executionRequest)}`, id);
-		if (!hasModel(id, context, modelId)) unavailable(`No available ${id} search model${modelId === undefined ? "" : ` matching ${modelId}`}`, id);
-		if (id === "brave") checkBrave();
-		return searchExecution(provider, modelId);
-	};
+	return (raw, context) => {
+		const request = validateSearchRequest(raw);
+		if (request.executionModel !== undefined && (request.providerHint === undefined || request.providerHint === "native")) unavailable("executionModel requires an explicit model-mediated provider hint");
 
-	return (request, context) => {
-		const normalized = validateSearchRequest(request);
-		if (normalized.executionModel !== undefined && (normalized.providerHint === undefined || normalized.providerHint === "native")) {
-			unavailable("executionModel requires an explicit model-mediated provider hint");
-		}
-		if (normalized.providerHint === "native") {
-			// This explicit escape hatch deliberately follows the chat model.
-			const active = context.model;
-			const id = (Object.keys(MODEL_BACKENDS) as SearchProviderHintId[]).find(id => {
-				const backend = MODEL_BACKENDS[id]!;
-				return backend.provider === active?.provider && backend.api === active.api && id !== "xai-x";
-			});
-			if (id === undefined) unavailable("Native search requires an active supported grounded model");
-			const target = id === "xai" && normalized.social !== undefined ? "xai-x" : id;
-			return { provider: resolve(target, normalized, context, active!.id), automatic: false, fallbacks: [] };
-		}
-		if (normalized.providerHint !== undefined) {
-			return { provider: resolve(normalized.providerHint as SearchProviderHintId, normalized, context, normalized.executionModel), automatic: false, fallbacks: [] };
-		}
-
-		let primary: Provider;
-		if (options.primary !== undefined) {
-			primary = resolve(options.primary, normalized, context, options.executionModel);
-		} else {
-			// Subscription first; API-key backends need automatic metered admission.
-			// Capability checks happen before dispatch, not by trial requests.
-			const ids: SearchProviderHintId[] = [
-				"openai-codex",
-				...(policy === "prefer-free" ? ["brave" as const] : []),
-				...(policy !== "free-only" ? ["openai", "exa", "deepseek"] as const : []),
-				...(policy !== "prefer-free" ? ["brave" as const] : []),
-			];
-			const id = ids.find(id => {
-				const provider = providers.get(id);
-				if (provider === undefined || !canServe(provider, normalized) || !hasModel(id, context)) return false;
-				return id !== "brave" || ((policy === "allow-configured-metered" || options.braveFreeCapacityConfigured === true) && options.braveCapacity?.canAttempt() !== false);
-			});
-			if (id === undefined) {
-				if (providers.has("brave") && canServe(providers.get("brave")!, normalized)) checkBrave();
-				unavailable(`No eligible search provider for ${constraints(normalized)}; configure PI_SEARCH_PROVIDER or admit API-key automatic search with PI_SEARCH_ALLOW_METERED=1`);
+		const eligibilityError = (id: SearchProviderHintId, modelId?: string, call: SearchRequest = request): ReturnType<typeof createProviderError> | undefined => {
+			const fail = (message: string) => createProviderError({ provider: id, kind: "unavailable", fallbackSafe: true, message, retryable: false });
+			const provider = providers.get(id);
+			if (provider === undefined) return fail(`Search provider ${id} is not configured or enabled`);
+			const unsupported = unsupportedConstraint(provider, modelId === undefined ? call : { ...call, executionModel: modelId });
+			if (unsupported !== undefined) return fail(`${id} cannot satisfy the requested ${unsupported}`);
+			try { provider.validateRequest?.(modelId === undefined ? call : { ...call, executionModel: modelId }); }
+			catch (error) {
+				if (!isProviderError(error) || (error.kind !== "unsupported" && error.kind !== "badRequest")) throw error;
+				return createProviderError({ provider: id, kind: error.kind, message: error.message, fallbackSafe: true, retryable: false });
 			}
-			primary = resolve(id, normalized, context);
-		}
-		const fallbackId = options.fallback;
-		// A fallback's availability, constraints, and quota matter only after a
-		// safe primary failure. In particular, batches never execute this path.
-		const fallback = fallbackId === undefined || fallbackId === primary.id ? undefined : {
-			...providers.get(fallbackId)!,
-			search: (request: SearchRequest, signal: AbortSignal, execution: Parameters<Provider["search"]>[2]) =>
-				resolve(fallbackId, request, context).search(request, signal, execution),
+			if (!hasModel(id, context, modelId)) return fail(`No available ${id} search model${modelId === undefined ? "" : ` matching ${modelId}`}`);
+			if (id === "brave" && !braveAllowed()) {
+				const exhausted = options.braveCapacity?.canAttempt() === false;
+				return createProviderError({ provider: id, kind: exhausted ? "rateLimit" : "unavailable", fallbackSafe: true, retryable: exhausted,
+					message: exhausted ? "Brave quota window is exhausted" : "Brave free-mode admission is disabled", rateLimits: options.braveCapacity?.snapshot() });
+			}
 		};
-		return { provider: primary, automatic: true, fallbacks: fallback === undefined ? [] : [fallback] };
+		const rejections: string[] = [];
+		const eligible = (id: SearchProviderHintId, modelId?: string): boolean => {
+			const error = eligibilityError(id, modelId);
+			if (error !== undefined && providers.has(id)) rejections.push(error.message);
+			return error === undefined;
+		};
+		const bind = (id: SearchProviderHintId, modelId?: string): Provider => ({
+			...providers.get(id)!,
+			search: (call, signal, execution: ProviderContext) => {
+				// Quota and registry availability may change after planning.
+				const error = eligibilityError(id, modelId, call);
+				if (error !== undefined) throw error;
+				const provider = providers.get(id)!;
+				return provider.search(modelId === undefined ? call : { ...call, executionModel: modelId }, signal,
+					provider.profile.auth === "modelRegistry" ? { modelRegistry: execution.modelRegistry } : execution);
+			},
+		});
+		const strict = (id: SearchProviderHintId, modelId?: string): Provider => {
+			const error = eligibilityError(id, modelId);
+			if (error !== undefined) throw error;
+			return bind(id, modelId);
+		};
+
+		if (request.providerHint !== undefined) {
+			const id = request.providerHint === "native" ? activeBackend(context, request) : request.providerHint as SearchProviderHintId;
+			if (id === undefined) unavailable("Native search requires an active supported grounded model");
+			return { providers: [strict(id, request.providerHint === "native" ? context.model!.id : request.executionModel)] };
+		}
+
+		const active = activeBackend(context, request);
+		const preferred = options.primary ?? active;
+		const modelId = options.primary !== undefined ? options.executionModel
+			: active === "openai" && !supportsOpenAISearchModel(context.model!) ? undefined : context.model?.id;
+		const candidates: Provider[] = [];
+		if (options.primary !== undefined) candidates.push(strict(options.primary, modelId));
+		else if (preferred !== undefined && eligible(preferred, modelId)) candidates.push(bind(preferred, modelId));
+
+		// Dedicated retrieval precedes cross-provider model calls. Subscription
+		// quota is unknown, so off-provider native calls also require admission.
+		const direct: SearchProviderHintId[] = policy === "free-only" ? ["brave"]
+			: policy === "prefer-free" ? ["brave", "exa", "deepseek", "parallel", "cloudflare"]
+			: ["exa", "deepseek", "brave", "parallel", "cloudflare"];
+		const defaults: SearchProviderHintId[] = [
+			...direct,
+			...(policy === "free-only" ? [] : [
+				...(request.social === undefined ? [] : ["x" as const]),
+				"openai-codex", "openai", "gemini", request.social === undefined ? "xai" : "xai-x", "anthropic", "meta",
+			] as SearchProviderHintId[]),
+		];
+		const seen = new Set(candidates.map(provider => provider.id));
+		for (const id of options.fallbacks ?? defaults) {
+			if (seen.has(id)) continue;
+			seen.add(id);
+			if (eligible(id)) candidates.push(bind(id));
+		}
+		const [first, ...rest] = candidates;
+		if (first === undefined) unavailable(`No eligible search provider; check authentication, requested constraints, and search spending policy${rejections.length === 0 ? "" : `: ${rejections.join("; ")}`}`);
+		return { providers: [first, ...rest] };
 	};
 }

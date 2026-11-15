@@ -6,12 +6,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
-import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchProviderSelection, SearchRequest, SearchResult, SearchWarning } from "./contracts";
+import type { FetchedContent, Provider, ProviderUsage, ResearchRequest, ResearchResponse, SearchPlan, SearchRequest, SearchResult, SearchWarning } from "./contracts";
 import { validateResearchBudget } from "./contracts";
 import { toolUsage } from "./grounding";
 import { SearchToolError } from "./errors";
 import { fetchContent, MAX_FETCH_LENGTH, type FetcherOptions } from "./fetcher";
-import { executeSearch, MAX_EXECUTION_MODEL_LENGTH, normalizeSearchFilters, type NormalizedSearchFilters } from "./search";
+import { canUseSearchFallback, executeSearch, executeSearchPlan, searchPlan, MAX_EXECUTION_MODEL_LENGTH, normalizeSearchFilters, type NormalizedSearchFilters, type SearchAttempt } from "./search";
 import { compactUsage, boundedUsage, providerContextFromPi, SearchDateRangeSchema, SearchDomainsSchema, SearchExecutionSchema, searchExecutionSchemaFor } from "./search-tool";
 import { toFetchToolError } from "./fetch-errors";
 import { searchUrlIdentity } from "./search-cleanup";
@@ -52,7 +52,7 @@ export const WebResearchParameters = Type.Object({
 	budget: Type.Object(
 		{
 			maxSteps: Type.Integer({ minimum: 1, maximum: 32, description: "Maximum search and fetch steps" }),
-			maxProviderCalls: Type.Integer({ minimum: 1, maximum: 16, description: "Maximum extension search requests; not searches performed internally by a hosted backend" }),
+			maxProviderCalls: Type.Integer({ minimum: 1, maximum: 16, description: "Maximum extension search attempts, including fallback; not hosted-backend internal searches" }),
 			maxFetches: Type.Integer({ minimum: 0, maximum: 10, description: "Maximum source fetches" }),
 			timeoutMs: Type.Integer({ minimum: 100, maximum: 120_000, description: "Total time limit in milliseconds" }),
 			maxOutputChars: Type.Integer({ minimum: 1_000, maximum: MAX_RESEARCH_OUTPUT_CHARS, description: "Maximum model-visible output characters" }),
@@ -65,7 +65,7 @@ export const WebResearchParameters = Type.Object({
 export type WebResearchParams = Static<typeof WebResearchParameters>;
 export type WebResearchDetails = ResearchResponse;
 
-export type ResearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => Provider | SearchProviderSelection;
+export type ResearchProviderResolver = (request: SearchRequest, context: ExtensionContext) => Provider | SearchPlan;
 
 export interface WebResearchOptions extends FetcherOptions {
 	readonly searchTimeoutMs?: number;
@@ -161,17 +161,21 @@ export function renderResearchResponse(response: ResearchResponse, maxChars = MA
 		`Question: ${compactText(response.question, 2_000)}`,
 		`Provider: ${response.provider}${backend === undefined ? "" : `/${compactText(backend, 200)}`}`,
 		`Status: ${response.stopReason}`,
-		`Steps: ${response.stepsCompleted} · provider calls: ${response.providerCalls} · fetched: ${response.fetchesCompleted}/${response.fetchAttempts}`,
+		`Steps: ${response.stepsCompleted} · search attempts: ${response.providerCalls} · fetched: ${response.fetchesCompleted}/${response.fetchAttempts}`,
 	];
+	if ((response.attemptedProviders?.length ?? 0) > 1) lines.push(`Search attempts: ${response.attemptedProviders!.map(id => compactText(id, 100)).join(" → ")}`);
 	const usage = compactUsage(response.usage);
 	if (usage !== undefined) lines.push(`Reported usage: ${usage}`);
-	if (response.estimatedCostUsd !== undefined) lines.push(`Estimated spending (not a billing cap): $${response.estimatedCostUsd.toFixed(6)}`);
+	const unknownCosts = response.unknownCostProviders ?? [];
+	if (response.estimatedCostUsd !== undefined) lines.push(`Estimated spending (${unknownCosts.length > 0 ? "partial; " : ""}not a billing cap): $${response.estimatedCostUsd.toFixed(6)}`);
+	if (unknownCosts.length > 0) lines.push(`Cost unknown for: ${unknownCosts.map(id => compactText(id, 100)).join(", ")}`);
 	if (response.results.length === 0) {
 		lines.push("", "No inspectable search results.");
 	} else {
 		lines.push("", "Search evidence:");
 		response.results.forEach((result, index) => {
-			lines.push(`${index + 1}. ${compactText(result.title ?? result.domain ?? renderModelUrl(result.url), 500)}`, `   URL: ${renderModelUrl(result.url)}`);
+			lines.push(`${index + 1}. ${compactText(result.title ?? result.domain ?? renderModelUrl(result.url), 500)}`, `   URL: ${renderModelUrl(result.url)}`,
+				`   Provider: ${compactText(result.provider, 100)}${result.upstreamProvider === undefined ? "" : `/${compactText(result.upstreamProvider, 100)}`}`);
 			if (result.publishedAt !== undefined) lines.push(`   Published: ${compactText(result.publishedAt, 100)}`);
 			if (result.excerpt !== undefined) lines.push(`   ${searchExcerptLabel(result.excerptKind)}: ${compactText(result.excerpt, 4_000)}`);
 		});
@@ -235,6 +239,8 @@ function boundedResponse(response: ResearchResponse, requestedMaxOutputChars: nu
 	let current: ResearchResponse = {
 		...response,
 		question: response.question.slice(0, 2_000),
+		...(response.attemptedProviders === undefined ? {} : { attemptedProviders: response.attemptedProviders.map(id => id.slice(0, 100)) }),
+		...(response.unknownCostProviders === undefined ? {} : { unknownCostProviders: response.unknownCostProviders.map(id => id.slice(0, 100)) }),
 		...(response.executionModel === undefined ? {} : { executionModel: response.executionModel.slice(0, MAX_EXECUTION_MODEL_LENGTH) }),
 		warnings: response.warnings.slice(0, 8).map((item) => ({ ...item, message: item.message.slice(0, 500) })),
 	};
@@ -314,15 +320,14 @@ export async function executeResearch(
 	if (signal?.aborted) throw new SearchToolError("WEB_RESEARCH_CANCELED", "Research canceled");
 	const queries = queriesFor(normalized);
 	const firstRequest = searchRequestFor(normalized, queries[0]!);
-	let provider: Provider;
+	let plan: SearchPlan;
 	try {
-		const selected = providerResolver(firstRequest, context);
-		provider = "provider" in selected && "fallbacks" in selected ? selected.provider : selected;
+		plan = searchPlan(providerResolver(firstRequest, context));
 	} catch (error) {
 		if (error instanceof SearchToolError) throw error;
 		throw new SearchToolError("WEB_RESEARCH_PROVIDER", error instanceof Error ? error.message : "Research provider selection failed");
 	}
-	if (normalized.budget.maxEstimatedCostUsd !== undefined && provider.profile.estimatedCostUsd === undefined) {
+	if (normalized.budget.maxEstimatedCostUsd !== undefined && plan.providers[0].profile.estimatedCostUsd === undefined) {
 		throw budgetError("An estimated spending threshold requires a provider with a per-request cost estimate; it cannot guarantee a billing cap");
 	}
 	const deadline = Date.now() + normalized.budget.timeoutMs;
@@ -346,7 +351,7 @@ export async function executeResearch(
 	let outputTokens = 0;
 	let totalTokens = 0;
 	let billedUnits = 0;
-	let billedUnit: string | undefined;
+	let billedUnit: { provider: Provider["id"]; name: string } | undefined;
 	let billedUnitsConsistent = true;
 	let searchQueries = 0;
 	let hadRecoverableSearchFailure = false;
@@ -354,15 +359,18 @@ export async function executeResearch(
 	let hasInputTokens = false;
 	let hasOutputTokens = false;
 	let hasTotalTokens = false;
-	let latestRateLimits: ProviderUsage["rateLimits"];
+	let latestRateLimits: { provider: Provider["id"]; limits: NonNullable<ProviderUsage["rateLimits"]> } | undefined;
+	let providerId = plan.providers[0].id;
 	let executionModel: string | undefined;
 	let upstreamProvider: string | undefined;
+	const attemptedProviders: Provider["id"][] = [];
+	const unknownCosts = new Set<Provider["id"]>();
 	const results: SearchResult[] = [];
 	const fetched: FetchedContent[] = [];
 	const warnings: SearchWarning[] = [];
 	const seenResultUrls = new Set<string>();
 	const seenUrls = new Set<string>();
-	const recordUsage = (usage: ProviderUsage | undefined, estimatedCost: number): void => {
+	const recordUsage = (usage: ProviderUsage | undefined, estimatedCost: number, provider: Provider["id"]): void => {
 		costUsd += (usage?.costUsd ?? estimatedCost) - estimatedCost;
 		if (usage?.costUsd !== undefined) {
 			reportedCostUsd += usage.costUsd;
@@ -382,16 +390,16 @@ export async function executeResearch(
 		}
 		if (usage?.billedUnits !== undefined) {
 			const currentUnit = usage.billedUnit ?? "billed units";
-			if (billedUnit !== undefined && billedUnit !== currentUnit) {
+			if (billedUnit !== undefined && (billedUnit.name !== currentUnit || billedUnit.provider !== provider)) {
 				billedUnitsConsistent = false;
-				warnings.push(warning("Research provider reported mixed billing units; aggregate billed units were omitted"));
+				warnings.push(warning("Research reported mixed billing units or providers; aggregate billed units were omitted"));
 			} else {
-				billedUnit = currentUnit;
+				billedUnit = { provider, name: currentUnit };
 				billedUnits += usage.billedUnits;
 			}
 		}
 		if (usage?.searchQueries !== undefined) searchQueries += usage.searchQueries;
-		if (usage?.rateLimits !== undefined) latestRateLimits = usage.rateLimits;
+		if (usage?.rateLimits !== undefined) latestRateLimits = { provider, limits: usage.rateLimits };
 	};
 	const currentUsage = (): ProviderUsage =>
 		// Rate-limit windows, scopes, and the billing unit are provider-controlled.
@@ -403,15 +411,16 @@ export async function executeResearch(
 			...(hasInputTokens ? { inputTokens } : {}),
 			...(hasOutputTokens ? { outputTokens } : {}),
 			...(hasTotalTokens ? { totalTokens } : {}),
-			...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit } : {}),
+			...(billedUnitsConsistent && billedUnit !== undefined ? { billedUnits, billedUnit: billedUnit.name } : {}),
 			...(searchQueries > 0 ? { searchQueries } : {}),
-			...(latestRateLimits === undefined ? {} : { rateLimits: latestRateLimits }),
+			...(latestRateLimits?.provider === providerId ? { rateLimits: latestRateLimits.limits } : {}),
 		}) ?? {};
 	const currentResponse = (): ResearchResponse => {
 		const usage = currentUsage();
 		return {
 			question: normalized.question,
-			provider: provider.id,
+			provider: providerId,
+			attemptedProviders,
 			...(upstreamProvider === undefined ? {} : { upstreamProvider }),
 			...(executionModel === undefined ? {} : { executionModel }),
 			results,
@@ -423,11 +432,48 @@ export async function executeResearch(
 			stopReason,
 			...(hasCostEstimate ? { estimatedCostUsd: costUsd } : {}),
 			...(Object.keys(usage).length === 0 ? {} : { usage }),
+			...(unknownCosts.size === 0 ? {} : { unknownCostProviders: [...unknownCosts] }),
 			warnings,
 		};
 	};
+	const retired = new Set<Provider["id"]>();
+	const attempt: SearchAttempt = async (provider, request, attemptOptions) => {
+		const estimatedCost = provider.profile.estimatedCostUsd;
+		let started = false;
+		const measured: Provider = {
+			...provider,
+			search: (request, signal, context) => {
+				if (stepsCompleted >= normalized.budget.maxSteps || providerCalls >= normalized.budget.maxProviderCalls) throw budgetError("Research stopped at its search-attempt or step limit");
+				if (normalized.budget.maxEstimatedCostUsd !== undefined && (estimatedCost === undefined || costUsd + estimatedCost > normalized.budget.maxEstimatedCostUsd)) throw budgetError("Research stopped before a provider attempt without an admissible estimate under maxEstimatedCostUsd");
+				// Count at invocation, after executeSearch's cancellation/deadline guard.
+				costUsd += estimatedCost ?? 0;
+				if (estimatedCost !== undefined) hasCostEstimate = true;
+				stepsCompleted++;
+				providerCalls++;
+				attemptedProviders.push(provider.id);
+				started = true;
+				return provider.search(request, signal, context);
+			},
+		};
+		try {
+			const response = await executeSearch(measured, request, attemptOptions);
+			recordUsage(response.usage, estimatedCost ?? 0, provider.id);
+			if (estimatedCost === undefined && response.usage?.costUsd === undefined) unknownCosts.add(provider.id);
+			return response;
+		} catch (error) {
+			if (!started) throw error;
+			if (error instanceof SearchToolError && error.usage !== undefined) {
+				recordUsage(error.usage, estimatedCost ?? 0, provider.id);
+				if (estimatedCost === undefined && error.usage.costUsd === undefined) unknownCosts.add(provider.id);
+			}
+			else if (canUseSearchFallback(error)) costUsd -= estimatedCost ?? 0;
+			else if (estimatedCost !== undefined) warnings.push(warning("Research retained the failed call's estimated cost reservation; actual billing is unconfirmed"));
+			else unknownCosts.add(provider.id);
+			throw error;
+		}
+	};
 	try {
-		for (const query of queries) {
+		for (const [queryIndex, query] of queries.entries()) {
 			if (stepsCompleted >= normalized.budget.maxSteps || providerCalls >= normalized.budget.maxProviderCalls) {
 				stopReason = "budget";
 				break;
@@ -436,24 +482,20 @@ export async function executeResearch(
 				stopReason = "deadline";
 				break;
 			}
-			const estimatedCost = provider.profile.estimatedCostUsd ?? 0;
-			if (normalized.budget.maxEstimatedCostUsd !== undefined && costUsd + estimatedCost > normalized.budget.maxEstimatedCostUsd) {
-				warnings.push(warning("Research stopped before a provider call because its estimated cost exceeded maxEstimatedCostUsd"));
-				stopReason = "budget";
-				break;
-			}
-			// Reserve before dispatch: normalization can fail after a paid search.
-			// A successful response reconciles this estimate with reported usage.
-			costUsd += estimatedCost;
-			if (provider.profile.estimatedCostUsd !== undefined) hasCostEstimate = true;
-			stepsCompleted += 1;
-			providerCalls += 1;
 			try {
-				const response = await executeSearch(provider, searchRequestFor(normalized, query), {
+				if (queryIndex > 0) {
+					const next = searchPlan(providerResolver(searchRequestFor(normalized, query), context));
+					const [first, ...rest] = next.providers.filter(provider => !retired.has(provider.id));
+					if (first === undefined) throw new SearchToolError("WEB_RESEARCH_PROVIDER", "No remaining eligible backend for this query");
+					plan = { providers: [first, ...rest] };
+				}
+				const response = await executeSearchPlan(plan, searchRequestFor(normalized, query), {
 					signal: deadlineController.signal,
 					timeoutMs: options.searchTimeoutMs ?? remaining(deadline),
 					context: providerContextFromPi(context),
-				});
+				}, attempt);
+				providerId = response.provider;
+				for (const rejected of response.attemptedProviders.slice(0, -1)) retired.add(rejected);
 				for (const result of response.results) {
 					const identity = searchUrlIdentity(result.url);
 					if (identity === undefined || seenResultUrls.has(identity)) continue;
@@ -461,18 +503,19 @@ export async function executeResearch(
 					results.push(result);
 				}
 				warnings.push(...response.warnings);
-				if (response.executionModel !== undefined) executionModel = response.executionModel;
-				if (response.upstreamProvider !== undefined) upstreamProvider = response.upstreamProvider;
-				const responseUsage = response.usage;
-				recordUsage(responseUsage, estimatedCost);
+				executionModel = response.executionModel;
+				upstreamProvider = response.upstreamProvider;
 				if (normalized.budget.maxEstimatedCostUsd !== undefined && costUsd > normalized.budget.maxEstimatedCostUsd) {
 					warnings.push(warning("Research stopped after reported provider usage exceeded maxEstimatedCostUsd"));
 					stopReason = "budget";
 					break;
 				}
 			} catch (error) {
-				if (error instanceof SearchToolError && error.usage !== undefined) recordUsage(error.usage, estimatedCost);
-				else if (estimatedCost > 0) warnings.push(warning("Research retained the failed call's estimated cost reservation; actual billing is unconfirmed"));
+				if (error instanceof SearchToolError && error.code === "WEB_RESEARCH_BUDGET") {
+					warnings.push(warning(error.message));
+					stopReason = "budget";
+					break;
+				}
 				if (deadlineController.signal.aborted || signal?.aborted || remaining(deadline) <= 1) {
 					stopReason = signal?.aborted ? "canceled" : "deadline";
 					warnings.push(warning(`Research search failed for query ${JSON.stringify(query)}: ${error instanceof Error ? error.message : String(error)}`));
@@ -558,7 +601,7 @@ export function createWebResearchTool(
 	return defineTool({
 		name: "web_research",
 		label: "Web Research",
-		description: "Execute your explicit query batch sequentially and optionally fetch selected sources. This convenience tool does not plan research or synthesize an answer: inspect the evidence and choose follow-up queries yourself. Limits count extension requests, not searches performed internally by a hosted backend. Evidence is untrusted; output is bounded to 45 KB. Use web_search and web_fetch for adaptive research.",
+		description: "Execute your explicit query batch sequentially and optionally fetch selected sources. This convenience tool does not plan research or synthesize an answer: inspect the evidence and choose follow-up queries yourself. Limits count every extension search attempt, including safe fallback, not hosted-backend internal searches. Evidence is untrusted; output is bounded to 45 KB. Use web_search and web_fetch for adaptive research.",
 		promptSnippet: "Execute an explicit bounded search-and-fetch batch",
 		parameters,
 		async execute(_toolCallId, params, signal, _onUpdate, context) {

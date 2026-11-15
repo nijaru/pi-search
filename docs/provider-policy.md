@@ -1,62 +1,70 @@
 # Provider and spending policy
 
-Provider capabilities, prices, quotas, and API schemas change. Routing is an
-installation preference, not a universal provider-quality ranking. See
-[README](../README.md#search-routing) for configuration and
-[DESIGN](DESIGN.md) for execution invariants.
+Provider capabilities, prices, quotas, and API schemas change. Priority is a
+predictable routing policy, not a universal quality ranking. Configuration and
+the default ordering live in [README](../README.md#search-routing); execution
+invariants live in [DESIGN](DESIGN.md).
 
-## Ordinary search
+## Preference and admission
 
-Normal search does not follow the active chat model. A named
-`PI_SEARCH_PROVIDER` pins the backend; optional `PI_SEARCH_MODEL` pins its
-registry model. Explicit per-call `advanced.provider`/`executionModel`
-overrides those preferences and never falls through. The `native` per-call
-alias deliberately follows the active chat model, also without fallback.
+Automatic search first tries the active provider with its existing
+authentication and an eligible search model: ChatGPT/Codex uses Codex standalone search, API GPT
+uses OpenAI Responses, Gemini uses Google, Grok uses xAI web/X, and supported
+Anthropic/Meta models use their matching adapters. A GPT-looking model name
+behind an unrelated proxy is not proof of either OpenAI or Codex authentication.
 
-Without a named primary, capability-compatible configured backends are checked
-in this order:
+`PI_SEARCH_PROVIDER` pins an installation primary instead. Its optional
+`PI_SEARCH_MODEL` pins that backend's registry model. Per-call
+`advanced.provider` overrides are strict, including `native` (active-only):
+they disable fallback. A per-call execution model requires a concrete provider.
 
-1. ChatGPT/Codex standalone search through Pi's registry.
-2. Under `PI_SEARCH_PREFER_FREE=1`, admitted paced Brave.
-3. When automatic metered search is admitted, OpenAI Responses, Exa, DeepSeek.
-4. Otherwise, admitted Brave.
+Automatic alternatives prefer dedicated retrieval before other authenticated
+native providers. Capability and pure adapter-specific request checks happen
+before credentials or network work. Incompatible/unconfigured providers are
+skipped; an explicitly pinned primary must support the request.
 
-Automatic metered admission requires `PI_SEARCH_ALLOW_METERED=1` or
-`PI_SEARCH_PREFER_FREE=1`. Choosing an API-key chat model is not search spending
-consent. Codex subscription quota/billing is unknown, not assumed free. Brave
-free-mode admission paces starts and observes quota headers; it does not inspect
-account billing or guarantee against paid overage.
+Off-provider automatic metered or unknown-cost backends require
+`PI_SEARCH_ALLOW_METERED=1` or `PI_SEARCH_PREFER_FREE=1`. Without either, only
+Brave's conservative free-mode admission participates off-provider.
+Prefer-free puts Brave before other alternatives, not before active native
+search. The active provider is deliberate authentication selection; an unrelated
+cached key/login is not spending permission. Subscription usage is not assumed
+free. Brave pacing and observed quota headers do not establish account balance
+or guarantee against paid overage.
 
-There is no fallback by default. `PI_SEARCH_FALLBACK_PROVIDER` deliberately
-names one alternative, with its billing and enable requirements. Its capability,
-model, and quota admission is checked only if needed, so an unused fallback
-cannot block a healthy primary or a batch. It must support the request and can
-run once only after a known-safe rejection/unavailability,
-not after a timeout, network failure, malformed response, cancellation, billed
-failure, or ambiguous post-dispatch error. Named provider/model configuration
-does not enable a disabled adapter. Credentials resolve lazily at execution.
+`PI_SEARCH_FALLBACK_PROVIDERS` replaces the default alternative list with an
+ordered allowlist. Its named entries deliberately admit spending, but cannot
+enable disabled adapters or manufacture credentials. Missing configured adapters
+are skipped; repeated IDs are rejected. An empty value disables alternatives.
+The preferred backend is never repeated in its own fallback list.
+
+Only proven safe pre-dispatch failures or explicit auth/rate-limit rejections
+may advance to the next provider. A response carrying reported usage, ambiguous
+network/timeout failure, cancellation, malformed response, or post-dispatch
+failure is final for that query. The first success ends the sequence; no fan-out
+or same-provider retry is added. Every executed attempt is visible.
 
 ## Shipped backends
 
-| Backend | Default automatic eligibility | Explicit configuration / per-call use | Authentication |
-| --- | --- | --- | --- |
-| Codex standalone `alpha/search` | First when an authenticated compatible registry model exists | `openai-codex` | Pi model registry |
-| OpenAI Responses | Automatic metered admission | `openai` | Pi model registry; separate API billing |
-| Exa | Automatic metered admission, after OpenAI | `exa` | `EXA_API_KEY` |
-| DeepSeek Search | Automatic metered admission, after Exa | `deepseek` | `DEEPSEEK_API_KEY` |
-| Brave | Conservative free-mode admission or deliberate metered mode | `brave` | `BRAVE_API_KEY` |
-| Gemini, xAI web/X, Anthropic, Meta | Never selected merely because their chat model is active | `gemini`, `xai`, `xai-x`, `anthropic`, `meta`; optional search model pin | Pi model registry |
-| Cloudflare gateway | Not in auto discovery | `cloudflare`; requires explicit upstream | Account ID and `CLOUDFLARE_API_TOKEN` |
-| Parallel Search | Not in auto discovery | `parallel` | `PARALLEL_API_KEY` |
-| Official X recent search | Not in auto discovery | `x` | `X_API_BEARER_TOKEN` |
-| Parallel Responses, Brave Answers | Not in auto discovery; explicit enable gate required | `parallel-responses`, `brave-answers` | Underlying provider key |
+| Backend | Automatic role | Authentication |
+| --- | --- | --- |
+| Codex standalone `alpha/search` | Active ChatGPT/Codex; otherwise admitted native fallback | Pi model registry |
+| OpenAI Responses | Active API GPT; otherwise admitted native fallback | Pi model registry; separate API billing |
+| Gemini, xAI web/X, Anthropic, Meta | Matching active provider; otherwise admitted native fallback | Pi model registry |
+| Exa, DeepSeek | Dedicated metered alternatives | `EXA_API_KEY`, `DEEPSEEK_API_KEY` |
+| Brave | Paced/quota-aware alternative; first alternative in prefer-free mode | `BRAVE_API_KEY` |
+| Parallel Search | Dedicated metered alternative after Brave | `PARALLEL_API_KEY` |
+| Cloudflare gateway | Dedicated metered alternative after Parallel; requires explicit upstream | Account ID and `CLOUDFLARE_API_TOKEN` |
+| Official X recent search | Admitted alternative only for social requests | `X_API_BEARER_TOKEN` |
+| Parallel Responses, Brave Answers | Explicit primary/allowlist/per-call only; enable gates required | Underlying provider key |
 
-All registered backends may be deliberately named as primary/fallback, subject
-to capability, model availability, credential, and enable checks. A fixed
-primary that cannot honor a hard constraint fails rather than silently choosing
-another provider. Auto discovery can skip incompatible backends before
-dispatch. Other providers earn integration only by solving a demonstrated gap;
-the portfolio is not expanded to fill out a matrix.
+Anthropic subscription request identity is unsupported and rejected before
+native dispatch; automatic routing can continue safely. An auth-token exchange
+or provider response that has already performed work is not automatically safe
+just because its final error says authentication failed.
+
+Other providers earn integration by solving a demonstrated gap, not by filling
+out a matrix.
 
 ## Direct-provider quality and cost posture (2026-09; DeepSeek pricing 2026-10-17)
 
@@ -207,7 +215,7 @@ credential-gated smoke case.
 
 Both adapters are implemented and ship disabled. Their enable gates admit
 registration; credentials are still required at execution. They require a named
-primary/fallback or `advanced.provider` and never enter auto discovery or the
+primary/allowlist or `advanced.provider` and never enter auto discovery or the
 `native` alias. Default search still returns evidence only; these backends may
 perform billed synthesis internally even when the answer is not returned.
 
@@ -229,10 +237,11 @@ is not equivalent.
 
 There are no same-provider retries. Authentication, rate-limit, and
 unavailable failures known not to have produced a billable result may consume
-the single explicitly configured alternative for automatic routing. Network, timeout, and
+the next admitted candidate in the ordered search plan. Network, timeout, and
 post-dispatch HTTP failures remain final because their effects are uncertain.
-Invalid requests, unsupported filters, malformed responses, and cancellation
-are not retried or rerouted. Failures remain visible with stable provider,
+Invalid requests fail at the tool boundary. Unsupported constraints are checked
+before dispatch; explicit providers never reroute around them. Malformed
+responses and cancellation are final. Failures remain visible with stable provider,
 status, request ID, retry timing, and retryability fields. A caller may retry
 as a new tool call.
 

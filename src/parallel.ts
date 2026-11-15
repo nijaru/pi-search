@@ -31,6 +31,7 @@ const capabilities: ProviderCapabilities = {
 	semantic: true,
 	excerpts: true,
 	domainFilter: true,
+	combinedDomainFilters: false,
 	dateFilter: true,
 };
 
@@ -145,6 +146,7 @@ export class ParallelProvider implements Provider {
 	readonly id = "parallel" as const;
 	readonly capabilities = capabilities;
 	readonly profile = profile;
+	readonly validateRequest = buildParallelRequest;
 	private readonly apiKey?: string;
 	private readonly endpoint: string;
 	private readonly fetchImpl: SearchHttpFetch;

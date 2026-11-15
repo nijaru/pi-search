@@ -8,7 +8,7 @@ import { createParallelResponsesProvider } from "./parallel-responses";
 import { createWebSearchTool } from "./search-tool";
 import { createWebResearchTool } from "./research-tool";
 import { createSearchRouter } from "./router";
-import { executeSearchSelection } from "./search";
+import { executeSearchPlan } from "./search";
 
 const signal = new AbortController().signal;
 const evidence: SearchResponse = {
@@ -50,7 +50,7 @@ test.each(["pause_turn", "too_many_requests", "unavailable"])("Anthropic %s cann
 	let fallbackCalls = 0;
 	const primary = new AnthropicProvider({ fetchImpl: async () => json({ stop_reason: code === "pause_turn" ? code : "end_turn", content: code === "pause_turn" ? [] : [{ type: "web_search_tool_result", content: { type: "web_search_tool_result_error", error_code: code } }], usage: { input_tokens: 10, output_tokens: 2, server_tool_use: { web_search_requests: 1 } } }) });
 	const fallback = adapter(async () => { fallbackCalls++; return evidence; });
-	await expect(executeSearchSelection({ provider: primary, fallbacks: [fallback], automatic: true }, { query: "q" }, { context })).rejects.toBeInstanceOf(Error);
+	await expect(executeSearchPlan({ providers: [primary, fallback] as const }, { query: "q" }, { context })).rejects.toBeInstanceOf(Error);
 	expect(fallbackCalls).toBe(0);
 	const piContext = { ...context, modelRegistry: { ...context.modelRegistry, getAvailable: () => [] } } as never;
 	const search = await createWebSearchTool(primary).execute("call", { query: "q" }, signal, undefined, piContext);
@@ -93,10 +93,10 @@ test("configured Anthropic search respects its domain-filter combination", () =>
 	const providers = [new AnthropicProvider(), adapter(async () => evidence)];
 	const route = createSearchRouter({ providers, primary: "anthropic" });
 	const ctx = { ...context, modelRegistry: { getAvailable: () => [context.model] } } as never;
-	expect(route({ query: "q", domains: { include: ["example.com"] } }, ctx).provider.id).toBe("anthropic");
+	expect(route({ query: "q", domains: { include: ["example.com"] } }, ctx).providers[0].id).toBe("anthropic");
 	const request = { query: "q", domains: { include: ["example.com"], exclude: ["blocked.example.com"] } };
 	expect(() => route(request, ctx)).toThrow(/domain filters/);
-	expect(createSearchRouter({ providers, billingPolicy: "allow-configured-metered" })(request, ctx).provider.id).toBe("exa");
+	expect(createSearchRouter({ providers, billingPolicy: "allow-configured-metered" })(request, ctx).providers[0].id).toBe("exa");
 });
 
 test.each(["failed", "incomplete", undefined])("Parallel requires terminal success: %s", async status => {

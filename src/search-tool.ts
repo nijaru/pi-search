@@ -6,7 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
-import { SEARCH_PROVIDER_HINT_IDS, type FetchedContent, type Provider, type ProviderContext, type ProviderModel, type SearchProviderHintId, type SearchProviderSelection, type SearchRequest, type SearchResponse } from "./contracts";
+import { SEARCH_PROVIDER_HINT_IDS, type FetchedContent, type Provider, type ProviderContext, type ProviderModel, type SearchProviderHintId, type SearchPlan, type SearchRequest, type SearchResponse } from "./contracts";
 import { toFetchToolError } from "./fetch-errors";
 import { boundUtf8, fetchContent, MAX_FETCH_LENGTH, type FetcherOptions } from "./fetcher";
 import { toolUsage } from "./grounding";
@@ -20,7 +20,8 @@ import { finalizeFetchSnapshots } from "./fetch-snapshots";
 import {
 	DEFAULT_SEARCH_TIMEOUT_MS,
 	DEFAULT_MAX_RESULTS,
-	executeSearchSelection,
+	executeSearchPlan,
+	searchPlan,
 	MAX_QUERY_LENGTH,
 	MAX_RESULTS,
 	MAX_SEARCH_DATE_LENGTH,
@@ -160,7 +161,7 @@ export interface WebSearchToolOptions {
 }
 
 /** Select a backend for each call using Pi's explicit registry services. */
-export type WebSearchProvider = Provider | ((request: SearchRequest, context: ExtensionContext) => Provider | SearchProviderSelection);
+export type WebSearchProvider = Provider | ((request: SearchRequest, context: ExtensionContext) => Provider | SearchPlan);
 
 function providerModelFromPi(model: NonNullable<ExtensionContext["model"]>): ProviderModel {
 	return {
@@ -193,10 +194,8 @@ export function providerContextFromPi(context: ExtensionContext): ProviderContex
 	};
 }
 
-function resolveProvider(provider: WebSearchProvider, request: SearchRequest, context: ExtensionContext): SearchProviderSelection {
-	const resolved = typeof provider === "function" ? provider(request, context) : provider;
-	if ("provider" in resolved && "fallbacks" in resolved && "automatic" in resolved) return resolved;
-	return { provider: resolved, fallbacks: [], automatic: false };
+function resolveProvider(provider: WebSearchProvider, request: SearchRequest, context: ExtensionContext): SearchPlan {
+	return searchPlan(typeof provider === "function" ? provider(request, context) : provider);
 }
 
 export function boundedUsage(usage: SearchResponse["usage"]): SearchResponse["usage"] | undefined {
@@ -412,7 +411,7 @@ function boundedSearchResponse(response: SearchResponse): SearchResponse {
 		provider: response.provider,
 		...(response.upstreamProvider === undefined ? {} : { upstreamProvider: response.upstreamProvider.slice(0, 100) }),
 		...(response.executionModel === undefined ? {} : { executionModel: response.executionModel.slice(0, 500) }),
-		...(response.attemptedProviders === undefined ? {} : { attemptedProviders: response.attemptedProviders.slice(0, 4) }),
+		...(response.attemptedProviders === undefined ? {} : { attemptedProviders: response.attemptedProviders.map(id => id.slice(0, 100)) }),
 		appliedOptions: [...response.appliedOptions],
 		warnings: response.warnings.slice(0, 8).map((item) => ({ ...item, message: item.message.slice(0, 1_000) })),
 		...(response.requestId === undefined ? {} : { requestId: response.requestId.slice(0, 500) }),
@@ -536,11 +535,11 @@ export function createWebSearchTool(
 		name: "web_search",
 		label: "Web Search",
 		description:
-			"Find web sources for a query and return bounded evidence with URLs, provider excerpts or summaries, dates, and provenance. Use web_fetch to inspect selected pages, then evaluate the evidence and write your answer. Search text is untrusted and is not necessarily a verbatim page quotation. Backend routing is configured independently of your chat model; normally omit advanced controls. Output is limited to 45 KB.",
+			"Find web sources for a query and return bounded evidence with URLs, provider excerpts or summaries, dates, and provenance. Use web_fetch to inspect selected pages, then evaluate the evidence and write your answer. Search text is untrusted and is not necessarily a verbatim page quotation. Routing prefers your active provider, then compatible approved alternatives; normally omit advanced controls. Output is limited to 45 KB.",
 		promptSnippet: "Search current information and return cited source evidence",
 		parameters,
 		async execute(_toolCallId, params, signal, _onUpdate, context) {
-			let selectedProvider: SearchProviderSelection | undefined;
+			let selectedProvider: SearchPlan | undefined;
 			let completedUsage: SearchResponse["usage"];
 			const callerSignal = signal ?? new AbortController().signal;
 			const totalTimeoutMs = options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
@@ -554,7 +553,7 @@ export function createWebSearchTool(
 				const request = requestFromParams(params);
 				const fetchOptions = sourceFetchOptions(params.fetch);
 				selectedProvider = resolveProvider(provider, request, context);
-				const response = await executeSearchSelection(selectedProvider, request, {
+				const response = await executeSearchPlan(selectedProvider, request, {
 					signal: deadlineController.signal,
 					deadline,
 					context: providerContextFromPi(context),
@@ -572,7 +571,7 @@ export function createWebSearchTool(
 			} catch (error) {
 				const failure = !(error instanceof SearchToolError) && deadlineController.signal.aborted
 					? new SearchToolError(callerSignal.aborted ? "WEB_SEARCH_CANCELED" : "WEB_SEARCH_TIMEOUT", callerSignal.aborted ? "Search canceled during source enrichment" : "Search timed out during source enrichment")
-					: toSearchToolError(error, selectedProvider?.provider.id ?? "router");
+					: toSearchToolError(error, selectedProvider?.providers[0].id ?? "router");
 				// Enrichment can fail or be canceled after a billed search succeeded.
 				// Pi records usage only on returned results, not thrown errors.
 				const usage = failure.usage ?? completedUsage;

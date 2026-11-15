@@ -44,36 +44,65 @@ To also include a cited backend-generated answer, explicitly request
 
 ### Search routing
 
-Search is independent of your active chat model. With `PI_SEARCH_PROVIDER`
-unset or `auto`, the extension checks available Codex search first, using your
-ChatGPT/Codex login in Pi. Switching to another chat model does not change that
-preference. Subscription quota and billing are unknown, not reported as free.
+Automatic search prefers your active model's provider and authentication:
 
-Without eligible Codex search, admitted automatic API-key paths are OpenAI
-Responses, Exa, then DeepSeek; Brave is the conservative paced path. API-key
-automatic search requires `PI_SEARCH_ALLOW_METERED=1` or
-`PI_SEARCH_PREFER_FREE=1`. The latter puts admitted Brave before those API-key
-paths, but after Codex. Brave's default free-mode admission is not a guarantee
-against account overage.
+| Active chat | Preferred search |
+| --- | --- |
+| ChatGPT/Codex login | Codex standalone search |
+| OpenAI API GPT | OpenAI Responses web search |
+| Gemini | Google grounding |
+| Grok | xAI web search, or X search for social constraints |
+| Anthropic / Meta | The matching native adapter, when supported |
+| Unsupported or local provider | Compatible approved alternatives |
 
-Set an explicit backend to pin search independently of all chat-model changes:
+Provider/API identity, not a model-name guess, determines the native path.
+Automatic native search normally uses the active model; if the adapter excludes
+it from automatic search, it selects an eligible model within the same provider
+and authentication path. Switching chat providers changes the preference; an
+unrelated cached Codex login does not take over.
+
+Before dispatch, the extension skips backends that lack required capabilities,
+authentication, or spending admission. After a known-safe rejection it advances
+sequentially through an ordered list and stops at the first success. There is
+no fan-out. Timeouts, network failures, malformed responses, cancellation, and
+failures carrying reported usage do not trigger another provider.
+
+The default alternatives are dedicated retrieval first: Exa, DeepSeek, Brave,
+Parallel, Cloudflare; then Codex, OpenAI, Gemini, xAI, Anthropic, Meta. Social
+requests also admit official X search and use xAI X rather than web search.
+Only configured, compatible backends participate. Answer-synthesis adapters
+never enter the default list.
+
+Off-provider metered or unknown-cost alternatives require
+`PI_SEARCH_ALLOW_METERED=1` or `PI_SEARCH_PREFER_FREE=1`. Without either,
+only conservatively admitted Brave is an automatic off-provider alternative.
+Prefer-free puts Brave first among alternatives, never ahead of the active
+native path. Subscription quota and billing are unknown, not reported as free;
+Brave's pacing is not a guarantee against account overage.
+
+Usually leave `PI_SEARCH_PROVIDER` unset or `auto`. Optional preferences:
 
 ```bash
-export PI_SEARCH_PROVIDER=openai-codex
-# Optional model pin, resolved through Pi's registry:
-# export PI_SEARCH_MODEL=<available-model-id>
-# Optional deliberate alternative after a safe primary rejection:
-# export PI_SEARCH_FALLBACK_PROVIDER=exa
-# Optional explicit query-batch convenience tool:
+# Pin an installation primary instead of following chat:
+# export PI_SEARCH_PROVIDER=gemini
+# export PI_SEARCH_MODEL=<available-google-model-id>
+
+# Replace the default alternatives with this ordered allowlist:
+# export PI_SEARCH_FALLBACK_PROVIDERS=exa,deepseek,brave
+# An empty value disables alternatives:
+# export PI_SEARCH_FALLBACK_PROVIDERS=
+
+# Register the explicit query-batch convenience tool:
 # export PI_SEARCH_ENABLE_RESEARCH=1
 ```
 
-Naming a primary, fallback, or per-call provider deliberately admits that
-backend's billing; credentials and provider-specific enable gates are still
-required. There is **no fallback by default**. A named fallback may run once
-only after a safe authentication, rate-limit, or unavailable failure. Network,
-timeout, malformed-response, and post-dispatch failures are final. Per-call
-provider overrides are strict and never fall through.
+Named primaries and allowlist entries deliberately admit their billing, but do
+not enable disabled adapters or resolve credentials at startup. Missing
+allowlist adapters are skipped, so one list can be used across installations.
+A fixed primary must support the request; it does not silently change providers
+to work around incompatible constraints. It can still use safe automatic
+fallback after rejection. Per-call `advanced.provider` overrides (including
+`native`) are strict and never fall through.
 
 Most calls need no backend controls. Specialized requests use `advanced`:
 
@@ -149,10 +178,10 @@ Alternatively, configure direct keys and routing settings in the environment:
 export EXA_API_KEY=...
 # Cheaper second metered path; selected after Exa when metered routing is allowed.
 export DEEPSEEK_API_KEY=...            # $0.75 per 1K successful requests
-# Allow API-key backends (OpenAI Responses, Exa, DeepSeek) in automatic routing:
+# Admit metered/unknown-cost off-provider alternatives in automatic routing:
 # export PI_SEARCH_ALLOW_METERED=1
-# Prefer admitted free-mode Brave before API-key backends (after Codex).
-# This does not configure a fallback:
+# Prefer admitted free-mode Brave before other alternatives (after active native search).
+# This also admits metered alternatives if Brave cannot serve the request:
 # export PI_SEARCH_PREFER_FREE=1
 
 # Optional last-resort keyword/fresh search
@@ -186,13 +215,13 @@ context. Anthropic supports API keys, registry-owned bearer headers, and
 workload identity federation; federation exchanges use the official SDK
 protocol with bounded, cancellable requests. Anthropic Pro/Max subscription
 search is not supported; its tokens are rejected before dispatch. Gemini,
-xAI web/X, Anthropic, and Meta remain available through `PI_SEARCH_PROVIDER`
-or `advanced.provider`, independently of the active chat model. Optional
-`PI_SEARCH_MODEL` or `advanced.executionModel` pins a compatible registry model;
-otherwise the adapter selects from available search models, not the active chat
-model. Pi's `/login xai` subscription flow is supported for Grok web/X search.
-An explicit `advanced.provider: "native"` is the escape hatch that deliberately
-follows the active chat model; it has no fallback.
+xAI web/X, Anthropic, and Meta participate in active-provider routing and
+approved native fallback. `PI_SEARCH_PROVIDER` or `advanced.provider` overrides
+the normal preference. Optional `PI_SEARCH_MODEL` or `advanced.executionModel`
+pins a compatible registry model; an explicit backend without a pin uses its
+adapter's compatible registry selection. Pi's `/login xai` subscription flow is supported for Grok web/X search.
+An explicit `advanced.provider: "native"` requires the active native path and
+disables fallback for that call.
 
 To fetch a few result pages within a search, pass
 `fetch: { "maxResults": 2, "maxLength": 4000 }`. Omit it for ordinary search,
@@ -200,8 +229,9 @@ then use `web_fetch` after selecting a source.
 
 ### Cloudflare Web Search
 
-Cloudflare routes search through Ceramic, Exa, or Linkup. Auto discovery never
-selects it; deliberately name it as a primary, fallback, or per-call override:
+Cloudflare routes search through Ceramic, Exa, or Linkup. Once configured, it
+can serve as a dedicated metered fallback after Parallel. It can also be named
+as a primary, allowlist entry, or per-call override:
 
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=...
@@ -443,13 +473,21 @@ For adaptive research, let Pi alternate `web_search` and `web_fetch`.
 }
 ```
 
-The batch selects one backend once, with no fallback or fan-out. Domain/date
-filters apply to every query. `maxProviderCalls` limits extension search
-requests, not searches a hosted backend may perform internally. Optional
+Each query gets its own capability/preflight plan and uses the same ordered
+safe fallback as search. After a successful fallback, actually rejected
+predecessors are retired for the rest of the batch. A backend skipped only for
+one query's limits remains eligible for later queries.
+There is no fan-out. Domain/date filters apply to every query and candidate.
+`maxProviderCalls` and `maxSteps` count every extension search attempt, including
+fallback, not searches a hosted backend may perform internally. Optional
 `maxEstimatedCostUsd` stops new work based on per-request estimates; it is not
 a guaranteed billing cap and is rejected for backends without an estimate.
 `estimatedCostUsd` includes unconfirmed reservations; `usage.costUsd` contains
-only provider-reported cost. A failed request can still have unknown billing.
+only provider-reported cost. Proven-unbilled rejections release their planning
+reservations; ambiguous failures retain them. A threshold never dispatches an
+unknown-estimate candidate. Without a threshold, partial estimates explicitly
+disclose unknown-cost calls through `unknownCostProviders` and the spending
+headline, even when ordinary warnings are shortened.
 
 ### Tool-call migration
 
@@ -459,9 +497,10 @@ move there. `includeContent`/`contentResults`/`contentMaxLength` become
 `fetch: { "maxResults": 2, "maxLength": 4000 }`. Batch provider/model overrides
 also move to `advanced`, and its budget uses `maxEstimatedCostUsd` instead of
 `maxCostUsd`. Rerun old tool calls using the current schema; no legacy argument
-translation is added. Research is now opt-in, provider answers are opt-in, and
-fallbacks must be configured explicitly. Active chat-model selection no longer
-admits automatic API-key search.
+translation is added. Research and provider answers are opt-in. Automatic
+routing now follows the active provider/authentication, with approved ordered
+alternatives; `PI_SEARCH_FALLBACK_PROVIDERS` replaces the singular
+`PI_SEARCH_FALLBACK_PROVIDER` setting.
 
 ## Development
 

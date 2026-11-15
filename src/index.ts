@@ -40,6 +40,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		let ready: Provider | undefined;
 		return {
 			id: metadata.id, capabilities: metadata.capabilities, profile: metadata.profile,
+			validateRequest: metadata.validateRequest?.bind(metadata),
 			async search(request, signal, context) {
 				if (signal.aborted || stopped) throw createProviderError({ provider: metadata.id, kind: "canceled", message: "Search canceled", retryable: false });
 				if (ready === undefined) {

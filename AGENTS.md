@@ -18,9 +18,9 @@ The public tool surface is limited to:
 - `web_research`: optional bounded execution of caller-planned search/fetch batches.
 
 The extension should support multiple provider adapters, but provider choice is
-an implementation detail unless the caller explicitly requests one. Normal
-search uses one provider. Combining providers is opt-in or belongs to the
-research workflow.
+an implementation detail unless explicitly requested. Normal search stops at
+one successful backend; sequential safe fallback is not provider fan-out.
+Combining successful searches is opt-in or belongs to the research workflow.
 
 ## Architecture rules
 
@@ -45,9 +45,12 @@ research workflow.
   explicit warning/error.
 - Keep model-mediated providers behind an explicit execution context carrying
   model selection and credential lookup; never read Pi auth state globally.
-- Search backend/model preferences are independent of the active chat model;
-  only the explicit `native` per-call alias follows it. Keep provider summaries
-  optional and excerpt text paired with its provenance. Pi owns synthesis.
+- Automatic routing follows active provider/API authentication, not model-name
+  heuristics or unrelated cached logins. Explicit per-call overrides are strict.
+  Search and research share one ordered plan executor; count every batch
+  fallback attempt. Adapter preflight must stay pure and precede credential use.
+- Keep provider summaries optional and excerpt text paired with its provenance.
+  Pi owns synthesis.
 - Add timeouts, cancellation, redirect validation, response-size limits, and
   SSRF protection to network paths. Treat remote content as untrusted and
   isolate possible prompt injection from instructions.

@@ -31,8 +31,8 @@ Routing admission and provider capability decisions live in
 | --- | --- |
 | `src/index.ts` | Pi registration, configured adapter registry, lazy credentials, resource shutdown |
 | `src/settings.ts` | Installation backend/model/fallback preferences and optional batch enablement |
-| `src/router.ts` | Pure metadata-based selection, capability and spending admission, execution-context binding |
-| `src/search.ts` | Request validation, deadlines/cancellation, one explicitly configured safe fallback |
+| `src/router.ts` | Active-provider preference, ordered eligible search plan, spending admission, execution-context binding |
+| `src/search.ts` | Request validation and one sequential plan executor with shared deadline/cancellation and safe fallback |
 | Provider adapters | Protocol mapping, auth resolution, transport, provider-specific source/usage interpretation |
 | `src/contracts.ts`, `src/search-excerpt.ts`, `src/search-cleanup.ts` | Typed evidence, paired excerpt provenance, normalization/deduplication/citation alignment |
 | `src/search-tool.ts`, `src/research-tool.ts` | Tool schemas, bounded model text, compact display, reported tool usage |
@@ -46,26 +46,38 @@ at startup; a call checks available registry metadata before execution.
 
 ## Search execution invariants
 
-- The active chat model does not choose the normal search backend or execution
-  model. The router binds model-mediated search to registry services without
-  forwarding the active chat descriptor. A configured search model pins the
-  primary only; per-call model overrides and fallback execution stay separate.
-- An explicit `advanced.provider: "native"` deliberately follows the active
-  chat model. This escape hatch is strict and has no fallback.
+- Automatic routing prefers the active provider/API identity and model. It
+  matches authentication rather than guessing from model names: API GPT never
+  borrows a ChatGPT login merely because one is cached. An automatically
+  excluded OpenAI model is not an explicit search-model pin; use an eligible
+  same-provider model or approved alternative. A configured primary
+  replaces that preference; a configured search model pins only that primary.
+- Each plan contains an ordered nonempty list of eligible adapters. Per-call
+  provider overrides, including `native` (active-only), contain exactly one.
+  There is no separate automatic flag or special single-fallback path.
+- Model-mediated plan entries bind their execution model explicitly when
+  following chat. Off-provider entries select within their own registry
+  protocol; they never borrow the active descriptor or primary's model pin.
 - Adapters resolve credentials through the supplied Pi model registry. They
   preserve resolved `baseUrl`, headers, and provider environment. Explicit
   authorization values or null deletions win over synthesized bearer headers.
 - OpenAI API Responses and ChatGPT/Codex standalone search are separate
   adapters. Subscription access does not imply API credit or known free usage.
-- Hard constraints must be supported before dispatch. Automatic selection may
-  skip an incompatible backend; an explicitly configured primary or per-call
-  provider fails rather than silently changing providers or dropping filters.
-- No fallback exists unless named in installation configuration. A fallback
-  is checked for request support, model availability, and quota only if needed;
-  an unused fallback cannot block the primary or a batch. It can execute
-  once after a known-safe primary rejection, never after ambiguous network,
-  timeout, post-dispatch, malformed, or billed failures. Per-call provider
-  overrides do not fall through. There are no retries or provider fan-out.
+- Hard constraints must be supported before dispatch. Coarse capability flags
+  handle common constraints; optional pure `validateRequest` hooks reuse
+  adapter-owned builders for finer limits such as Parallel date precision and
+  DeepSeek composed-query length. Preflight never resolves credentials or
+  performs I/O. Explicit primaries/overrides fail on unsupported constraints.
+- Default automatic alternatives prefer dedicated retrieval, then other native
+  adapters, subject to spending admission. An ordered explicit allowlist can
+  replace them. Unavailable/incompatible alternatives are skipped, so an unused
+  fallback cannot block a healthy primary. Execution rechecks changing model
+  availability and quota before each attempt.
+- One sequential executor advances only after proven-safe failures, with one
+  deadline shared across all attempts. The first success ends execution.
+  Ambiguous network/timeout, cancellation, malformed, post-dispatch, or billed
+  failures cannot advance, even if mislabeled safe. No fan-out or same-provider
+  retries are added. Search and optional research use this same executor.
 - OpenAI streaming requires a terminal completed event, supports LF/CRLF SSE,
   and bounds response bytes. Completion-only or partial responses do not count
   as successful search evidence.
@@ -128,24 +140,38 @@ They do not bypass extraction caps or imply complete upstream X coverage.
 
 ## Batch limits and cost semantics
 
-The optional batch selects one provider once, executes caller queries in order,
-deduplicates results, and may fetch selected pages. It has no fallback. A
-malformed response may leave a partial batch and permit independent remaining
-queries; authentication/network and other provider failures end search work.
-Completed evidence may still be fetched unless canceled or past its deadline.
+The optional batch preflights each caller query, executes queries in order,
+deduplicates results, and may fetch selected pages. It uses the shared
+safe-fallback executor. After a fallback succeeds, actually rejected
+predecessors are retired for remaining queries; query-specific incompatibility
+alone does not retire a backend. Each rendered source retains its own backend
+identity; the summary names the last successful backend and reports attempt
+history. Quota metadata stays tied to that backend, and billing units are not
+added across different providers even when their unit labels happen to match.
+A malformed response can leave a partial batch and permit independent remaining
+queries, but cannot switch backend for that query. Other unrecovered provider
+failures end search work. Completed evidence may still be fetched unless
+canceled or past the deadline.
 
 Step/search-request/fetch counts, time, and output are bounded separately.
-Request counts do not bound hosted-provider internal search actions.
+Every fallback attempt counts against both search-request and step budgets.
+These counts do not bound hosted-provider internal search actions.
 `maxEstimatedCostUsd` is a planning threshold, not a billing cap. It requires a
 per-request estimate and stops new work when the reconciled planning total
-would exceed it. Failed calls retain unconfirmed reservations. The response's
-`estimatedCostUsd` is separate from `usage.costUsd`, which includes only actual
-provider reports. Cancellation never proves a dispatched request was unbilled.
+would exceed it; an unknown-estimate candidate is not dispatched under that
+threshold. Proven-unbilled rejections release reservations; ambiguous failures
+retain them. Reservations/counts occur only at provider invocation, after the
+shared execution guard; a pre-dispatch timeout cannot create an unconfirmed
+charge. The response's `estimatedCostUsd` is separate from `usage.costUsd`,
+which includes only actual provider reports. `unknownCostProviders` and the
+spending headline disclose partial estimates independently of bounded warnings.
+Cancellation never proves a dispatched request was unbilled.
 
 ## Verification
 
-Offline checks cover model-independent routing, explicit preference/override
-precedence, billing admission, strict constraints, bounded safe fallback,
+Offline checks cover active-provider/authentication matching, explicit override
+precedence, billing admission, strict preflight, ordered safe fallback and
+per-attempt batch budgets,
 registry-resolved routing/auth, provenance through real adapter normalization,
 citation alignment, output bounds, cancellation, batch partial results, and
 snapshot identity/expiry/eviction/shutdown. Registration tests exercise the

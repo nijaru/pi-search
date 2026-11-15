@@ -239,6 +239,7 @@ export class DeepSeekProvider implements Provider {
 	readonly id = "deepseek" as const;
 	readonly capabilities = capabilities;
 	readonly profile = profile;
+	readonly validateRequest = buildDeepSeekRequest;
 	private readonly apiKey?: string;
 	private readonly endpoint: string;
 	private readonly fetchImpl: SearchHttpFetch;

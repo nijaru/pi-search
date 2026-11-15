@@ -45,7 +45,7 @@ const unsupportedOptions = [
 ] as const satisfies readonly SearchOption[];
 
 function configurationError(message: string, kind: "auth" | "badRequest" = "badRequest"): never {
-	throw createProviderError({ provider: "cloudflare", kind, message, retryable: false });
+	throw createProviderError({ provider: "cloudflare", kind, fallbackSafe: true, message, retryable: false });
 }
 
 function requiredSetting(value: string | undefined, name: string, kind: "auth" | "badRequest"): string {
@@ -131,7 +131,7 @@ export class CloudflareProvider implements Provider {
 		}
 	}
 
-	async search(request: SearchRequest, signal: AbortSignal, _context: ProviderContext): Promise<SearchResponse> {
+	readonly validateRequest = (request: SearchRequest): void => {
 		const normalized = validateSearchRequest(request);
 		if (normalized.query.length > 1_024) return configurationError("Cloudflare search query must be at most 1024 characters");
 		if ((normalized.maxResults ?? 10) > 10) return configurationError("Cloudflare search maxResults must be at most 10");
@@ -140,6 +140,11 @@ export class CloudflareProvider implements Provider {
 				throw createProviderError({ provider: this.id, kind: "unsupported", message: `Cloudflare Web Search does not support ${option}`, retryable: false });
 			}
 		}
+	};
+
+	async search(request: SearchRequest, signal: AbortSignal, _context: ProviderContext): Promise<SearchResponse> {
+		const normalized = validateSearchRequest(request);
+		this.validateRequest(normalized);
 		if (!["ceramic", "exa", "linkup"].includes(this.upstream)) {
 			return configurationError("Cloudflare upstream must be explicitly configured as ceramic, exa, or linkup");
 		}
