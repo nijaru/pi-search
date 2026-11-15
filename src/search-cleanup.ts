@@ -1,4 +1,5 @@
-import type { ProviderId, SearchAnswer, SearchCitation, SearchRequest, SearchResponse, SearchResult, SearchWarning } from "./contracts";
+import type { ProviderId, SearchAnswer, SearchCitation, SearchExcerpt, SearchRequest, SearchResponse, SearchResult, SearchWarning } from "./contracts";
+import { copySearchExcerpt } from "./search-excerpt";
 
 export const MAX_SEARCH_URL_LENGTH = 8_192;
 export const MAX_SEARCH_TITLE_LENGTH = 500;
@@ -111,7 +112,7 @@ function optionalScore(value: unknown): number | undefined {
 	return Math.max(0, Math.min(1, value));
 }
 
-function normalizeResult(value: unknown, request: SearchRequest, provider: ProviderId): SearchResult | undefined {
+function normalizeResult(value: unknown, request: SearchRequest, provider: ProviderId, onInvalidExcerpt: () => void): SearchResult | undefined {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
 	const result = value as Partial<SearchResult>;
 	const parsed = normalizeSearchUrl(result.url);
@@ -119,6 +120,11 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 	const title = boundedString(result.title, MAX_SEARCH_TITLE_LENGTH);
 	const publishedAt = optionalTimestamp(result.publishedAt);
 	const excerpt = boundedString(result.excerpt, MAX_SEARCH_EXCERPT_LENGTH);
+	const excerptKind = result.excerptKind;
+	const validKind = excerptKind === "provider-excerpt" || excerptKind === "provider-summary" || excerptKind === "provider-text";
+	// Unknown provenance cannot be repaired by guessing from the adapter id.
+	const excerptFields: SearchExcerpt = excerpt !== undefined && validKind ? { excerpt, excerptKind } : {};
+	if (excerpt !== undefined && !validKind) onInvalidExcerpt();
 	const sourceId = boundedString(result.sourceId, MAX_SEARCH_SOURCE_ID_LENGTH);
 	const score = optionalScore(result.score);
 	const upstreamProvider = boundedString(result.upstreamProvider, 100);
@@ -134,7 +140,7 @@ function normalizeResult(value: unknown, request: SearchRequest, provider: Provi
 		...(title === undefined ? {} : { title }),
 		domain: parsed.domain,
 		...(publishedAt === undefined ? {} : { publishedAt }),
-		...(excerpt === undefined ? {} : { excerpt }),
+		...excerptFields,
 		provider,
 		...(upstreamProvider === undefined ? {} : { upstreamProvider }),
 		searchQuery: request.query,
@@ -186,7 +192,7 @@ function mergeResult(current: SearchResult, candidate: SearchResult): SearchResu
 		...(current.sourcePageUrl === undefined && candidate.sourcePageUrl !== undefined ? { sourcePageUrl: candidate.sourcePageUrl } : {}),
 		...(current.title === undefined && candidate.title !== undefined ? { title: candidate.title } : {}),
 		...(current.publishedAt === undefined && candidate.publishedAt !== undefined ? { publishedAt: candidate.publishedAt } : {}),
-		...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),
+		...copySearchExcerpt(current.excerpt === undefined ? candidate : current),
 		...(current.sourceId === undefined && candidate.sourceId !== undefined ? { sourceId: candidate.sourceId } : {}),
 		...(current.score === undefined && candidate.score !== undefined ? { score: candidate.score } : {}),
 	};
@@ -198,8 +204,9 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 	const results = new Map<string, SearchResult>();
 	let discarded = Array.isArray(response.results) ? 0 : 1;
 	let domainDiscarded = 0;
+	let invalidExcerpts = 0;
 	for (const value of candidates) {
-		const normalized = normalizeResult(value, request, provider);
+		const normalized = normalizeResult(value, request, provider, () => { invalidExcerpts += 1; });
 		if (normalized === undefined) {
 			discarded += 1;
 			continue;
@@ -216,6 +223,12 @@ export function cleanupSearchResponse(response: SearchResponse, request: SearchR
 		warnings.push({
 			code: "partial-results",
 			message: `Search discarded ${discarded} malformed result entr${discarded === 1 ? "y" : "ies"}`,
+		});
+	}
+	if (invalidExcerpts > 0) {
+		warnings.push({
+			code: "partial-results",
+			message: `Search omitted ${invalidExcerpts} excerpt${invalidExcerpts === 1 ? "" : "s"} with missing or invalid provenance`,
 		});
 	}
 	if (domainDiscarded > 0) {

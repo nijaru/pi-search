@@ -4,17 +4,10 @@ Standalone Pi extension for provider-neutral web search and content fetching.
 
 ## Current status
 
-The cost-controlled core is implemented. `src/index.ts` registers the three
-public tools: `web_search`, `web_fetch`, and `web_research`. Shipped search
-adapters cover OpenAI/Codex, Gemini, xAI web/X, Brave, Exa, DeepSeek, and
-Parallel.
-Direct fetching includes bounded HTTP, SSRF/redirect protection, local HTML
-extraction, PDF text, and YouTube captions.
-
-The next work is provider-landscape research, live credential-gated smoke
-coverage, and carefully selected integrations from existing Pi extensions.
-Do not add placeholder providers or speculative features just to fill out the
-package.
+`src/index.ts` registers `web_search` and `web_fetch`; the explicit query-batch
+`web_research` is opt-in. Architecture and remaining work live in
+`docs/DESIGN.md` and `docs/implementation-plan.md`.
+Do not add providers or speculative features merely to fill out the package.
 
 ## Scope
 
@@ -22,7 +15,7 @@ The public tool surface is limited to:
 
 - `web_search`: structured results and provenance, not an opaque answer.
 - `web_fetch`: bounded, safe extraction from a selected URL.
-- `web_research`: explicit, budgeted multi-step research for hard questions.
+- `web_research`: optional bounded execution of caller-planned search/fetch batches.
 
 The extension should support multiple provider adapters, but provider choice is
 an implementation detail unless the caller explicitly requests one. Normal
@@ -52,8 +45,9 @@ research workflow.
   explicit warning/error.
 - Keep model-mediated providers behind an explicit execution context carrying
   model selection and credential lookup; never read Pi auth state globally.
-- Keep provider-specific answer synthesis optional. The default path should
-  give the calling model inspectable evidence.
+- Search backend/model preferences are independent of the active chat model;
+  only the explicit `native` per-call alias follows it. Keep provider summaries
+  optional and excerpt text paired with its provenance. Pi owns synthesis.
 - Add timeouts, cancellation, redirect validation, response-size limits, and
   SSRF protection to network paths. Treat remote content as untrusted and
   isolate possible prompt injection from instructions.

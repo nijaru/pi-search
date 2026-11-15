@@ -16,12 +16,9 @@ interface ModelSelectionOptions {
 	readonly request: SearchRequest;
 	readonly context: ProviderContext;
 	/**
-	 * Select an available registry model automatically when the active model
-	 * is not a compatible execution target. The router only dispatches here
-	 * after confirming a registry model is available, so this preserves the
-	 * built-in-search guarantee for non-native active models (DESIGN: backend
-	 * resolution step 2). Explicit cross-provider hints never reach this path
-	 * without an executionModel; the router rejects those first.
+	 * Allow compatible registry models without a direct-caller active descriptor
+	 * or explicit model pin. Normal search passes registry-only context after
+	 * the router has admitted this backend and confirmed model availability.
 	 */
 	readonly allowRegistryFallback?: boolean;
 }
@@ -46,10 +43,9 @@ function candidates(options: ModelSelectionOptions): ProviderModel[] {
 }
 
 /**
- * Resolve one explicitly requested, active, or router-sanctioned registry
- * model without reading Pi auth state directly. Cross-provider execution that
- * was not router-initiated still requires an explicit model id so a stored
- * subscription cannot silently create a metered request.
+ * Resolve an explicit model, a direct caller's descriptor, or an admitted
+ * registry model without reading Pi auth state globally. The search router
+ * owns backend/spending admission and does not forward its chat descriptor.
  */
 export async function selectModelExecution(options: ModelSelectionOptions): Promise<ModelExecution> {
 	const registry = options.context.modelRegistry;
@@ -77,9 +73,8 @@ export async function selectModelExecution(options: ModelSelectionOptions): Prom
 	}
 	if (activeMatch !== undefined) return authenticate(activeMatch, registry, options);
 	if (options.allowRegistryFallback === true && available.length > 0) {
-		// The router dispatched here because a compatible registry model is
-		// available (DESIGN backend-resolution step 2). Try candidates in the
-		// registry's own order; Pi lists default models first. Preserve the last
+		// Try candidates in the registry's own order, independently of the chat
+		// model. These are credential checks, not provider requests. Preserve the last
 		// auth failure so an unauthenticated registry reports an auth problem,
 		// not a misleading model-selection problem.
 		let lastAuthError: unknown;

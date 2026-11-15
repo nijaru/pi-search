@@ -41,6 +41,7 @@ describe("DeepSeekProvider", () => {
 			domain: "example.com",
 			title: "Example",
 			excerpt: "A model-oriented summary.",
+			excerptKind: "provider-summary",
 			publishedAt: "2026-01-02T00:00:00+00:00",
 			provider: "deepseek",
 			searchQuery: "latest TypeScript release",
@@ -157,7 +158,7 @@ describe("DeepSeekProvider", () => {
 			{ url: "https://example.com/valid", snippet: "Snippet excerpt." },
 		] }) }).search({ query: "q" }, new AbortController().signal, {});
 		expect(result.results).toHaveLength(1);
-		expect(result.results[0]).toMatchObject({ url: "https://example.com/valid", excerpt: "Snippet excerpt." });
+		expect(result.results[0]).toMatchObject({ url: "https://example.com/valid", excerpt: "Snippet excerpt.", excerptKind: "provider-excerpt" });
 		expect(result.warnings).toEqual([{ code: "partial-results", message: "DeepSeek discarded 2 malformed result entries" }]);
 	});
 
@@ -166,7 +167,10 @@ describe("DeepSeekProvider", () => {
 			{ url: "https://example.com/summary", summary: "Summary text.", snippet: "Snippet text.", rerank_score: "high", date: "not-a-date" },
 			{ url: "https://example.com/snippet", snippet: "Only snippet.", rerank_score: 9 },
 		] }) }).search({ query: "q", maxResults: 2 }, new AbortController().signal, {});
-		expect(result.results.map((item) => item.excerpt)).toEqual(["Summary text.", "Only snippet."]);
+		expect(result.results.map((item) => [item.excerpt, item.excerptKind])).toEqual([
+			["Summary text.", "provider-summary"],
+			["Only snippet.", "provider-excerpt"],
+		]);
 		expect(result.results[0]).toMatchObject({ score: undefined, publishedAt: undefined });
 		expect(result.results[1]?.score).toBe(1);
 	});

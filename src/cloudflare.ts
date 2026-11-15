@@ -19,6 +19,7 @@ import {
 	type SearchHttpFetch,
 } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 import { normalizeSearchUrl } from "./search-cleanup";
 
 export type CloudflareUpstream = "ceramic" | "exa" | "linkup";
@@ -75,10 +76,12 @@ function normalizeResponse(result: JsonResponse, request: SearchRequest, upstrea
 			discarded += 1;
 			continue;
 		}
+		const description = optionalString(item.description, 4_000);
 		results.push({
 			...parsed,
 			title: optionalString(item.title, 500),
-			excerpt: optionalString(item.description, 4_000),
+			// The gateway description does not identify upstream extraction vs synthesis.
+			...searchExcerpt(description, "provider-text"),
 			// Keep both the gateway service and the selected upstream inspectable.
 			provider: "cloudflare",
 			upstreamProvider: upstream,

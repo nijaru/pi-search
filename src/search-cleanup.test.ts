@@ -20,6 +20,7 @@ describe("search result cleanup", () => {
 					url: "https://example.com/page",
 					title: "Useful title",
 					excerpt: "Useful excerpt",
+					excerptKind: "provider-excerpt",
 					sourceId: "source-1",
 					provider: "wrong",
 					searchQuery: "wrong",
@@ -44,11 +45,50 @@ describe("search result cleanup", () => {
 				title: "Useful title",
 				domain: "example.com",
 				excerpt: "Useful excerpt",
+				excerptKind: "provider-excerpt",
 				provider: "brave",
 				searchQuery: "q",
 				sourceId: "source-1",
 			},
 		]);
+	});
+
+	it.each(["provider-excerpt", "provider-summary", "provider-text"] as const)("preserves %s provenance when bounding and merging duplicate URLs", (excerptKind) => {
+		const request = validateSearchRequest({ query: "q" });
+		const response = cleanupSearchResponse({
+			query: "q", provider: "deepseek", appliedOptions: [], warnings: [],
+			results: [
+				{ url: "https://example.com/page", provider: "deepseek", searchQuery: "q" },
+				{ url: "https://example.com/page#duplicate", provider: "deepseek", searchQuery: "q", excerpt: "a".repeat(5_000), excerptKind },
+				{ url: "https://example.com/page", provider: "deepseek", searchQuery: "q", excerpt: "Later text", excerptKind: "provider-text" },
+			],
+		}, request, "deepseek");
+		expect(response.results).toHaveLength(1);
+		expect(response.results[0]).toMatchObject({ excerpt: "a".repeat(4_000), excerptKind });
+	});
+
+	it.each([undefined, "page-text", "provider-answer"])("omits text with invalid provenance %j without guessing from provider identity", (excerptKind) => {
+		// Exercise runtime validation for an untyped/malformed adapter boundary.
+		const response = {
+			query: "q", provider: "deepseek", executionModel: "model", requestId: "id", usage: { totalTokens: 5 }, appliedOptions: [], warnings: [],
+			results: [{ url: "https://example.com/", excerpt: "Unclassified text", excerptKind, sourceId: "source", provider: "deepseek", searchQuery: "q" }],
+			answer: { text: "Answer", contentTrust: "untrusted", provider: "deepseek", citations: [{ url: "https://example.com/" }] },
+		} as unknown as SearchResponse;
+		const cleaned = cleanupSearchResponse(response, validateSearchRequest({ query: "q" }), "deepseek");
+		expect(cleaned).toMatchObject({ executionModel: "model", requestId: "id", usage: { totalTokens: 5 }, answer: { citations: [{ url: "https://example.com/" }] } });
+		expect(cleaned.results[0]).toMatchObject({ url: "https://example.com/", sourceId: "source" });
+		expect(cleaned.results[0]).not.toHaveProperty("excerpt");
+		expect(cleaned.results[0]).not.toHaveProperty("excerptKind");
+		expect(cleaned.warnings).toContainEqual({ code: "partial-results", message: expect.stringContaining("missing or invalid provenance") });
+	});
+
+	it("removes orphan provenance when empty text is normalized away", () => {
+		const response = cleanupSearchResponse({
+			query: "q", provider: "exa", appliedOptions: [], warnings: [],
+			results: [{ url: "https://example.com/", provider: "exa", searchQuery: "q", excerpt: "   ", excerptKind: "provider-summary" }],
+		}, validateSearchRequest({ query: "q" }), "exa");
+		expect(response.results[0]).not.toHaveProperty("excerpt");
+		expect(response.results[0]).not.toHaveProperty("excerptKind");
 	});
 
 	it("rejects non-http URLs and embedded credentials while reporting discarded results", () => {

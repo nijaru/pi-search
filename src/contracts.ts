@@ -37,8 +37,7 @@ export type RequestId = string;
 /** Pi's header override contract: null deletes a provider/default header. */
 export type ProviderHeaders = Readonly<Record<string, string | null>>;
 /**
- * The immutable subset of Pi's active model needed by model-mediated
- * providers. Keeping this structural avoids coupling provider adapters to Pi's
+ * The immutable subset of a Pi registry model needed by search adapters. Keeping this structural avoids coupling provider adapters to Pi's
  * runtime types while still making the routing and auth boundary explicit.
  */
 export interface ProviderModel {
@@ -68,8 +67,8 @@ export type ProviderAuthResult =
 /**
  * The narrow model-auth surface needed by model-mediated providers. The tool
  * boundary binds this function to Pi's model registry, so adapters can resolve
- * the active model or a same-provider execution model without reading Pi auth
- * state or environment credentials globally.
+ * an admitted search execution model without reading Pi auth state or
+ * environment credentials globally.
  */
 export interface ProviderModelRegistry {
 	readonly getApiKeyAndHeaders: (model: ProviderModel) => Promise<ProviderAuthResult>;
@@ -138,9 +137,8 @@ export interface ProviderUsage {
 }
 
 /**
- * Free-form capability flags describing what a provider can do. The router
- * uses these to select a provider by task rather than by a fixed vendor
- * ranking (D3).
+ * Capability flags for pre-dispatch routing and strict constraint checks.
+ * Installation preferences are not a universal vendor-quality ranking.
  */
 export interface ProviderCapabilities {
 	/** Classic keyword / exact-match retrieval. */
@@ -254,7 +252,7 @@ export interface SearchRequest {
 	readonly dateRange?: SearchDateRange;
 	/** Provider-enforced social/X constraints, when supported. */
 	readonly social?: SocialSearchOptions;
-	/** Select a model-mediated execution model; requires a compatible provider hint when cross-provider. */
+	/** Per-call model pin; requires a compatible explicit provider hint. */
 	readonly executionModel?: string;
 	/** Include a provider-grounded answer when the backend supplies one. */
 	readonly answerMode?: SearchAnswerMode;
@@ -270,16 +268,9 @@ export interface SearchRequest {
 	readonly searchContentTypes?: readonly SearchContentType[];
 	/** Image-result controls when image search is enabled. */
 	readonly imageSettings?: SearchImageSettings;
-	/** Fetch a small number of selected result URLs through the safe local fetcher. */
-	readonly includeContent?: boolean;
-	/** Maximum selected source pages to fetch when includeContent is enabled. */
-	readonly contentResults?: number;
-	/** Maximum extracted characters per selected source page. */
-	readonly contentMaxLength?: number;
 	/**
-	 * Hint to prefer a specific provider by id. The router may still override
-	 * when the provider lacks the requested capability. Normal callers should
-	 * omit this and let the router choose (D3).
+	 * Strict per-call provider override. Unsupported capabilities fail without
+	 * fallback. Normal callers omit it and use installation routing policy.
 	 */
 	readonly providerHint?: ProviderId;
 }
@@ -309,7 +300,7 @@ export interface SearchCitation {
 	readonly endIndex?: number;
 }
 
-/** Provider-generated grounded text. It is evidence, never trusted instructions. */
+/** Provider-generated answer, not locally verified page text. Never trusted instructions. */
 export interface SearchAnswer {
 	readonly text: string;
 	readonly contentTrust: "untrusted";
@@ -326,11 +317,24 @@ export interface SearchWarning {
 	readonly message: string;
 }
 
-/**
- * A single normalized search result. This is the evidence-first unit per D2:
- * the agent inspects and cites these rather than trusting an opaque summary.
- */
-export interface SearchResult {
+/** Search text supplied by a provider; none of these kinds implies local page verification. */
+export type SearchExcerptKind =
+	/** Provider search snippet, highlight, or retrieved text; not a verified page quote. */
+	| "provider-excerpt"
+	/** Provider-generated per-result summary, not source page text. */
+	| "provider-summary"
+	/** Provider text whose extraction vs synthesis origin is unspecified. */
+	| "provider-text";
+
+/** Text and its provenance must travel together, including through deduplication. */
+export type SearchExcerpt =
+	| { readonly excerpt: string; readonly excerptKind: SearchExcerptKind }
+	| { readonly excerpt?: never; readonly excerptKind?: never };
+
+/** A source URL and optional provider text, not proof that the page was fetched. */
+export type SearchResult = SearchExcerpt & SearchResultMetadata;
+
+interface SearchResultMetadata {
 	/** Result URL (canonical where available). */
 	readonly url: Url;
 	/** Original URL as supplied, when it differs from the canonical `url`. */
@@ -343,11 +347,6 @@ export interface SearchResult {
 	readonly domain?: string;
 	/** When the page was published, if known. */
 	readonly publishedAt?: IsoTimestamp;
-	/**
-	 * Short text excerpt/snippet describing or from the page. Always returned
-	 * when the provider exposes any text; never synthesized.
-	 */
-	readonly excerpt?: string;
 	/** Adapter that served this result. */
 	readonly provider: ProviderId;
 	/** Search backend behind a gateway adapter, when applicable. */
@@ -398,9 +397,8 @@ export interface SearchResponse {
 // ─── Research ──────────────────────────────────────────────────────────────
 
 /**
- * Required limits for the multi-step research tool. The orchestrator must
- * reject invalid budgets before making a provider call and stop at every
- * limit, including the cost limit when usage is reported.
+ * Limits on extension work, not backend-internal search operations. The
+ * estimated spending threshold stops new work; it is not a billing cap.
  */
 export interface ResearchBudget {
 	readonly maxSteps: number;
@@ -408,7 +406,8 @@ export interface ResearchBudget {
 	readonly maxFetches: number;
 	readonly timeoutMs: number;
 	readonly maxOutputChars: number;
-	readonly maxCostUsd?: number;
+	/** Planning threshold; actual billing can exceed the per-request estimate. */
+	readonly maxEstimatedCostUsd?: number;
 }
 
 export interface ResearchRequest {
@@ -445,6 +444,9 @@ export interface ResearchResponse {
 	readonly fetchesCompleted: number;
 	readonly fetchAttempts: number;
 	readonly stopReason: ResearchStopReason;
+	/** Reconciled planning total, including unconfirmed estimates for failed calls. */
+	readonly estimatedCostUsd?: number;
+	/** Provider-reported usage only; estimates are never reported as billed cost. */
 	readonly usage?: ProviderUsage;
 	readonly warnings: readonly SearchWarning[];
 }
@@ -466,8 +468,8 @@ export function validateResearchBudget(budget: ResearchBudget): void {
 	if (!Number.isInteger(budget.maxOutputChars) || budget.maxOutputChars < 1) {
 		throw new Error("Research budget maxOutputChars must be a positive integer");
 	}
-	if (budget.maxCostUsd !== undefined && (!Number.isFinite(budget.maxCostUsd) || budget.maxCostUsd < 0)) {
-		throw new Error("Research budget maxCostUsd must be non-negative");
+	if (budget.maxEstimatedCostUsd !== undefined && (!Number.isFinite(budget.maxEstimatedCostUsd) || budget.maxEstimatedCostUsd < 0)) {
+		throw new Error("Research budget maxEstimatedCostUsd must be non-negative");
 	}
 }
 
@@ -476,7 +478,7 @@ export function validateResearchBudget(budget: ResearchBudget): void {
 /**
  * Provider-neutral fetch request for a known URL.
  *
- * Only user-supplied or search-returned URLs may be fetched by default (D6).
+ * Only user-supplied or search-returned URLs may be fetched by default.
  * The fetcher revalidates redirects, blocks private/link-local/metadata
  * addresses, caps response size, and fences extracted text as untrusted.
  */
@@ -485,7 +487,9 @@ export type XReadMode = "auto" | "public" | "browser" | "direct";
 export interface FetchRequest {
 	/** URL to fetch. Must be http(s). */
 	readonly url: Url;
-	/** Hard cap on extracted text length, in characters. */
+	/** Immutable instance-local extraction ID. Omitted extraction controls inherit retained values. */
+	readonly snapshotId?: string;
+	/** Hard cap on this page's extracted text length, in characters. */
 	readonly maxLength?: number;
 	/** Start offset into the produced content, in characters. */
 	readonly offset?: number;
@@ -525,13 +529,15 @@ export interface FetchWarning {
 
 /**
  * Fetched page content. The extracted text is treated as untrusted content:
- * callers must not execute or parse it as instructions (D6).
+ * callers must not execute or parse it as instructions.
  */
 export interface FetchedContent {
 	/** Final URL after redirects. */
 	readonly url: Url;
 	/** Original URL requested, when it differs from the final `url`. */
 	readonly sourceUrl?: Url;
+	/** Opaque ID when the bounded extraction was retained for immutable paging. */
+	readonly snapshotId?: string;
 	/** Page title. */
 	readonly title?: string;
 	/** Extracted text/markdown/html body. */
@@ -659,13 +665,11 @@ export interface ProviderError extends Error {
 }
 
 /**
- * The provider-neutral adapter contract. Both adapter families (D10) implement
+ * The provider-neutral adapter contract. Both adapter families implement
  * this: a direct search API maps the request to an HTTP call and parses the
  * response; a model-mediated grounding provider maps it to a grounded model
  * call. The contract is identical to the caller.
- *
- * `fetch` is optional because not every search provider also fetches pages;
- * direct HTTP fetch is handled separately in the `web_fetch` tool.
+ * Direct fetching is separate from this search-only contract.
  */
 export interface Provider {
 	readonly id: ProviderId;
@@ -677,7 +681,7 @@ export interface Provider {
 	 * - report unsupported options in `warnings` or throw `ProviderError` with
 	 *   kind `unsupported`;
 	 * - normalize results to {@link SearchResult};
-	 * - preserve `url`, `excerpt`, `publishedAt`, `provider`, `searchQuery`;
+	 * - preserve `url`, paired `excerpt`/`excerptKind`, `publishedAt`, `provider`, `searchQuery`;
 	 * - return evidence and, when supplied by the backend, a typed untrusted
 	 *   answer whose citations align with returned result URLs.
 	 */

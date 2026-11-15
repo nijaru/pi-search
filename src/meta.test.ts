@@ -76,6 +76,7 @@ describe("MetaProvider", () => {
 				title: "Example docs",
 				domain: "example.com",
 				excerpt: "Release notes.",
+				excerptKind: "provider-text",
 				provider: "meta",
 				searchQuery: "latest release",
 			},

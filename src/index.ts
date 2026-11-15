@@ -11,6 +11,7 @@ import { createExaProvider } from "./exa";
 import { createCloudflareProvider, type CloudflareUpstream } from "./cloudflare";
 import { createGeminiProvider } from "./gemini";
 import { registerWebFetch } from "./fetch-tool";
+import { createFetchSnapshots } from "./fetch-snapshots";
 import { createOpenAIProvider } from "./openai";
 import { createParallelProvider } from "./parallel";
 import { createParallelResponsesProvider } from "./parallel-responses";
@@ -18,21 +19,17 @@ import { createMetaProvider } from "./meta";
 import { createSearchRouter } from "./router";
 import { createXProvider } from "./x";
 import { createXAIProvider } from "./xai";
-import { availableProviderHints } from "./provider-availability";
+import { searchPreferences } from "./settings";
 import { registerWebResearch } from "./research-tool";
 import { registerWebSearch } from "./search-tool";
 import { loadDirectCredentials, type SecretName } from "./credentials";
-import type { Provider } from "./contracts";
+import { SEARCH_PROVIDER_HINT_IDS, type Provider } from "./contracts";
 import { createProviderError } from "./errors";
 
-/**
- * Native grounding is selected for supported active models. Exa is the
- * metered non-native default only when explicitly allowed, DeepSeek is the
- * cheaper second metered path, and Brave is the paced last-resort keyword
- * path. Automatic availability failures may use one visible fallback.
- */
+/** Register the evidence tools and their extension-instance resources. */
 export default async function (pi: ExtensionAPI): Promise<void> {
 	const agentDir = getAgentDir();
+	const preferences = searchPreferences(process.env);
 	const credentials = await loadDirectCredentials(agentDir);
 	let stopped = false;
 	// Routing needs adapter metadata at registration, but only a selected direct
@@ -49,7 +46,8 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 					let key: string | undefined;
 					try { key = await credentials.get(name, signal); }
 					catch (error) {
-						throw createProviderError({ provider: metadata.id, kind: signal.aborted || stopped ? "canceled" : "auth", message: error instanceof Error ? error.message : "Credential resolution failed", retryable: false });
+						const canceled = signal.aborted || stopped;
+						throw createProviderError({ provider: metadata.id, kind: canceled ? "canceled" : "auth", fallbackSafe: !canceled, message: error instanceof Error ? error.message : "Credential resolution failed", retryable: false });
 					}
 					// Another call may have finished the shared resolution first.
 					if (signal.aborted || stopped) throw createProviderError({ provider: metadata.id, kind: "canceled", message: "Search canceled", retryable: false });
@@ -102,53 +100,35 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	const billingPolicy = process.env.PI_SEARCH_ALLOW_METERED === "1"
 		? "allow-configured-metered"
 		: process.env.PI_SEARCH_PREFER_FREE === "1" ? "prefer-free" : "free-only";
-	const braveFreeCapacityConfigured = braveFreeOnly;
+	// One configured registry owns both dispatch and the exposed provider hints.
+	const providers = [
+		openai, codex, gemini, xai, xaiX, anthropic, meta,
+		...(credentials.has("EXA_API_KEY") ? [exa] : []),
+		...(credentials.has("DEEPSEEK_API_KEY") ? [deepseek] : []),
+		...(credentials.has("BRAVE_API_KEY") ? [brave] : []),
+		...(cloudflare === undefined ? [] : [cloudflare]),
+		...(credentials.has("PARALLEL_API_KEY") ? [parallel] : []),
+		...(credentials.has("X_API_BEARER_TOKEN") ? [x] : []),
+		...(parallelResponsesEnabled ? [parallelResponses] : []),
+		...(braveAnswersEnabled ? [braveAnswers] : []),
+	];
 	const route = createSearchRouter({
-		openai,
-		openaiCodex: codex,
-		gemini,
-		xai,
-		xaiX,
-		anthropic,
-		meta,
-		exa,
-		deepseek,
-		cloudflare,
-		cloudflareConfigured,
-		parallel,
-		parallelResponses,
-		braveAnswers,
-		x,
-		brave,
-		braveConfigured: credentials.has("BRAVE_API_KEY"),
-		exaConfigured: credentials.has("EXA_API_KEY"),
-		deepseekConfigured: credentials.has("DEEPSEEK_API_KEY"),
-		parallelConfigured: credentials.has("PARALLEL_API_KEY"),
-		parallelResponsesConfigured: parallelResponsesEnabled,
-		braveAnswersConfigured: braveAnswersEnabled,
-		xConfigured: credentials.has("X_API_BEARER_TOKEN"),
-		braveFreeCapacityConfigured,
+		providers,
+		...preferences,
+		braveFreeCapacityConfigured: braveFreeOnly,
 		braveCapacity,
 		billingPolicy,
 	});
-	// Expose only provider hints this installation can actually dispatch so
-	// the tool schemas never advertise options whose keys or gates are absent.
-	const availableHints = availableProviderHints({
-		brave: credentials.has("BRAVE_API_KEY"),
-		braveAnswers: braveAnswersEnabled,
-		exa: credentials.has("EXA_API_KEY"),
-		deepseek: credentials.has("DEEPSEEK_API_KEY"),
-		cloudflare: cloudflareConfigured,
-		parallel: credentials.has("PARALLEL_API_KEY"),
-		parallelResponses: parallelResponsesEnabled,
-		x: credentials.has("X_API_BEARER_TOKEN"),
-	});
+	const availableHints = SEARCH_PROVIDER_HINT_IDS.filter(id => providers.some(provider => provider.id === id));
 	const xBrowser = new XBrowserAccess(join(agentDir, "pi-search", "x"));
-	registerWebSearch(pi, route, { availableProviderHints: availableHints, fetcherOptions: { xBrowser } });
-	registerWebFetch(pi, { xBrowser });
-	registerWebResearch(pi, route, { availableProviderHints: availableHints, xBrowser });
+	const snapshots = createFetchSnapshots();
+	const fetcherOptions = { xBrowser, snapshots };
+	registerWebSearch(pi, route, { availableProviderHints: availableHints, fetcherOptions });
+	registerWebFetch(pi, fetcherOptions);
+	if (preferences.researchEnabled) registerWebResearch(pi, route, { availableProviderHints: availableHints, ...fetcherOptions });
 	pi.on("session_shutdown", async () => {
 		stopped = true;
+		snapshots.close();
 		await Promise.all([credentials.shutdown(), xBrowser.shutdown()]);
 	});
 	pi.registerCommand("search-x", {

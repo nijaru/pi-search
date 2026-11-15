@@ -13,6 +13,7 @@ import type {
 import { createProviderError } from "./errors";
 import { getJson, objectValue, optionalString, optionalTimestamp, requireApiKey, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 
 export const X_RECENT_SEARCH_ENDPOINT = "https://api.x.com/2/tweets/search/recent";
 export const DEFAULT_X_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -130,7 +131,7 @@ function normalizeXResponse(payload: unknown, request: SearchRequest, metadata: 
 			...(username === undefined ? {} : { title: `@${username}` }),
 			domain: "x.com",
 			...(publishedAt === undefined ? {} : { publishedAt }),
-			...(text === undefined ? {} : { excerpt: text }),
+			...searchExcerpt(text, "provider-excerpt"),
 			provider: "x",
 			searchQuery: normalized.query,
 			sourceId: id,

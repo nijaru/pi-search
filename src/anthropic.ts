@@ -4,6 +4,7 @@ import type {
 	ProviderContext,
 	ProviderModel,
 	ProviderProfile,
+	SearchExcerpt,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -20,6 +21,7 @@ import {
 import { AnthropicSearchAuth } from "./anthropic-auth";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { copySearchExcerpt, searchExcerpt } from "./search-excerpt";
 
 export const ANTHROPIC_MESSAGES_ENDPOINT = "https://api.anthropic.com/v1/messages";
 export { ANTHROPIC_VERSION } from "./anthropic-auth";
@@ -126,11 +128,10 @@ function endpointFor(model: ProviderModel, override?: string): string {
 	return url.toString();
 }
 
-interface AnthropicCandidate {
+type AnthropicCandidate = SearchExcerpt & {
 	readonly url: string;
 	readonly title?: string;
-	readonly excerpt?: string;
-}
+};
 
 function candidateFromUrl(url: unknown, title: unknown): AnthropicCandidate | undefined {
 	const parsed = httpSource(url, "anthropic");
@@ -205,7 +206,7 @@ function normalizeEvidence(payload: unknown, request: SearchRequest): SearchResp
 		candidates.set(candidate.url, {
 			...current,
 			...(current.title === undefined && candidate.title !== undefined ? { title: candidate.title } : {}),
-			...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),
+			...copySearchExcerpt(current.excerpt === undefined ? candidate : current),
 		});
 	};
 	let searchQueries = 0;
@@ -250,7 +251,7 @@ function normalizeEvidence(payload: unknown, request: SearchRequest): SearchResp
 				// Result items carry opaque encrypted content for multi-turn use;
 				// only human-readable snippet/text fields become excerpts.
 				const excerpt = optionalString(item.snippet ?? item.text, 4_000);
-				merge(excerpt === undefined ? candidate : { ...candidate, excerpt });
+				merge({ ...candidate, ...searchExcerpt(excerpt, "provider-text") });
 			}
 			continue;
 		}
@@ -285,7 +286,7 @@ function normalizeEvidence(payload: unknown, request: SearchRequest): SearchResp
 			url: candidate.url,
 			...(candidate.title === undefined ? {} : { title: candidate.title }),
 			domain: parsed.hostname.toLowerCase(),
-			...(candidate.excerpt === undefined ? {} : { excerpt: candidate.excerpt }),
+			...copySearchExcerpt(candidate),
 			provider: "anthropic",
 			searchQuery: normalized.query,
 		};

@@ -136,7 +136,7 @@ describe("web_research", () => {
 
 	it.each([
 		{ maxSteps: 0 }, { maxProviderCalls: 0 }, { maxFetches: -1 },
-		{ timeoutMs: 0 }, { timeoutMs: Infinity }, { maxOutputChars: 0 }, { maxCostUsd: -1 },
+		{ timeoutMs: 0 }, { timeoutMs: Infinity }, { maxOutputChars: 0 }, { maxEstimatedCostUsd: -1 },
 	])("rejects invalid budgets before provider selection: %j", async (limits) => {
 		let selected = false;
 		await expect(executeResearch({ question: "main", budget: { ...budget, ...limits } }, () => { selected = true; return provider(); }, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
@@ -144,8 +144,9 @@ describe("web_research", () => {
 	});
 
 	it("reserves estimated cost before each provider call", async () => {
-		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget: { ...budget, maxCostUsd: 1 } }, () => provider(false, 0.6), context());
-		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", usage: { costUsd: 0.6 } });
+		const result = await executeResearch({ question: "main", queries: ["one", "two"], budget: { ...budget, maxEstimatedCostUsd: 1 } }, () => provider(false, 0.6), context());
+		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", estimatedCostUsd: 0.6 });
+		expect(result.usage?.costUsd).toBeUndefined();
 	});
 
 	it("retains the cost reservation for malformed potentially billed responses", async () => {
@@ -153,8 +154,9 @@ describe("web_research", () => {
 			...provider(false, 0.007),
 			search: async () => { throw new SearchToolError("WEB_SEARCH_MALFORMED_RESPONSE", "invalid sources", { kind: "malformed" }); },
 		};
-		const result = await executeResearch({ question: "main", queries: ["one", "two", "three"], budget: { ...budget, maxProviderCalls: 3, maxCostUsd: 0.007 } }, () => selected, context());
-		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", usage: { costUsd: 0.007 } });
+		const result = await executeResearch({ question: "main", queries: ["one", "two", "three"], budget: { ...budget, maxProviderCalls: 3, maxEstimatedCostUsd: 0.007 } }, () => selected, context());
+		expect(result).toMatchObject({ providerCalls: 1, stopReason: "budget", estimatedCostUsd: 0.007 });
+		expect(result.usage?.costUsd).toBeUndefined();
 	});
 
 	it("reports a budget stop rather than completion when steps omit planned queries", async () => {
@@ -245,20 +247,21 @@ describe("web_research", () => {
 				};
 			},
 		};
-		const route = createSearchRouter({ exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
+		const route = createSearchRouter({ providers: [exa], billingPolicy: "allow-configured-metered" });
 		const result = await executeResearch({
 			question: "main",
 			queries: ["one", "two"],
 			domains: { include: ["Example.COM"] },
 			dateRange: { from: "2026-01-01", to: "2026-01-02" },
-			budget: { ...budget, maxCostUsd: 0.02 },
+			budget: { ...budget, maxEstimatedCostUsd: 0.02 },
 		}, route, context());
 		expect(result.provider).toBe("exa");
 		expect(seen).toHaveLength(2);
 		for (const request of seen) {
 			expect(request).toMatchObject({ domains: { include: ["example.com"] }, dateRange: { from: "2026-01-01", to: "2026-01-02" } });
 		}
-		expect(result.usage).toMatchObject({ costUsd: 0.014 });
+		expect(result.estimatedCostUsd).toBe(0.014);
+		expect(result.usage?.costUsd).toBeUndefined();
 	});
 
 	it("rejects invalid research filters before provider selection", async () => {
@@ -271,7 +274,7 @@ describe("web_research", () => {
 
 	it("rejects hard research filters the selected route cannot enforce", async () => {
 		const brave: Provider = { id: "brave", capabilities: { domainFilter: true }, profile: { auth: "direct", costModel: "per-request" }, search: async () => { throw new Error("must not dispatch"); } };
-		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
+		const route = createSearchRouter({ providers: [brave], braveFreeCapacityConfigured: true });
 		await expect(executeResearch({ question: "main", dateRange: { from: "2026-01-01" }, budget }, route, context())).rejects.toMatchObject({ code: "WEB_RESEARCH_PROVIDER", message: expect.stringContaining("date range") });
 	});
 
@@ -380,7 +383,7 @@ describe("web_research", () => {
 			...provider(),
 			search: async (request) => ({
 				query: request.query,
-				results: [{ url: "https://example.com/1", provider: "openai", searchQuery: request.query, excerpt: longExcerpt }],
+				results: [{ url: "https://example.com/1", provider: "openai", searchQuery: request.query, excerpt: longExcerpt, excerptKind: "provider-excerpt" }],
 				provider: "openai",
 				appliedOptions: [],
 				warnings: [],
@@ -495,7 +498,7 @@ describe("web_research", () => {
 		expect(new TextEncoder().encode(JSON.stringify(result.details, null, 2)).byteLength).toBeLessThanOrEqual(256_000);
 	});
 
-	it("rejects a cost ceiling when the selected provider has no estimate", async () => {
-		await expect(executeResearch({ question: "main", budget: { ...budget, maxCostUsd: 0 } }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
+	it("rejects an estimated spending threshold when the selected provider has no estimate", async () => {
+		await expect(executeResearch({ question: "main", budget: { ...budget, maxEstimatedCostUsd: 0 } }, () => provider(), context())).rejects.toMatchObject({ code: "WEB_RESEARCH_BUDGET" });
 	});
 });

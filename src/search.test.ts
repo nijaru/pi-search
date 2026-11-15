@@ -38,9 +38,6 @@ describe("search boundary", () => {
 		expect(() => validateSearchRequest({ query: "   " })).toThrow("must not be empty");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 0 })).toThrow("maxResults");
 		expect(() => validateSearchRequest({ query: "q", maxResults: 21 })).toThrow("maxResults");
-		expect(validateSearchRequest({ query: "q", includeContent: true, contentResults: 5, contentMaxLength: 20_000 })).toMatchObject({ contentResults: 5, contentMaxLength: 20_000 });
-		expect(() => validateSearchRequest({ query: "q", contentResults: 21 })).toThrow("between 1 and 20");
-		expect(() => validateSearchRequest({ query: "q", contentMaxLength: 32_001 })).toThrow("between 1 and 32000");
 		expect(() => validateSearchRequest({ query: "q", executionModel: 42 as never })).toThrow("executionModel must be a string");
 		expect(() => validateSearchRequest({ query: "q", mode: "garbage" as never })).toThrow("Search mode must be auto, keyword, or fresh");
 		expect(validateSearchRequest({ query: "q", mode: "fresh" })).toMatchObject({ mode: "fresh" });
@@ -74,7 +71,7 @@ describe("search boundary", () => {
 			expect(received.social).toBeUndefined();
 			return successResponse();
 		});
-		const route = createSearchRouter({ brave: provider, braveConfigured: true, braveFreeCapacityConfigured: true });
+		const route = createSearchRouter({ providers: [provider], braveFreeCapacityConfigured: true });
 		await executeSearchSelection(route(request, {} as never), request);
 	});
 
@@ -342,7 +339,7 @@ describe("search boundary", () => {
 				return { url: nested, content: "Rate card", contentTrust: "untrusted", outputFormat: "markdown", extraction: "markdown", fetchedAt: "2026-01-01T00:00:00.000Z", status: 200, redirectCount: 0, bytesRead: 9, truncated: false, offset: 0, warnings: [] };
 			},
 		});
-		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", fetch: { maxResults: 1 }, advanced: { answerMode: "auto" } }, undefined, undefined, {} as never);
 		expect(result.details?.results[0]).toMatchObject({ url: nested });
 		expect(result.details?.results[0]?.sourceUrl).toBeUndefined();
 		expect(fetchedUrl).toBe(nested);
@@ -377,7 +374,7 @@ describe("search boundary", () => {
 		})), {
 			fetcher: async (request) => { fetchedUrl = request.url; return page; },
 		});
-		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", fetch: { maxResults: 1 } }, undefined, undefined, {} as never);
 		expect(fetchedUrl).toBe("https://example.com/source-page");
 		expect(result.details?.sourceContents?.[0]?.content).toBe("Readable source content");
 	});
@@ -408,7 +405,7 @@ describe("search boundary", () => {
 				};
 			},
 		});
-		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", fetch: { maxResults: 1 } }, undefined, undefined, {} as never);
 		expect(attempts).toBe(1);
 		expect(result.details?.sourceContents).toBeUndefined();
 		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ code: "partial-results" }));
@@ -433,7 +430,7 @@ describe("search boundary", () => {
 				};
 			},
 		});
-		const bounded = await boundedTool.execute("call-2", { query: "q", includeContent: true, contentResults: 3 }, undefined, undefined, {} as never);
+		const bounded = await boundedTool.execute("call-2", { query: "q", fetch: { maxResults: 3 } }, undefined, undefined, {} as never);
 		expect(boundedAttempts).toBe(2);
 		expect(bounded.details?.sourceContents).toHaveLength(1);
 		expect(new TextEncoder().encode(JSON.stringify(bounded.details)).byteLength).toBeLessThanOrEqual(45_000);
@@ -450,7 +447,7 @@ describe("search boundary", () => {
 				signal.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
 			}),
 		});
-		const pending = tool.execute("call-1", { query: "q", includeContent: true }, controller.signal, undefined, {} as never);
+		const pending = tool.execute("call-1", { query: "q", fetch: {} }, controller.signal, undefined, {} as never);
 		await Bun.sleep(1);
 		controller.abort();
 		if (billed) {
@@ -467,7 +464,7 @@ describe("search boundary", () => {
 				signal?.addEventListener("abort", () => reject(new SafeFetchError({ kind: "canceled", message: "Fetch canceled" })), { once: true });
 			}),
 		});
-		const result = await tool.execute("call-1", { query: "q", includeContent: true, contentResults: 1 }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", fetch: { maxResults: 1 } }, undefined, undefined, {} as never);
 		expect(result.details?.results.length).toBeGreaterThan(0);
 		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ message: expect.stringContaining("deadline") }));
 	});
@@ -585,7 +582,7 @@ describe("search boundary", () => {
 		const response = successResponse();
 		const rendered = renderSearchResponse({
 			...response,
-			results: [{ ...response.results[0]!, title: "safe\u001b[2Jwiped", excerpt: "body\u001b]8;;https://evil.test\u0007link\u001b]8;;\u001b\\" }],
+			results: [{ ...response.results[0]!, title: "safe\u001b[2Jwiped", excerptKind: "provider-text", excerpt: "body\u001b]8;;https://evil.test\u0007link\u001b]8;;\u001b\\" }],
 			answer: {
 				text: "answer \u001b[2J",
 				contentTrust: "untrusted",
@@ -645,13 +642,14 @@ describe("search boundary", () => {
 				...successResponse().results[0]!,
 				title: "A\nsource",
 				excerpt: "Useful\n evidence",
+				excerptKind: "provider-excerpt",
 				publishedAt: "2026-01-02",
 			}],
 			usage: { costUsd: 0.007, billedUnits: 3, billedUnit: "results" },
 			requestId: "req-1",
 		});
 		expect(rendered).toContain("[1] A source");
-		expect(rendered).toContain("Excerpt: Useful evidence");
+		expect(rendered).toContain("Provider excerpt (not page-verified): Useful evidence");
 		expect(rendered).toContain("Published: 2026-01-02");
 		expect(rendered).toContain("Usage: cost $0.007; 3 results");
 		expect(rendered).toContain("Request ID: req-1");
@@ -672,6 +670,7 @@ describe("search boundary", () => {
 				...successResponse().results[0]!,
 				url: `https://example.com/${index}`,
 				excerpt: "x".repeat(4_000),
+				excerptKind: "provider-excerpt" as const,
 			})),
 			answer: {
 				text: "provider-grounded answer",
@@ -681,7 +680,7 @@ describe("search boundary", () => {
 			},
 		}));
 		const tool = createWebSearchTool(provider);
-		const result = await tool.execute("call-1", { query: "q", maxResults: 20 }, undefined, undefined, {} as never);
+		const result = await tool.execute("call-1", { query: "q", maxResults: 20, advanced: { answerMode: "auto" } }, undefined, undefined, {} as never);
 		const text = result.content[0];
 		expect(text.type).toBe("text");
 		if (text.type === "text") expect(new TextEncoder().encode(text.text).byteLength).toBeLessThanOrEqual(45_000);
@@ -727,11 +726,11 @@ describe("search boundary", () => {
 				results: [{ url: "https://example.com/", domain: "example.com", provider: "openai", searchQuery: request.query }],
 			}),
 		};
-		const route = createSearchRouter({ openai });
+		const route = createSearchRouter({ providers: [openai], primary: "openai" });
 		const tool = createWebSearchTool(route);
 		const result = await tool.execute("call-1", { query: "q" }, undefined, undefined, {
 			model: { id: "gpt-test", provider: "openai", api: "openai-responses", baseUrl: "https://api.openai.com/v1" },
-			modelRegistry: { getAvailable: () => [], getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }) },
+			modelRegistry: { getAvailable: () => [{ id: "gpt-test", provider: "openai", api: "openai-responses", baseUrl: "https://api.openai.com/v1" }], getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }) },
 		} as never);
 		expect(result.details).toMatchObject({ provider: "openai", attemptedProviders: ["openai"] });
 	});

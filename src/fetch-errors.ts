@@ -1,5 +1,7 @@
 export type FetchErrorKind =
 	| "invalidRequest"
+	| "snapshotUnavailable"
+	| "snapshotMismatch"
 	| "ssrf"
 	| "redirect"
 	| "network"
@@ -35,6 +37,8 @@ export class SafeFetchError extends Error {
 
 export type FetchToolErrorCode =
 	| "WEB_FETCH_INVALID_REQUEST"
+	| "WEB_FETCH_SNAPSHOT_UNAVAILABLE"
+	| "WEB_FETCH_SNAPSHOT_MISMATCH"
 	| "WEB_FETCH_SSRF_BLOCKED"
 	| "WEB_FETCH_REDIRECT_ERROR"
 	| "WEB_FETCH_NETWORK"
@@ -76,6 +80,10 @@ function errorCode(kind: FetchErrorKind): FetchToolErrorCode {
 	switch (kind) {
 		case "invalidRequest":
 			return "WEB_FETCH_INVALID_REQUEST";
+		case "snapshotUnavailable":
+			return "WEB_FETCH_SNAPSHOT_UNAVAILABLE";
+		case "snapshotMismatch":
+			return "WEB_FETCH_SNAPSHOT_MISMATCH";
 		case "ssrf":
 			return "WEB_FETCH_SSRF_BLOCKED";
 		case "redirect":

@@ -89,12 +89,14 @@ test("Codex accepts header-only auth and preserves explicit account identity", a
 	}
 });
 
-test("automatic routing respects Anthropic's domain-filter combination", () => {
-	const exa = adapter(async () => evidence);
-	const route = createSearchRouter({ anthropic: new AnthropicProvider(), exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-	const ctx = { ...context, modelRegistry: { getAvailable: () => [] } } as never;
+test("configured Anthropic search respects its domain-filter combination", () => {
+	const providers = [new AnthropicProvider(), adapter(async () => evidence)];
+	const route = createSearchRouter({ providers, primary: "anthropic" });
+	const ctx = { ...context, modelRegistry: { getAvailable: () => [context.model] } } as never;
 	expect(route({ query: "q", domains: { include: ["example.com"] } }, ctx).provider.id).toBe("anthropic");
-	expect(route({ query: "q", domains: { include: ["example.com"], exclude: ["blocked.example.com"] } }, ctx).provider.id).toBe("exa");
+	const request = { query: "q", domains: { include: ["example.com"], exclude: ["blocked.example.com"] } };
+	expect(() => route(request, ctx)).toThrow(/domain filters/);
+	expect(createSearchRouter({ providers, billingPolicy: "allow-configured-metered" })(request, ctx).provider.id).toBe("exa");
 });
 
 test.each(["failed", "incomplete", undefined])("Parallel requires terminal success: %s", async status => {

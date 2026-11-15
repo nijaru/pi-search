@@ -1,294 +1,185 @@
 import { describe, expect, it } from "bun:test";
-import type { Provider, SearchResponse } from "./contracts";
+import type { Provider, ProviderContext, SearchRequest, SearchResponse } from "./contracts";
 import { createSearchRouter } from "./router";
+import { executeSearchSelection } from "./search";
+import { executeResearch } from "./research-tool";
+import { createProviderError } from "./errors";
 
-function provider(id: Provider["id"], capabilities: Provider["capabilities"] = {}, auth: "none" | "modelRegistry" = "none"): Provider {
-	const response: SearchResponse = { query: "q", results: [], provider: id, appliedOptions: [], warnings: [] };
-	return {
-		id,
-		capabilities,
-		profile: { auth, costModel: "free" },
-		search: async () => response,
-	};
+function provider(id: Provider["id"], capabilities: Provider["capabilities"] = {}, native = false): Provider {
+	return { id, capabilities, profile: { auth: native ? "modelRegistry" : "direct", costModel: "unknown" },
+		search: async () => ({ query: "q", results: [], provider: id, appliedOptions: [], warnings: [] }) };
 }
-
-function context(providerName?: string, api?: string, available: readonly Record<string, string>[] = []): any {
-	return {
-		model: providerName === undefined
-			? undefined
-			: { provider: providerName, id: "test", api: api ?? (providerName === "openai" ? "openai-responses" : providerName === "openai-codex" ? "openai-codex-responses" : "test"), baseUrl: "https://example.test" },
-		modelRegistry: { getAvailable: () => available },
-	};
-}
-
-function availableModel(provider: string, api: string, id = "gpt-5.5"): Record<string, string> {
+function model(provider: string, api: string, id = "search-model") {
 	return { provider, api, id, baseUrl: "https://example.test" };
 }
+const codexModel = model("openai-codex", "openai-codex-responses");
+const openaiModel = model("openai", "openai-responses");
+const googleModel = model("google", "google-generative-ai");
+const xaiModel = model("xai", "openai-responses");
+function context(active?: ReturnType<typeof model>, available = [codexModel, openaiModel, googleModel, xaiModel]): any {
+	return { model: active, modelRegistry: { getAvailable: () => available } };
+}
+const codex = provider("openai-codex", { freshness: true, domainFilter: true }, true);
+const openai = provider("openai", { freshness: true, domainFilter: true }, true);
+const gemini = provider("gemini", { freshness: true }, true);
+const xai = provider("xai", { domainFilter: true }, true);
+const xaiX = provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, true);
+const exa = provider("exa", { semantic: true, domainFilter: true, dateFilter: true });
+const deepseek = provider("deepseek", { domainFilter: true, dateFilter: true });
+const brave = provider("brave", { domainFilter: true });
 
-describe("search provider router", () => {
-	const nativeOpenAI = provider("openai", { keyword: true, freshness: true, domainFilter: true }, "modelRegistry");
-	const nativeCodex = provider("openai-codex", { keyword: true, freshness: true, domainFilter: true });
-	const nativeGemini = provider("gemini", { freshness: true, semantic: true }, "modelRegistry");
-	const nativeXAI = provider("xai", { freshness: true, semantic: true, domainFilter: true }, "modelRegistry");
-	const exa = provider("exa", { keyword: true, freshness: true, semantic: true, domainFilter: true, dateFilter: true });
-	const deepseek = provider("deepseek", { keyword: true, freshness: true, excerpts: true, domainFilter: true, dateFilter: true });
-	const parallel = provider("parallel", { keyword: true, freshness: true, semantic: true });
-	const x = provider("x", { keyword: true, freshness: true, excerpts: true, social: true });
-	const brave = provider("brave", { keyword: true, freshness: true, domainFilter: true });
-
-	it("keeps native OpenAI/Codex selection strict and first", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, openaiCodex: nativeCodex, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q", mode: "keyword" }, context("openai")).provider.id).toBe("openai");
-		expect(route({ query: "q" }, context("openai-codex")).provider.id).toBe("openai-codex");
+describe("search backend policy", () => {
+	it("chooses Codex regardless of the active chat model, and has no implicit fallback", () => {
+		const route = createSearchRouter({ providers: [codex, openai, gemini, exa, brave], billingPolicy: "allow-configured-metered", braveFreeCapacityConfigured: true });
+		for (const active of [undefined, codexModel, openaiModel, googleModel, model("local", "openai-completions")]) {
+			const result = route({ query: "q" }, context(active));
+			expect(result.provider.id).toBe("openai-codex");
+			expect(result.fallbacks).toEqual([]);
+		}
 	});
-
-	it("keeps a date range on web search instead of switching to X", () => {
-		const route = createSearchRouter({
-			xai: nativeXAI,
-			xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry"),
-			exa,
-			exaConfigured: true,
-			billingPolicy: "allow-configured-metered",
-		});
-		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("xai", "openai-responses")).provider.id).toBe("exa");
+	it("keeps configured primary selection independent of the active chat model", () => {
+		const route = createSearchRouter({ providers: [codex, gemini], primary: "gemini" });
+		for (const active of [undefined, codexModel, googleModel]) expect(route({ query: "q" }, context(active)).provider.id).toBe("gemini");
 	});
-
-	it("does not treat false-only social media flags as a hard constraint", () => {
-		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q", social: { understandImages: false, understandVideos: false } }, context("anthropic")).provider.id).toBe("brave");
+	it("does not borrow the active chat execution model or lose registry services", async () => {
+		let received: SearchRequest | undefined;
+		let execution: ProviderContext | undefined;
+		const adapter: Provider = { ...codex, search: async (request, _signal, ctx) => {
+			received = request; execution = ctx;
+			return { query: "q", results: [], provider: "openai-codex", appliedOptions: [], warnings: [] };
+		} };
+		const registry = { getApiKeyAndHeaders: async () => ({ ok: true as const, baseUrl: "https://route.example", headers: { authorization: null } }) };
+		const route = createSearchRouter({ providers: [adapter], primary: "openai-codex", executionModel: codexModel.id });
+		await route({ query: "q" }, context(codexModel)).provider.search({ query: "q" }, new AbortController().signal, { model: codexModel, modelRegistry: registry });
+		expect(received?.executionModel).toBe(codexModel.id);
+		expect(execution?.model).toBeUndefined();
+		expect(execution?.modelRegistry).toBe(registry);
 	});
-
-	it("does not select the xAI X tool for combined include and exclude handles", () => {
-		const xaiX = provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry");
-		const route = createSearchRouter({ xai: nativeXAI, xaiX });
-		expect(route({ query: "q", social: { includeHandles: ["one"] } }, context("xai", "openai-responses")).provider.id).toBe("xai-x");
-		expect(() => route({ query: "q", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context("xai", "openai-responses")))
-			.toThrow(/xAI X search cannot satisfy the requested social\/X constraints/);
-		expect(() => route({ query: "q", providerHint: "xai-x", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context("xai", "openai-responses")))
-			.toThrow(/xAI X search cannot satisfy/);
+	it("never admits API-key search merely because its chat model is active", () => {
+		const route = createSearchRouter({ providers: [openai, gemini, exa, brave], braveFreeCapacityConfigured: true });
+		expect(route({ query: "q" }, context(openaiModel)).provider.id).toBe("brave");
+		expect(route({ query: "q" }, context(googleModel)).provider.id).toBe("brave");
+		expect(() => createSearchRouter({ providers: [openai, exa] })({ query: "q" }, context(openaiModel))).toThrow(/PI_SEARCH_ALLOW_METERED/);
 	});
-
-	it("routes combined handle constraints by capability rather than provider identity", () => {
-		const request = { query: "q", providerHint: "x" as const, social: { includeHandles: ["one"], excludeHandles: ["two"] } };
+	it("uses OpenAI, Exa, then DeepSeek only under automatic metered admission", () => {
+		const options = { billingPolicy: "allow-configured-metered" as const };
+		expect(createSearchRouter({ ...options, providers: [openai, exa, deepseek] })({ query: "q" }, context()).provider.id).toBe("openai");
+		expect(createSearchRouter({ ...options, providers: [exa, deepseek] })({ query: "q" }, context()).provider.id).toBe("exa");
+		expect(createSearchRouter({ ...options, providers: [deepseek] })({ query: "q" }, context()).provider.id).toBe("deepseek");
+	});
+	it("prefers admitted Brave before API-key backends without creating an implicit fallback", () => {
+		const route = createSearchRouter({ providers: [openai, exa, brave], billingPolicy: "prefer-free", braveFreeCapacityConfigured: true });
+		expect(route({ query: "q" }, context())).toMatchObject({ provider: { id: "brave" }, fallbacks: [] });
+	});
+	it("uses a named fallback only for automatic requests; explicit hints are strict", () => {
+		const route = createSearchRouter({ providers: [codex, exa, deepseek], fallback: "exa" });
+		expect(route({ query: "q" }, context())).toMatchObject({ automatic: true, fallbacks: [{ id: "exa" }] });
+		expect(route({ query: "q", providerHint: "deepseek" }, context())).toEqual({ provider: deepseek, automatic: false, fallbacks: [] });
+		expect(route({ query: "q", providerHint: "openai-codex", executionModel: codexModel.id }, context())).toMatchObject({ automatic: false, fallbacks: [] });
+	});
+	it("never lets unused fallback constraints, missing models, or exhausted quota block the primary or batch", async () => {
+		let dispatches = 0;
+		const primary: Provider = { ...exa, search: async request => {
+			dispatches++;
+			return { query: request.query, provider: "exa", results: [{ url: "https://example.com/", provider: "exa", searchQuery: request.query }], warnings: [], appliedOptions: [] };
+		} };
+		for (const fallback of ["brave", "gemini"] as const) {
+			const route = createSearchRouter({ providers: [primary, brave, gemini], primary: "exa", fallback, braveFreeCapacityConfigured: true, braveCapacity: { canAttempt: () => false, observe() {}, snapshot: () => undefined } });
+			for (const request of [{ query: "q" }, { query: "q", dateRange: { from: "2026-01-01" } }]) {
+				const ctx = context(undefined, []);
+				expect((await executeSearchSelection(route(request, ctx), request)).provider).toBe("exa");
+				expect((await executeResearch({ question: "q", ...request, budget: { maxSteps: 1, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 1000, maxOutputChars: 1000 } }, route, ctx)).provider).toBe("exa");
+			}
+		}
+		expect(dispatches).toBe(8);
+	});
+	it("reports unusable fallback admission only when a safe primary failure actually needs it", async () => {
+		const primary: Provider = { ...exa, search: async () => { throw createProviderError({ provider: "exa", kind: "auth", fallbackSafe: true, message: "primary rejected", retryable: false }); } };
+		const route = createSearchRouter({ providers: [primary, brave], primary: "exa", fallback: "brave", braveFreeCapacityConfigured: true });
+		const request = { query: "q", dateRange: { from: "2026-01-01" } };
+		await expect(executeSearchSelection(route(request, context()), request)).rejects.toMatchObject({ provider: "brave", message: expect.stringContaining("primary rejected") });
+	});
+	it("shares OpenAI automatic model eligibility with the adapter while retaining explicit model pins", () => {
+		const ctx = context(undefined, [model("openai", "openai-responses", "gpt-5-pro")]);
+		const route = createSearchRouter({ providers: [openai, exa], billingPolicy: "allow-configured-metered" });
+		expect(route({ query: "q" }, ctx).provider.id).toBe("exa");
+		expect(() => route({ query: "q", providerHint: "openai" }, ctx)).toThrow(/No available openai/);
+		expect(route({ query: "q", providerHint: "openai", executionModel: "gpt-5-pro" }, ctx).provider.id).toBe("openai");
+	});
+	it("does not apply a configured primary model to another explicit backend or its fallback", async () => {
+		const seen: (string | undefined)[] = [];
+		const adapter: Provider = { ...openai, search: async request => {
+			seen.push(request.executionModel);
+			return { query: "q", results: [], provider: "openai", appliedOptions: [], warnings: [] };
+		} };
+		const route = createSearchRouter({ providers: [codex, adapter], primary: "openai-codex", executionModel: codexModel.id, fallback: "openai" });
+		const ctx = { modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true as const }) } };
+		await route({ query: "q" }, context()).fallbacks[0]!.search({ query: "q" }, new AbortController().signal, ctx);
+		await route({ query: "q", providerHint: "openai", executionModel: openaiModel.id }, context()).provider.search({ query: "q" }, new AbortController().signal, ctx);
+		expect(seen).toEqual([undefined, openaiModel.id]);
+	});
+	it("routes around unsupported filters before automatic dispatch without dropping them", () => {
+		const route = createSearchRouter({ providers: [codex, xaiX, exa], billingPolicy: "allow-configured-metered" });
+		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context(xaiModel)).provider.id).toBe("exa");
+		const strict = createSearchRouter({ providers: [codex, exa], primary: "openai-codex" });
+		expect(() => strict({ query: "q", dateRange: { from: "2026-01-01" } }, context())).toThrow(/date range/);
+		expect(() => route({ query: "q", providerHint: "openai-codex", dateRange: { from: "2026-01-01" } }, context())).toThrow(/date range/);
+	});
+	it("does not silently change web search into X search", () => {
+		const route = createSearchRouter({ providers: [xai, xaiX], primary: "xai" });
+		expect(() => route({ query: "q", dateRange: { from: "2026-01-01" } }, context())).toThrow(/date range/);
+		expect(() => route({ query: "q", social: { includeHandles: ["one"] } }, context())).toThrow(/social\/X/);
+		expect(route({ query: "q", providerHint: "xai-x", social: { includeHandles: ["one"] } }, context()).provider.id).toBe("xai-x");
+	});
+	it("enforces combined domain, handle, and media capabilities", () => {
+		const limited = provider("anthropic", { domainFilter: true, combinedDomainFilters: false }, true);
+		const models = [model("anthropic", "anthropic-messages")];
+		const route = createSearchRouter({ providers: [limited, xaiX] });
+		expect(() => route({ query: "q", providerHint: "anthropic", domains: { include: ["a.com"], exclude: ["b.com"] } }, context(undefined, models))).toThrow(/domain filters/);
+		expect(() => route({ query: "q", providerHint: "xai-x", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context())).toThrow(/social\/X/);
 		const supported = provider("x", { social: true, handleFilter: true, combinedHandleFilters: true });
-		expect(createSearchRouter({ x: supported, xConfigured: true })(request, context()).provider).toBe(supported);
-		const unsupported = provider("x", { social: true, handleFilter: true });
-		expect(() => createSearchRouter({ x: unsupported, xConfigured: true })(request, context())).toThrow(/cannot satisfy/);
+		expect(createSearchRouter({ providers: [supported] })({ query: "q", providerHint: "x", social: { includeHandles: ["one"], excludeHandles: ["two"] } }, context()).provider.id).toBe("x");
+		expect(() => createSearchRouter({ providers: [supported] })({ query: "q", providerHint: "x", social: { understandImages: true } }, context())).toThrow(/social\/X/);
 	});
-
-	it("uses an authenticated registry OpenAI model before direct search", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-		const selected = route({ query: "q" }, context("openrouter", "openai-completions", [availableModel("openai", "openai-responses")]));
-		expect(selected.provider.id).toBe("openai");
-		expect(selected.automatic).toBe(true);
-		expect(selected.fallbacks.map((item) => item.id)).toEqual(["exa"]);
+	it.each(["searchContextSize", "returnTokenBudget", "externalWebAccess", "userLocation", "searchContentTypes", "imageSettings"] as const)("does not drop %s", field => {
+		const values = { searchContextSize: "low", returnTokenBudget: "default", externalWebAccess: false, userLocation: { type: "approximate", country: "US" }, searchContentTypes: ["image"], imageSettings: { caption: true } };
+		const request = { query: "q", providerHint: "exa", [field]: values[field], ...(field === "imageSettings" ? { searchContentTypes: ["image"] } : {}) } as SearchRequest;
+		expect(() => createSearchRouter({ providers: [exa] })(request, context())).toThrow(/cannot satisfy/);
 	});
-
-	it("uses configured Exa before Brave for non-native search", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("exa");
-		expect(route({ query: "q" }, context("openrouter", "openai-completions")).provider.id).toBe("exa");
+	it("normalizes empty filters before checking capability", () => {
+		expect(createSearchRouter({ providers: [brave], braveFreeCapacityConfigured: true })({ query: "q", social: { understandImages: false }, dateRange: {} }, context()).provider.id).toBe("brave");
 	});
-
-	it("uses configured Brave when Exa is absent", () => {
-		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("brave");
-		expect(route({ query: "q" }, context("openrouter", "openai-completions")).provider.id).toBe("brave");
+	it("honors Brave admission and observed quota for explicit and automatic routing", () => {
+		expect(() => createSearchRouter({ providers: [brave] })({ query: "q" }, context())).toThrow(/admission/);
+		const capacity = { canAttempt: () => false, observe: () => {}, snapshot: () => ({ windows: [{ remaining: 0 }] }) };
+		const options = { providers: [brave, exa], braveFreeCapacityConfigured: true, braveCapacity: capacity };
+		expect(() => createSearchRouter(options)({ query: "q", providerHint: "brave" }, context())).toThrow(/quota window/);
+		expect(() => createSearchRouter(options)({ query: "q" }, context())).toThrow(/quota window/);
+		expect(createSearchRouter({ ...options, billingPolicy: "prefer-free" })({ query: "q" }, context()).provider.id).toBe("exa");
 	});
-
-	it("does not automatically spend configured Exa in free-only mode", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true });
-		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/Exa is configured and could serve this request, but metered automatic routing is disabled/);
+	it("keeps specialty and answer backends out of automatic routing", () => {
+		const providers = [provider("cloudflare"), provider("parallel"), provider("x"), provider("parallel-responses"), provider("brave-answers"), gemini];
+		const route = createSearchRouter({ providers, billingPolicy: "allow-configured-metered" });
+		expect(() => route({ query: "q" }, context())).toThrow(/No eligible/);
+		for (const adapter of providers) expect(route({ query: "q", providerHint: adapter.id }, context()).provider.id).toBe(adapter.id);
+		expect(() => createSearchRouter({ providers: [] })({ query: "q", providerHint: "parallel-responses" }, context())).toThrow(/not configured or enabled/);
 	});
-
-	it("uses DeepSeek as the automatic metered path when it is the only configured direct provider", () => {
-		const route = createSearchRouter({ deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
-		const selected = route({ query: "q", mode: "keyword" }, context("anthropic"));
-		expect(selected.provider.id).toBe("deepseek");
-		expect(selected.automatic).toBe(true);
-		const fallback = createSearchRouter({ deepseek, deepseekConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(fallback({ query: "q" }, context("anthropic")).fallbacks.map((item) => item.id)).toEqual(["brave"]);
+	it("keeps following the active model an explicit native-only escape hatch", () => {
+		const route = createSearchRouter({ providers: [gemini, xai, xaiX] });
+		expect(route({ query: "q", providerHint: "native" }, context(googleModel)).provider.id).toBe("gemini");
+		expect(route({ query: "q", providerHint: "native", social: { includeHandles: ["one"] } }, context(xaiModel)).provider.id).toBe("xai-x");
+		expect(() => route({ query: "q", providerHint: "native" }, context())).toThrow(/active supported/);
 	});
-
-	it("keeps Exa ahead of DeepSeek and uses DeepSeek as the bounded fallback", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true, deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
-		const selected = route({ query: "q" }, context("anthropic"));
-		expect(selected.provider.id).toBe("exa");
-		expect(selected.fallbacks.map((item) => item.id)).toEqual(["deepseek"]);
-	});
-
-	it("does not automatically spend configured DeepSeek in free-only mode", () => {
-		const route = createSearchRouter({ deepseek, deepseekConfigured: true });
-		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/DeepSeek is configured and could serve this request, but metered automatic routing is disabled/);
-	});
-
-	it("does not claim a configured metered provider can serve an unsupported constraint", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true, deepseek, deepseekConfigured: true });
-		expect(() => route({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/No eligible search provider/);
-	});
-
-	it("does not automatically use an unconfigured DeepSeek adapter", () => {
-		const route = createSearchRouter({ deepseek, billingPolicy: "allow-configured-metered" });
-		expect(() => route({ query: "q" }, context("anthropic"))).toThrow(/No eligible search provider/);
-	});
-
-	it("uses one metered fallback after a safe Brave failure in prefer-free mode", () => {
-		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, exa, exaConfigured: true, deepseek, deepseekConfigured: true, billingPolicy: "prefer-free" });
-		const selected = route({ query: "q" }, context("anthropic"));
-		expect(selected.provider.id).toBe("brave");
-		expect(selected.fallbacks.map((item) => item.id)).toEqual(["exa"]);
-		const deepseekFallback = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, deepseek, deepseekConfigured: true, billingPolicy: "prefer-free" });
-		expect(deepseekFallback({ query: "q" }, context("anthropic")).fallbacks.map((item) => item.id)).toEqual(["deepseek"]);
-	});
-
-	it("dispatches explicit DeepSeek hints without a billing gate and rejects unconfigured ones", () => {
-		const route = createSearchRouter({ deepseek, deepseekConfigured: true });
-		expect(route({ query: "q", providerHint: "deepseek" }, context("anthropic"))).toEqual({ provider: deepseek, automatic: false, fallbacks: [] });
-		expect(() => createSearchRouter({ deepseek })({ query: "q", providerHint: "deepseek" }, context("anthropic"))).toThrow(/DeepSeek search is not configured; set DEEPSEEK_API_KEY/);
-	});
-
-	it("names DeepSeek's unsatisfiable constraints when it is the only direct provider", () => {
-		const route = createSearchRouter({ deepseek, deepseekConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(() => route({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/DeepSeek cannot satisfy the requested social\/X constraints/);
-	});
-
-	it("selects configured native grounding before Brave without an extra opt-in", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, xai: nativeXAI, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry"), brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
-		expect(route({ query: "q", providerHint: "native" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
-		expect(route({ query: "q", providerHint: "native" }, context("xai", "openai-responses")).provider.id).toBe("xai");
-		expect(route({ query: "q", mode: "keyword", providerHint: "gemini" }, context("google", "google-generative-ai")).provider.id).toBe("gemini");
-		expect(route({ query: "q", mode: "keyword", providerHint: "xai" }, context("xai", "openai-responses")).provider.id).toBe("xai");
-		expect(route({ query: "q", social: { includeHandles: ["xai"] } }, context("xai", "openai-responses")).provider.id).toBe("xai-x");
-	});
-
-	it("does not dispatch active Gemini when it cannot honor a hard domain filter", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("google", "google-generative-ai")).provider.id).toBe("exa");
-	});
-
-	it("names the unsatisfiable hard constraint, not the retrieval mode, when no direct provider can serve", () => {
-		const braveOnly = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(() => braveOnly({ query: "q", mode: "fresh", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(/social\/X constraints/);
-		expect(() => braveOnly({ query: "q", mode: "fresh", dateRange: { from: "2026-01-01" } }, context("anthropic"))).toThrow(/a date range/);
-		expect(() => braveOnly({ query: "q", social: { includeHandles: ["xai"] } }, context("anthropic"))).toThrow(
-			/Brave cannot satisfy the requested social\/X constraints/,
-		);
-		const exaToo = createSearchRouter({ exa, exaConfigured: true, billingPolicy: "allow-configured-metered", brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(() => exaToo({ query: "q", mode: "fresh", searchContextSize: "low" }, context("anthropic"))).toThrow(/Exa cannot satisfy the requested search context size/);
-		expect(exaToo({ query: "q", mode: "fresh" }, context("anthropic")).provider.id).toBe("exa");
-	});
-
-	it("does not silently drop hard date constraints on native OpenAI", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("openai", "openai-responses")).provider.id).toBe("exa");
-	});
-
-	it("allows an explicit same-provider execution model from the registry", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI });
-		expect(route({ query: "q", providerHint: "openai", executionModel: "gpt-5.6" }, context("openai", "openai-responses", [availableModel("openai", "openai-responses", "gpt-5.6")])).provider.id).toBe("openai");
-	});
-
-	it("allows explicit registry-backed Gemini and xAI execution", () => {
-		const route = createSearchRouter({ gemini: nativeGemini, xaiX: provider("xai-x", { social: true, dateFilter: true, handleFilter: true, mediaUnderstanding: true }, "modelRegistry") });
-		expect(route({ query: "q", providerHint: "gemini", executionModel: "gemini-flash-lite-latest" }, context("openrouter", "openai-completions", [availableModel("google", "google-generative-ai", "gemini-flash-lite-latest")])).provider.id).toBe("gemini");
-		expect(route({ query: "q", providerHint: "xai-x", executionModel: "grok-4.5" }, context("openrouter", "openai-completions", [availableModel("xai", "openai-responses", "grok-4.5")])).provider.id).toBe("xai-x");
-	});
-
-	it("requires an explicit provider for an execution model", () => {
-		const route = createSearchRouter({ exa, exaConfigured: true });
-		expect(() => route({ query: "q", executionModel: "gemini-flash-lite-latest" }, context("openrouter"))).toThrow(/explicit model-mediated provider hint/);
-	});
-
-	it("requires free-mode admission to be supplied by the construction boundary", () => {
-		const disabled = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: false });
-		expect(() => disabled({ query: "q" }, context("anthropic"))).toThrow(/free-mode admission/);
-		const capacity = { canAttempt: () => false, observe: () => {}, snapshot: () => ({ windows: [{ remaining: 0, resetAfterMs: 1000 }] }) };
-		const exhausted = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity });
-		expect(() => exhausted({ query: "q" }, context("anthropic"))).toThrow("Brave quota window is exhausted");
-		const admittedExa = createSearchRouter({ exa, exaConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true, braveCapacity: capacity, billingPolicy: "prefer-free" });
-		expect(admittedExa({ query: "q" }, context("anthropic")).provider.id).toBe("exa");
-		expect(() => admittedExa({ query: "q", providerHint: "brave" }, context("anthropic"))).toThrow("Brave quota window is exhausted");
-	});
-
-	it("keeps configured Cloudflare explicit-only with no paid fallback", () => {
-		const cloudflare = provider("cloudflare", { semantic: true, excerpts: true });
-		const route = createSearchRouter({ cloudflare, cloudflareConfigured: true, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(route({ query: "q" }, context()).provider.id).toBe("exa");
-		expect(route({ query: "q", providerHint: "cloudflare" }, context())).toEqual({ provider: cloudflare, automatic: false, fallbacks: [] });
-		expect(() => route({ query: "q", providerHint: "cloudflare", domains: { include: ["example.com"] } }, context())).toThrow(/constraints/);
-		const onlyCloudflare = createSearchRouter({ cloudflare, cloudflareConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(() => onlyCloudflare({ query: "q" }, context())).toThrow(/No eligible/);
-	});
-
-	it("honors strict provider hints without hidden fallback", () => {
-		const route = createSearchRouter({ brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q", providerHint: "brave" }, context("anthropic")).provider.id).toBe("brave");
-		expect(() => route({ query: "q", providerHint: "native" }, context("anthropic"))).toThrow(/active supported grounded model/);
-		expect(() => route({ query: "q", providerHint: "unknown" }, context("anthropic"))).toThrow(/not configured/);
-	});
-
-	it("routes OpenAI completions models through the normal automatic path", () => {
-		const route = createSearchRouter({ openai: nativeOpenAI, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		const selected = route({ query: "q" }, context("openai", "openai-completions"));
-		expect(selected.provider.id).toBe("brave");
-		expect(selected.automatic).toBe(true);
-	});
-
-	it("selects active Anthropic and Meta grounding automatically", () => {
-		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
-		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
-		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		expect(route({ query: "q" }, context("anthropic", "anthropic-messages")).provider.id).toBe("anthropic");
-		expect(route({ query: "q", providerHint: "native" }, context("anthropic", "anthropic-messages")).provider.id).toBe("anthropic");
-		expect(route({ query: "q" }, context("meta", "openai-responses")).provider.id).toBe("meta");
-		expect(route({ query: "q", providerHint: "native" }, context("meta", "openai-responses")).provider.id).toBe("meta");
-	});
-
-	it("allows explicit registry-backed Anthropic and Meta execution", () => {
-		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
-		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
-		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta });
-		expect(route({ query: "q", providerHint: "anthropic", executionModel: "claude-opus-5" }, context("openrouter", "openai-completions", [availableModel("anthropic", "anthropic-messages", "claude-opus-5")])).provider.id).toBe("anthropic");
-		expect(route({ query: "q", providerHint: "meta", executionModel: "muse-spark-1.3" }, context("openrouter", "openai-completions", [availableModel("meta", "openai-responses", "muse-spark-1.3")])).provider.id).toBe("meta");
-		expect(() => route({ query: "q", providerHint: "anthropic" }, context("openrouter", "openai-completions", []))).toThrow(/explicit executionModel/);
-	});
-
-	it("falls through when the active native model cannot honor a hard filter", () => {
-		const nativeAnthropic = provider("anthropic", { freshness: true, semantic: true }, "modelRegistry");
-		const nativeMeta = provider("meta", { freshness: true, semantic: true }, "modelRegistry");
-		const route = createSearchRouter({ anthropic: nativeAnthropic, meta: nativeMeta, exa, exaConfigured: true, billingPolicy: "allow-configured-metered" });
-		expect(route({ query: "q", dateRange: { from: "2026-01-01" } }, context("anthropic", "anthropic-messages")).provider.id).toBe("exa");
-		expect(route({ query: "q", domains: { include: ["example.com"] } }, context("meta", "openai-responses")).provider.id).toBe("exa");
-	});
-
-	it("uses explicitly selected direct providers when configured", () => {
-		const route = createSearchRouter({ exa, parallel, x, exaConfigured: true, parallelConfigured: true, xConfigured: true });
-		expect(route({ query: "q", providerHint: "exa" }, context("local")).provider.id).toBe("exa");
-		expect(route({ query: "q", providerHint: "parallel" }, context("local")).provider.id).toBe("parallel");
-		expect(route({ query: "q", providerHint: "x" }, context("local")).provider.id).toBe("x");
-		expect(() => createSearchRouter({ exa })({ query: "q", providerHint: "exa" }, context("local"))).toThrow(/not configured/);
-	});
-
-	it("keeps opt-in synthesis providers explicit and gated", () => {
-		const parallelResponses = provider("parallel-responses", { semantic: true, freshness: true, nativeGrounding: true, searchContextSize: true });
-		const braveAnswers = provider("brave-answers", { semantic: true, freshness: true, nativeGrounding: true, searchContextSize: true, userLocation: true });
-		// Not enabled: the hint is rejected with the enable-gate message.
-		const off = createSearchRouter({ parallelResponses, braveAnswers });
-		expect(() => off({ query: "q", providerHint: "parallel-responses" }, context("local"))).toThrow(/PI_SEARCH_ENABLE_PARALLEL_RESPONSES/);
-		expect(() => off({ query: "q", providerHint: "brave-answers" }, context("local"))).toThrow(/PI_SEARCH_ENABLE_BRAVE_ANSWERS/);
-		// Enabled and hinted: dispatches explicitly with no fallback.
-		const on = createSearchRouter({ parallelResponses, braveAnswers, parallelResponsesConfigured: true, braveAnswersConfigured: true, brave, braveConfigured: true, braveFreeCapacityConfigured: true });
-		const selected = on({ query: "q", providerHint: "parallel-responses" }, context("local"));
-		expect(selected.provider.id).toBe("parallel-responses");
-		expect(selected.automatic).toBe(false);
-		expect(selected.fallbacks).toHaveLength(0);
-		expect(on({ query: "q", providerHint: "brave-answers" }, context("local")).provider.id).toBe("brave-answers");
-		// Never automatic: an ordinary query never selects a synthesis provider.
-		expect(on({ query: "q" }, context("local")).provider.id).toBe("brave");
-		// Never the native alias.
-		expect(() => on({ query: "q", providerHint: "native" }, context("local"))).toThrow(/grounded model/);
-		// Hard constraints the synthesis adapters do not support are rejected.
-		expect(() => on({ query: "q", providerHint: "parallel-responses", dateRange: { from: "2026-01-01" } }, context("local"))).toThrow(/cannot satisfy/);
+	it("rejects unavailable models, unqualified model overrides, duplicates and invalid configuration", () => {
+		const route = createSearchRouter({ providers: [codex] });
+		expect(() => route({ query: "q", providerHint: "openai-codex", executionModel: "missing" }, context())).toThrow(/matching missing/);
+		expect(() => route({ query: "q", executionModel: "search-model" }, context())).toThrow(/explicit model-mediated/);
+		expect(() => route({ query: "q", providerHint: "native", executionModel: "search-model" }, context(codexModel))).toThrow(/explicit model-mediated/);
+		expect(() => route({ query: "q" }, context(undefined, []))).toThrow(/No eligible/);
+		expect(() => createSearchRouter({ providers: [codex, codex] })).toThrow(/unique/);
+		expect(() => createSearchRouter({ providers: [codex], primary: "exa" })).toThrow(/not configured/);
+		expect(() => createSearchRouter({ providers: [codex], fallback: "exa" })).toThrow(/not configured/);
+		expect(() => createSearchRouter({ providers: [codex], primary: "openai-codex", fallback: "openai-codex" })).toThrow(/must differ/);
+		expect(() => createSearchRouter({ providers: [exa], primary: "exa", executionModel: "model" })).toThrow(/model-mediated/);
 	});
 });

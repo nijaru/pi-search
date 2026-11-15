@@ -1,102 +1,62 @@
-# Provider and replacement policy
+# Provider and spending policy
 
-Provider capabilities, prices, quotas, and API schemas change. This document
-records current routing and spending policy, not a permanent provider ranking.
+Provider capabilities, prices, quotas, and API schemas change. Routing is an
+installation preference, not a universal provider-quality ranking. See
+[README](../README.md#search-routing) for configuration and
+[DESIGN](DESIGN.md) for execution invariants.
 
 ## Ordinary search
 
-The extension selects one primary provider and may make one visible fallback
-call for automatic routing:
+Normal search does not follow the active chat model. A named
+`PI_SEARCH_PROVIDER` pins the backend; optional `PI_SEARCH_MODEL` pins its
+registry model. Explicit per-call `advanced.provider`/`executionModel`
+overrides those preferences and never falls through. The `native` per-call
+alias deliberately follows the active chat model, also without fallback.
 
-1. Active OpenAI Responses models use hosted Responses web search; active Codex
-   Responses models use the standalone Codex `alpha/search` endpoint.
-2. With another active model, an authenticated OpenAI/Codex search model in
-   Pi's registry is eligible, so built-in search does not require changing the
-   active model.
-3. Active Google Gemini, xAI Responses, Anthropic Messages, and Meta
-   Responses models use native grounding automatically; selecting that
-   active model is the user's metered-call decision. Explicit `gemini`,
-   `xai`, `xai-x`, `anthropic`, and `meta` hints may use a compatible
-   Pi-registry model through `executionModel`; `xai-x` is explicit for
-   X-specific retrieval.
-4. Other/local models use configured Exa automatically only when metered
-   search is allowed. Exa is preferred because it returns semantic evidence
-   and highlights. An explicit `provider: "exa"` is always an intentional
-   per-call opt-in when configured.
-5. In free-only mode, Brave is the direct automatic path when
-   `BRAVE_API_KEY` is configured. The default is conservative free-mode
-   admission: local request starts are spaced by one second and observed
-   provider quota windows are honored. `PI_SEARCH_PREFER_FREE=1` prefers this
-   admitted Brave path before metered Exa. `PI_SEARCH_ALLOW_METERED=1` allows
-   automatic Exa and deliberate metered Brave use. Neither mode inspects
-   account billing or guarantees against paid overage.
-6. Parallel, Cloudflare Web Search, and official X API require an explicit
-   provider hint. Cloudflare is never an automatic fallback.
+Without a named primary, capability-compatible configured backends are checked
+in this order:
 
-An automatic primary failure may use at most one eligible alternative for
-authentication, rate-limit, or unavailable errors known not to have produced a
-billable result. Network, timeout, and post-dispatch HTTP failures remain
-final because their effects are uncertain. The response reports the failed
-provider and fallback warning. Explicit provider hints, invalid/unsupported/
-malformed requests, and cancellation remain final. There are no retry loops,
-hidden fan-out, or provider comparisons.
+1. ChatGPT/Codex standalone search through Pi's registry.
+2. Under `PI_SEARCH_PREFER_FREE=1`, admitted paced Brave.
+3. When automatic metered search is admitted, OpenAI Responses, Exa, DeepSeek.
+4. Otherwise, admitted Brave.
 
-## Shipped providers
+Automatic metered admission requires `PI_SEARCH_ALLOW_METERED=1` or
+`PI_SEARCH_PREFER_FREE=1`. Choosing an API-key chat model is not search spending
+consent. Codex subscription quota/billing is unknown, not assumed free. Brave
+free-mode admission paces starts and observes quota headers; it does not inspect
+account billing or guarantee against paid overage.
 
-| Provider | Role | Billing/routing policy | Auth |
+There is no fallback by default. `PI_SEARCH_FALLBACK_PROVIDER` deliberately
+names one alternative, with its billing and enable requirements. Its capability,
+model, and quota admission is checked only if needed, so an unused fallback
+cannot block a healthy primary or a batch. It must support the request and can
+run once only after a known-safe rejection/unavailability,
+not after a timeout, network failure, malformed response, cancellation, billed
+failure, or ambiguous post-dispatch error. Named provider/model configuration
+does not enable a disabled adapter. Credentials resolve lazily at execution.
+
+## Shipped backends
+
+| Backend | Default automatic eligibility | Explicit configuration / per-call use | Authentication |
 | --- | --- | --- | --- |
-| OpenAI | Responses web search | Active model first; one authenticated registry model may serve other models | Pi model registry |
-| Codex | Standalone `alpha/search` | Active model first; one authenticated registry model may serve other models | Pi model registry |
-| Gemini | Native Google Search grounding for active Gemini; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including Pi xAI/Gemini auth |
-| xAI | Native web grounding for active xAI Responses; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry, including xAI OAuth |
-| xAI X | Explicit social/X grounding with handle/date/media controls | Explicit `xai-x`; no fallback | Pi model registry, including xAI OAuth |
-| Anthropic | Messages `web_search_20250305` grounding for active Claude; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
-| Meta | Responses-compatible `web_search` grounding for active Muse Spark; explicit registry model with `executionModel` | Active model is automatic; cross-provider use is explicit and model-selected | Pi model registry |
-| Brave | Last non-native/local path | Conservative free-mode spacing by default; deliberate unpaced mode is explicit | `BRAVE_API_KEY` |
-| Exa | Automatic non-native semantic path | Automatic only with `PI_SEARCH_PREFER_FREE=1` or `PI_SEARCH_ALLOW_METERED=1`; explicit provider hints are intentional | `EXA_API_KEY` |
-| DeepSeek | Cheaper second metered direct path for non-native/local models | Automatic only when metered routing is allowed; second metered candidate after Exa under `PI_SEARCH_ALLOW_METERED=1`; explicit `deepseek` hints are intentional | `DEEPSEEK_API_KEY` |
-| Cloudflare | Gateway to explicitly configured Ceramic, Exa, or Linkup | Explicit `cloudflare` only; stored BYOK or prepaid gateway credits; never automatic | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PI_SEARCH_CLOUDFLARE_PROVIDER` |
-| Parallel | Objective-oriented search and excerpts; `auto`/`keyword`/`fresh` map to the `fast`/`basic`/`advanced` tiers | Explicit `parallel`; no automatic selection | `PARALLEL_API_KEY` |
-| Official X API | Bounded recent search; X query operators and direct post evidence | Explicit `x`; no automatic fallback | `X_API_BEARER_TOKEN` |
+| Codex standalone `alpha/search` | First when an authenticated compatible registry model exists | `openai-codex` | Pi model registry |
+| OpenAI Responses | Automatic metered admission | `openai` | Pi model registry; separate API billing |
+| Exa | Automatic metered admission, after OpenAI | `exa` | `EXA_API_KEY` |
+| DeepSeek Search | Automatic metered admission, after Exa | `deepseek` | `DEEPSEEK_API_KEY` |
+| Brave | Conservative free-mode admission or deliberate metered mode | `brave` | `BRAVE_API_KEY` |
+| Gemini, xAI web/X, Anthropic, Meta | Never selected merely because their chat model is active | `gemini`, `xai`, `xai-x`, `anthropic`, `meta`; optional search model pin | Pi model registry |
+| Cloudflare gateway | Not in auto discovery | `cloudflare`; requires explicit upstream | Account ID and `CLOUDFLARE_API_TOKEN` |
+| Parallel Search | Not in auto discovery | `parallel` | `PARALLEL_API_KEY` |
+| Official X recent search | Not in auto discovery | `x` | `X_API_BEARER_TOKEN` |
+| Parallel Responses, Brave Answers | Not in auto discovery; explicit enable gate required | `parallel-responses`, `brave-answers` | Underlying provider key |
 
-The word “fallback” for Brave primarily means fallback in model *selection*
-when no native provider applies. Automatic routing also permits one visible
-alternative after a safe authentication, rate-limit, or unavailable failure;
-explicit providers never use this behavior.
-
-## Why both native and direct providers exist
-
-Native grounding is appropriate when the active model already owns a search
-capability, especially OpenAI, Codex, Gemini, and xAI. When another model is
-active, an already authenticated OpenAI/Codex model in Pi's registry can still
-provide the built-in search path; the response identifies that execution
-model. Explicit Gemini and xAI hints can use a registry model selected through
-`executionModel`, which supports Pi's subscription OAuth without silently
-spending it during automatic routing. This avoids forcing a model switch while
-keeping credentials inside Pi's registry boundary.
-
-Exa is the automatic semantic option for local and other models when the
-billing policy permits metered use because it returns useful highlights and
-source evidence. `PI_SEARCH_PREFER_FREE=1` makes admitted Brave the first
-non-native path while retaining Exa as a fallback. Free-only mode never
-silently dispatches Exa; explicit Exa hints remain user-directed. DeepSeek is
-the cheaper second metered path ($0.75 per 1K successful requests): it is
-ordered after Exa because independent quality evidence for its index is not
-collected yet, and ahead of Brave under `PI_SEARCH_ALLOW_METERED=1`. Under
-`PI_SEARCH_PREFER_FREE=1`, admitted Brave stays first with one metered
-fallback. Explicit DeepSeek hints work regardless of the billing policy.
-Parallel is
-an objective-oriented provider whose `fast` tier is the recommended agent
-default and whose `advanced` tier suits multi-hop depth; both Exa and Parallel
-are retained because their evidence shapes are complementary (semantic
-document discovery versus objective-oriented ranked excerpts) and both rank
-in the top tier of current independent evaluations. The
-official X API is a separate exact recent-search path; X query operators can
-target posts or users, but dedicated lookup and archive endpoints are not
-implemented. xAI X remains the semantic, model-mediated path. None of these
-direct providers
-provides a reliable fixed per-call estimate for every hard research cost
-ceiling, so unsupported cost ceilings are rejected before calls.
+All registered backends may be deliberately named as primary/fallback, subject
+to capability, model availability, credential, and enable checks. A fixed
+primary that cannot honor a hard constraint fails rather than silently choosing
+another provider. Auto discovery can skip incompatible backends before
+dispatch. Other providers earn integration only by solving a demonstrated gap;
+the portfolio is not expanded to fill out a matrix.
 
 ## Direct-provider quality and cost posture (2026-09; DeepSeek pricing 2026-10-17)
 
@@ -144,7 +104,7 @@ upstream, and preserves upstream provenance in results and tool output.
 [Advertised list prices](https://developers.cloudflare.com/web-search/providers/)
 per 1,000 requests are Ceramic $0.25, Exa $7, and Linkup $5. Gateway credits
 have no advertised markup; BYOK billing follows the upstream agreement.
-Actual billed cost is not inferred, so hard research cost ceilings are rejected.
+Actual billed cost is not inferred, so estimated batch spending thresholds are rejected when no per-request estimate is available.
 An explicit BYOK alias prevents missing-key fallback to credits.
 
 Keep direct Exa as the direct-search default: it has richer filtering than the
@@ -245,10 +205,11 @@ credential-gated smoke case.
 
 ### Synthesis providers (opt-in only, not enabled by default)
 
-Both adapters are implemented and ship disabled. They register only when their
-explicit enable gate is set (plus the underlying credential), are selected
-only through an explicit `provider` hint, never ride automatic routing or the
-`native` alias, and expose no automatic fallback.
+Both adapters are implemented and ship disabled. Their enable gates admit
+registration; credentials are still required at execution. They require a named
+primary/fallback or `advanced.provider` and never enter auto discovery or the
+`native` alias. Default search still returns evidence only; these backends may
+perform billed synthesis internally even when the answer is not returned.
 
 | Provider | Position and rationale |
 | --- | --- |
@@ -268,7 +229,7 @@ is not equivalent.
 
 There are no same-provider retries. Authentication, rate-limit, and
 unavailable failures known not to have produced a billable result may consume
-the single bounded alternative for automatic routing. Network, timeout, and
+the single explicitly configured alternative for automatic routing. Network, timeout, and
 post-dispatch HTTP failures remain final because their effects are uncertain.
 Invalid requests, unsupported filters, malformed responses, and cancellation
 are not retried or rerouted. Failures remain visible with stable provider,

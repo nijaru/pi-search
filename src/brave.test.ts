@@ -20,7 +20,7 @@ describe("BraveProvider", () => {
 	it("keeps valid siblings and normalization warnings through search", async () => {
 		const provider = createBraveProvider({ apiKey: "test", fetchImpl: async () => response({ web: { results: [null, [], { url: "bad" }, { url: "https://example.com/page", description: "Evidence" }, { url: "https://example.com/bad", title: 42 }] } }) });
 		const result = await provider.search({ query: "q" }, signal, {});
-		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "Evidence" }]);
+		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "Evidence", excerptKind: "provider-excerpt" }]);
 		expect(result.warnings).toContainEqual(expect.objectContaining({ code: "partial-results" }));
 		for (const results of [[null, []], [{ url: "bad" }]]) {
 			expect(() => normalizeBraveResponse({ web: { results } }, { query: "q" })).toThrow(expect.objectContaining({ kind: "malformed" }));
@@ -69,6 +69,7 @@ describe("BraveProvider", () => {
 				domain: "docs.example.com",
 				publishedAt: "2025-04-02",
 				excerpt: "A snippet",
+				excerptKind: "provider-excerpt",
 				provider: "brave",
 				searchQuery: "q",
 			},

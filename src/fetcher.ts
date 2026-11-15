@@ -3,6 +3,7 @@ import type { FetchRequest, FetchedContent, FetchOutputFormat, FetchExtraction, 
 import { MAX_X_REPLIES, parseXUrl, readFxTwitter, type XUrl } from "./x-public";
 import type { XBrowserReader, XBrowserSelection } from "./x-browser";
 import { SafeFetchError } from "./fetch-errors";
+import type { FetchSnapshots } from "./fetch-snapshots";
 import { closeResponseBody, fetchRemoteUrl, type Lookup, type ResponseBody } from "./ssrf";
 import type { DirectTransport } from "./direct-transport";
 import { extractPdfText } from "./pdf";
@@ -45,6 +46,8 @@ interface ExtractedContent {
 }
 
 export interface FetcherOptions {
+	/** Extension-instance owned; omitted means live-only fetching. */
+	readonly snapshots?: FetchSnapshots;
 	readonly timeoutMs?: number;
 	readonly maxResponseBytes?: number;
 	readonly lookup?: Lookup;
@@ -75,6 +78,27 @@ export async function fetchContent(
 	}
 	if (signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "Fetch canceled" });
 
+	if (request.snapshotId !== undefined) {
+		if (!options.snapshots) throw new SafeFetchError({ kind: "snapshotUnavailable", message: "Fetch snapshot storage is not available in this instance" });
+		const retained = options.snapshots.read(request.snapshotId, request);
+		const page = pageContent(retained, normalized);
+		if (signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "Fetch canceled" });
+		return { ...page, snapshotId: request.snapshotId };
+	}
+	const extracted = await fetchLiveContent(normalized, signal, options, timeoutMs, maxResponseBytes);
+	if (signal?.aborted) throw new SafeFetchError({ kind: "canceled", message: "Fetch canceled" });
+	const page = pageContent(extracted, normalized);
+	const snapshotId = options.snapshots?.retain(normalized, extracted);
+	return { ...page, ...(snapshotId === undefined ? {} : { snapshotId }) };
+}
+
+async function fetchLiveContent(
+	normalized: NormalizedFetchRequest,
+	signal: AbortSignal | undefined,
+	options: FetcherOptions,
+	timeoutMs: number,
+	maxResponseBytes: number,
+): Promise<FetchedContent> {
 	const controller = new AbortController();
 	let timedOut = false;
 	const timeoutId = setTimeout(() => {
@@ -171,23 +195,37 @@ function finishContent(
 	now: () => Date = () => new Date(),
 	notices: readonly FetchWarning[] = [],
 ): FetchedContent {
-	const sliced = sliceOutput(extracted.content, request.offset, request.maxLength);
+	// Retain only the existing reachable extraction range, never imply that the
+	// snapshot contains text past this cap. totalCharacters still reports what
+	// the extractor actually produced, so the terminal page stays truncated.
+	const content = extracted.content.slice(0, safeSliceEnd(extracted.content, MAX_FETCH_OFFSET));
 	return {
 		...metadata,
 		...(metadata.url === request.url ? {} : { sourceUrl: request.url }),
 		...(extracted.title === undefined ? {} : { title: boundText(extracted.title, MAX_TITLE_LENGTH) }),
-		content: sliced.content, contentTrust: "untrusted", outputFormat: extracted.outputFormat,
-		extraction: extracted.extraction, fetchedAt: now().toISOString(), truncated: sliced.truncated, offset: sliced.offset,
+		content, contentTrust: "untrusted", outputFormat: extracted.outputFormat,
+		extraction: extracted.extraction, fetchedAt: now().toISOString(), truncated: content.length < extracted.content.length, offset: 0,
 		...(extracted.documentFormat === undefined ? {} : { documentFormat: extracted.documentFormat }),
-		...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
 		totalCharacters: extracted.content.length,
 		warnings: [
 			...notices,
 			...(extracted.extraction === "x-post" ? [FOCAL_X_WARNING] : []),
 			...(extracted.fellBackToRaw ? [{ code: "raw-fallback" as const, message: "Readable extraction failed; bounded raw HTML was returned" }] : []),
-			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
 		],
 		...(extracted.fellBackToRaw ? { fellBackToRaw: true } : {}),
+	};
+}
+
+function pageContent(extracted: FetchedContent, request: NormalizedFetchRequest): FetchedContent {
+	const sliced = sliceOutput(extracted.content, request.offset, request.maxLength, extracted.totalCharacters);
+	return {
+		...extracted,
+		content: sliced.content, offset: sliced.offset, truncated: sliced.truncated,
+		...(sliced.nextOffset === undefined ? {} : { nextOffset: sliced.nextOffset }),
+		warnings: [
+			...extracted.warnings,
+			...(sliced.truncated ? [{ code: "truncated" as const, message: sliced.pagingLimitReached ? "Content was truncated at the maximum paging offset" : "Content was truncated to the configured output bound" }] : []),
+		],
 	};
 }
 
@@ -252,6 +290,9 @@ async function fetchXContent(
 export function validateFetchRequest(request: FetchRequest): NormalizedFetchRequest {
 	if (typeof request.url !== "string" || request.url.trim().length === 0) {
 		throw new SafeFetchError({ kind: "invalidRequest", message: "URL must not be empty" });
+	}
+	if (request.snapshotId !== undefined && (typeof request.snapshotId !== "string" || request.snapshotId.length < 1 || request.snapshotId.length > 128)) {
+		throw new SafeFetchError({ kind: "invalidRequest", message: "snapshotId must be a nonempty opaque ID of at most 128 characters" });
 	}
 	const url = request.url.trim();
 	if (url.length > 8_192) {
@@ -481,13 +522,13 @@ export function safeSliceEnd(value: string, end: number): number {
 	return end > 0 && end < value.length && isHighSurrogate(value.charCodeAt(end - 1)) && isLowSurrogate(value.charCodeAt(end)) ? end - 1 : end;
 }
 
-function sliceOutput(content: string, requestedOffset: number, maxLength: number): { content: string; offset: number; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
+function sliceOutput(content: string, requestedOffset: number, maxLength: number, totalCharacters = content.length): { content: string; offset: number; truncated: boolean; nextOffset?: number; pagingLimitReached?: boolean } {
 	// A caller-selected offset may land inside a surrogate pair; skip the low
 	// half so a page never starts with an unpaired code unit.
 	const offset = requestedOffset > 0 && requestedOffset < content.length && isLowSurrogate(content.charCodeAt(requestedOffset))
 		? requestedOffset + 1
 		: requestedOffset;
-	if (offset >= content.length) return { content: "", offset, truncated: false };
+	if (offset >= content.length) return { content: "", offset, truncated: offset < totalCharacters, ...(offset < totalCharacters ? { pagingLimitReached: true } : {}) };
 	const pagingEnd = safeSliceEnd(content, Math.min(content.length, MAX_FETCH_OFFSET));
 	if (offset >= pagingEnd) return { content: "", offset, truncated: true, pagingLimitReached: true };
 	const requestedEnd = Math.min(content.length, offset + maxLength, pagingEnd);
@@ -496,7 +537,7 @@ function sliceOutput(content: string, requestedOffset: number, maxLength: number
 	const candidate = content.slice(offset, end);
 	const bounded = boundUtf8(candidate, MAX_OUTPUT_BYTES);
 	const consumed = offset + bounded.length;
-	const truncated = consumed < content.length;
+	const truncated = consumed < totalCharacters;
 	const pagingLimitReached = truncated && consumed >= pagingEnd;
 	return {
 		content: bounded,

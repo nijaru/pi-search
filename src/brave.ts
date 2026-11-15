@@ -13,6 +13,7 @@ import type {
 import { createProviderError, isProviderError } from "./errors";
 import { cancelResponseBody, readBoundedResponseText } from "./http";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 import { parseProviderRateLimits } from "./provider-http";
 import { matchesSearchDomain, normalizeSearchUrl } from "./search-cleanup";
 
@@ -226,7 +227,7 @@ function resultFromPayload(value: unknown, query: string): SearchResult {
 		...(title === undefined ? {} : { title }),
 		domain: parsed.domain,
 		...(publishedAt === undefined ? {} : { publishedAt }),
-		...(description === undefined ? {} : { excerpt: description }),
+		...searchExcerpt(description, "provider-excerpt"),
 		provider: "brave",
 		searchQuery: query,
 	};

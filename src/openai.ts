@@ -6,6 +6,7 @@ import type {
 	ProviderModel,
 	ProviderProfile,
 	ProviderUsage,
+	SearchExcerpt,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -18,6 +19,7 @@ import { cancelResponseBody, readBoundedResponseText, ResponseBodyTooLargeError 
 import { parseProviderRateLimits, retryAfterMsFromHeaders as parseRetryAfter } from "./provider-http";
 import { validateSearchRequest } from "./search";
 import { normalizeSearchUrl } from "./search-cleanup";
+import { copySearchExcerpt, searchExcerpt } from "./search-excerpt";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 export const DEFAULT_OPENAI_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -55,15 +57,14 @@ interface OpenAIRequestPlan {
 	readonly warnings: readonly SearchWarning[];
 }
 
-interface SourceCandidate {
+type SourceCandidate = SearchExcerpt & {
 	readonly url: string;
 	readonly sourceUrl?: string;
 	readonly sourcePageUrl?: string;
 	readonly title?: string;
-	readonly excerpt?: string;
 	readonly publishedAt?: string;
 	readonly sourceId?: string;
-}
+};
 
 const SEARCH_MODEL_EXCLUDED_SEGMENTS = new Set(["pro", "ultra"]);
 // Prefer the Luna family for native search; executionModel remains an explicit override.
@@ -212,7 +213,8 @@ function candidateFromRecord(value: unknown): SourceCandidate | undefined {
 		...(sourceUrl === undefined ? {} : { sourceUrl }),
 		...(sourcePageUrl === undefined ? {} : { sourcePageUrl }),
 		...(title === undefined ? {} : { title }),
-		...(excerpt === undefined ? {} : { excerpt }),
+		// Responses-compatible source text/captions have no verbatim-page guarantee.
+		...searchExcerpt(excerpt, "provider-text"),
 		...(publishedAt === undefined ? {} : { publishedAt }),
 		...(sourceId === undefined ? {} : { sourceId }),
 	};
@@ -264,7 +266,7 @@ function mergeCandidate(
 		...(current.sourceUrl === undefined && candidate.sourceUrl !== undefined ? { sourceUrl: candidate.sourceUrl } : {}),
 		...(current.sourcePageUrl === undefined && candidate.sourcePageUrl !== undefined ? { sourcePageUrl: candidate.sourcePageUrl } : {}),
 		...(current.title === undefined && candidate.title !== undefined ? { title: candidate.title } : {}),
-		...(current.excerpt === undefined && candidate.excerpt !== undefined ? { excerpt: candidate.excerpt } : {}),
+		...copySearchExcerpt(current.excerpt === undefined ? candidate : current),
 		...(current.publishedAt === undefined && candidate.publishedAt !== undefined ? { publishedAt: candidate.publishedAt } : {}),
 		...(current.sourceId === undefined && candidate.sourceId !== undefined ? { sourceId: candidate.sourceId } : {}),
 	});
@@ -279,7 +281,7 @@ function resultFromCandidate(candidate: SourceCandidate, query: string, provider
 		...(candidate.title === undefined ? {} : { title: candidate.title }),
 		domain: parsed.hostname.toLowerCase(),
 		...(candidate.publishedAt === undefined ? {} : { publishedAt: candidate.publishedAt }),
-		...(candidate.excerpt === undefined ? {} : { excerpt: candidate.excerpt }),
+		...copySearchExcerpt(candidate),
 		provider,
 		searchQuery: query,
 		...(candidate.sourceId === undefined ? {} : { sourceId: candidate.sourceId }),
@@ -407,6 +409,10 @@ function modelSearchRank(model: ProviderModel): [number, string] {
 	return [2, model.id];
 }
 
+export function supportsOpenAISearchModel(model: ProviderModel, explicit = false): boolean {
+	return model.provider === "openai" && model.api === "openai-responses" && (explicit || modelSearchRank(model)[0] < 3);
+}
+
 function searchModelCandidates(
 	active: ProviderModel | undefined,
 	registry: ProviderContext["modelRegistry"],
@@ -414,11 +420,11 @@ function searchModelCandidates(
 ): ProviderModel[] {
 	const seen = new Set<string>();
 	const candidates = [...(active === undefined ? [] : [active]), ...(registry?.getModels?.() ?? [])].filter((candidate) => {
-		if (candidate.provider !== "openai" || candidate.api !== "openai-responses") return false;
+		if (!supportsOpenAISearchModel(candidate, executionModel !== undefined)) return false;
 		const key = `${candidate.provider}:${candidate.api}:${candidate.id}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
-		return executionModel !== undefined || modelSearchRank(candidate)[0] < 3;
+		return true;
 	});
 	candidates.sort((left, right) => {
 		const [leftRank, leftId] = modelSearchRank(left);

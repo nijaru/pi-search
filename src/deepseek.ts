@@ -4,6 +4,7 @@ import type {
 	ProviderContext,
 	ProviderProfile,
 	ProviderRateLimitInfo,
+	SearchExcerpt,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -172,10 +173,11 @@ function scoreFromResult(value: unknown): number | undefined {
 	return Math.max(0, Math.min(1, value / DEEPSEEK_MAX_SCORE));
 }
 
-function excerptFromRecord(record: Record<string, unknown>): string | undefined {
-	// `summary` is the 600-800 character text DeepSeek intends models to read;
-	// `snippet` is the shorter display string.
-	return optionalString(record.summary, 4_000) ?? optionalString(record.snippet, 4_000);
+function excerptFromRecord(record: Record<string, unknown>): SearchExcerpt {
+	const summary = optionalString(record.summary, 4_000);
+	if (summary !== undefined) return { excerpt: summary, excerptKind: "provider-summary" };
+	const snippet = optionalString(record.snippet, 4_000);
+	return snippet === undefined ? {} : { excerpt: snippet, excerptKind: "provider-excerpt" };
 }
 
 export function normalizeDeepSeekResponse(
@@ -204,7 +206,7 @@ export function normalizeDeepSeekResponse(
 			title: optionalString(value.title, 500),
 			domain: parsed.domain,
 			publishedAt: optionalTimestamp(value.date),
-			excerpt: excerptFromRecord(value),
+			...excerptFromRecord(value),
 			provider: "deepseek",
 			searchQuery: normalized.query,
 			score: scoreFromResult(value.rerank_score),

@@ -15,47 +15,78 @@ exact version pin in its extension settings unchanged during `pi update`.
 Version `0.0.10` resolves direct-provider credentials on first use. Version
 `0.0.9` runs configured credential commands during extension loading.
 
-## Status
+## Use
 
-The cost-controlled core is implemented. The extension exposes exactly three
-Pi tools:
+Two tools are available by default:
 
-- `web_search` — a bounded grounded answer when available, plus structured
-  evidence with URLs, excerpts, dates, and provider provenance.
-- `web_fetch` — bounded safe extraction from a selected URL.
-- `web_research` — explicit, budgeted sequential search and fetches.
+- `web_search` finds sources with URLs, dates, and labeled provider text.
+- `web_fetch` reads a selected URL through bounded, safe extraction.
+
+Pi's main model decides what to search, evaluates the evidence, and writes the
+answer. The extension does not add a hidden research planner or another
+answer-writing assistant.
+
+```json
+{"query":"Bun subprocess cancellation","domains":{"include":["bun.sh"]}}
+```
+
+Then read a selected source:
+
+```json
+{"url":"https://bun.sh/docs/runtime/child-process","maxLength":8000}
+```
+
+Search snippets are not verified page quotations. Results distinguish provider
+excerpts, generated summaries, and text of unspecified origin. Fetched content
+reports its extraction path. Everything retrieved remains untrusted data.
+To also include a cited backend-generated answer, explicitly request
+`advanced.answerMode: "auto"`; evidence alone is the default.
 
 ### Search routing
 
-- Active OpenAI Responses models use the hosted Responses `web_search` tool;
-  active Codex models use Codex's standalone `alpha/search` endpoint. With
-  another active model, an authenticated OpenAI/Codex search model in Pi's
-  registry can provide search without a model switch.
-- Active Gemini models use Google Search grounding automatically.
-- Active xAI Responses models use xAI web search automatically; select `xai-x`
-  explicitly when the task requires X search.
-- Active Anthropic Messages models use the server-side `web_search` tool
-  automatically; active Meta Responses models use `web_search` grounding
-  automatically.
-- Other/local models use configured Exa automatically only when metered search
-  is allowed; Exa returns semantic results with excerpts and reported usage.
-  Configured DeepSeek is the cheaper second metered path (structured dates and
-  excerpts through `site:`/`after:`/`before:` operators), selected after Exa
-  under metered routing.
-- In free-only mode, configured Brave is the conservative paced keyword/fresh
-  path. Set `PI_SEARCH_PREFER_FREE=1` to prefer it before metered providers,
-  with one metered fallback after a safe Brave failure.
-  Parallel, Cloudflare Web Search, and the official X API remain explicit providers.
-- Automatic routing permits at most one visible fallback after a safe
-  authentication, rate-limit, or unavailable failure. Network, timeout, and
-  post-dispatch HTTP failures remain final because their effects are uncertain.
-  Explicit provider hints never fall through;
-  there are no retry loops or provider fan-out.
+Search is independent of your active chat model. With `PI_SEARCH_PROVIDER`
+unset or `auto`, the extension checks available Codex search first, using your
+ChatGPT/Codex login in Pi. Switching to another chat model does not change that
+preference. Subscription quota and billing are unknown, not reported as free.
 
-All providers normalize into the same evidence-first result shape. Provider
-answers are typed, cited, bounded, and marked untrusted rather than treated as
-authoritative summaries. OpenAI/Codex search also exposes native context-size,
-location, live-access, and content-type controls when requested.
+Without eligible Codex search, admitted automatic API-key paths are OpenAI
+Responses, Exa, then DeepSeek; Brave is the conservative paced path. API-key
+automatic search requires `PI_SEARCH_ALLOW_METERED=1` or
+`PI_SEARCH_PREFER_FREE=1`. The latter puts admitted Brave before those API-key
+paths, but after Codex. Brave's default free-mode admission is not a guarantee
+against account overage.
+
+Set an explicit backend to pin search independently of all chat-model changes:
+
+```bash
+export PI_SEARCH_PROVIDER=openai-codex
+# Optional model pin, resolved through Pi's registry:
+# export PI_SEARCH_MODEL=<available-model-id>
+# Optional deliberate alternative after a safe primary rejection:
+# export PI_SEARCH_FALLBACK_PROVIDER=exa
+# Optional explicit query-batch convenience tool:
+# export PI_SEARCH_ENABLE_RESEARCH=1
+```
+
+Naming a primary, fallback, or per-call provider deliberately admits that
+backend's billing; credentials and provider-specific enable gates are still
+required. There is **no fallback by default**. A named fallback may run once
+only after a safe authentication, rate-limit, or unavailable failure. Network,
+timeout, malformed-response, and post-dispatch failures are final. Per-call
+provider overrides are strict and never fall through.
+
+Most calls need no backend controls. Specialized requests use `advanced`:
+
+```json
+{"query":"recent runtime changes","advanced":{"provider":"exa"}}
+```
+
+`advanced` also holds `executionModel`, `mode`, `social`, `answerMode`, and
+provider-native context, live-access, token-budget, and image controls.
+`userLocation`, domain filters, and date filters stay at the top level.
+Unsupported hard constraints are rejected, never silently dropped; an explicit
+primary does not change providers to work around them. Automatic selection can
+choose a compatible backend before any request is dispatched.
 
 ## Configuration
 
@@ -114,14 +145,14 @@ still resolves through Pi's model registry at request time.
 Alternatively, configure direct keys and routing settings in the environment:
 
 ```bash
-# Optional metered search for non-native/local models
+# Optional direct search, independent of your chat model
 export EXA_API_KEY=...
 # Cheaper second metered path; selected after Exa when metered routing is allowed.
 export DEEPSEEK_API_KEY=...            # $0.75 per 1K successful requests
-# Allow metered providers (Exa, DeepSeek) in automatic routing:
+# Allow API-key backends (OpenAI Responses, Exa, DeepSeek) in automatic routing:
 # export PI_SEARCH_ALLOW_METERED=1
-# Prefer admitted free-mode Brave before metered providers, with one metered
-# fallback after a safe Brave failure:
+# Prefer admitted free-mode Brave before API-key backends (after Codex).
+# This does not configure a fallback:
 # export PI_SEARCH_PREFER_FREE=1
 
 # Optional last-resort keyword/fresh search
@@ -132,7 +163,7 @@ export BRAVE_API_KEY=...
 # metered Brave with the opt-in below.
 export PI_SEARCH_BRAVE_FREE_ONLY=1
 # Free mode does not inspect account billing or guarantee no paid overage.
-# Explicit `provider: "exa"` or `"deepseek"` remains an intentional per-call opt-in.
+# Explicit advanced.provider or PI_SEARCH_PROVIDER is a deliberate billing opt-in.
 
 # Explicit secondary providers
 export PARALLEL_API_KEY=...
@@ -142,7 +173,7 @@ export X_API_BEARER_TOKEN=...         # explicit official X API search
 # export PI_SEARCH_ALLOW_METERED=1
 
 # Opt-in answer-synthesis providers (disabled by default; explicit provider
-# hint only -- never selected automatically, never the native alias):
+# selection only -- never chosen by auto or the native alias):
 # export PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1   # also needs PARALLEL_API_KEY
 # export PI_SEARCH_ENABLE_BRAVE_ANSWERS=1       # also needs BRAVE_API_KEY on a plan with AI Answers
 # Parallel Responses is metered per reasoning effort ($10-$250/1K requests);
@@ -154,28 +185,23 @@ Native-provider credentials come from Pi's model-registry authentication
 context. Anthropic supports API keys, registry-owned bearer headers, and
 workload identity federation; federation exchanges use the official SDK
 protocol with bounded, cancellable requests. Anthropic Pro/Max subscription
-search is not supported; its tokens are rejected before dispatch. Active Gemini/xAI models use native search automatically. For
-search-only Gemini grounding, prefer Pi's current `gemini-flash-lite-latest`
-model alias rather than full Flash/Pro or legacy model IDs. Explicit
-`provider: "gemini"`, `"xai"`, `"xai-x"`, `"anthropic"`, or `"meta"` can use a
-compatible registry model with `executionModel` even when another model is
-active; this makes model and billing choice visible. Pi's `/login xai` subscription flow is supported by the
-registry for Grok web/X search. A provider hint such as `provider: "exa"`,
-`"deepseek"`, `"parallel"`, or `"x"` is strict and never falls through to
-another provider.
-Without a hint, the router selects available native search first, then Exa,
-then DeepSeek, then Brave when the corresponding credentials and hard
-constraints permit it.
-Set `includeContent: true` on `web_search` only when bounded excerpts from
-selected source pages are needed; this reuses the safe local fetch path. For
-`web_research`, use `executionModel` with an explicit model-mediated `provider`
-when a multi-query run should use a specific Gemini, xAI, Anthropic, Meta,
-OpenAI, or Codex model.
+search is not supported; its tokens are rejected before dispatch. Gemini,
+xAI web/X, Anthropic, and Meta remain available through `PI_SEARCH_PROVIDER`
+or `advanced.provider`, independently of the active chat model. Optional
+`PI_SEARCH_MODEL` or `advanced.executionModel` pins a compatible registry model;
+otherwise the adapter selects from available search models, not the active chat
+model. Pi's `/login xai` subscription flow is supported for Grok web/X search.
+An explicit `advanced.provider: "native"` is the escape hatch that deliberately
+follows the active chat model; it has no fallback.
+
+To fetch a few result pages within a search, pass
+`fetch: { "maxResults": 2, "maxLength": 4000 }`. Omit it for ordinary search,
+then use `web_fetch` after selecting a source.
 
 ### Cloudflare Web Search
 
-Cloudflare routes search through Ceramic, Exa, or Linkup. It is an explicit
-secondary provider, never an automatic choice or fallback:
+Cloudflare routes search through Ceramic, Exa, or Linkup. Auto discovery never
+selects it; deliberately name it as a primary, fallback, or per-call override:
 
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=...
@@ -185,7 +211,8 @@ export PI_SEARCH_CLOUDFLARE_PROVIDER=exa  # required: exa, linkup, or ceramic
 # export PI_SEARCH_CLOUDFLARE_BYOK_ALIAS=default
 ```
 
-Use `provider: "cloudflare"` with `web_search` or `web_research`. The API token
+Use `advanced.provider: "cloudflare"` with `web_search` or the optional
+`web_research`. The API token
 needs **Workers AI Read** and **AI Gateway Read** permissions. Queries are
 limited to 1,024 characters and results to 10. Domain/date/social filters and
 native-model controls are rejected, not silently dropped. Results identify
@@ -207,7 +234,7 @@ handling, not permission to retain results yourself.
 
 ### DeepSeek Search
 
-DeepSeek Search is a direct metered provider (`provider: "deepseek"`). The
+DeepSeek Search is a direct metered provider (`advanced.provider: "deepseek"`). The
 adapter composes domain and inclusive publication-date filters into DeepSeek's
 documented `site:`, `-site:`, `after:`, and `before:` query operators, and
 requests the model-oriented summary rather than full page content; readable
@@ -238,9 +265,8 @@ Tool results use compact readable model content and a compact Pi display;
 expanded tool details retain the normalized metadata and source evidence.
 Native grounded answers include citations. xAI X search accepts bounded handle,
 date-range, and opt-in image/video-understanding constraints. `web_search` can
-opt into bounded
-fetching of selected result pages with `includeContent`, `contentResults`, and
-`contentMaxLength`; fetched pages remain untrusted.
+opt into bounded fetching of selected result pages with
+`fetch: { "maxResults": 2, "maxLength": 4000 }`; fetched pages remain untrusted.
 `web_fetch` owns direct HTTPS/HTTP fetching with SSRF protection, redirect
 validation, response limits, cancellation, Markdown content negotiation, local
 Readability/Turndown extraction, and untrusted-content fencing. It also supports:
@@ -262,6 +288,34 @@ Readability/Turndown extraction, and untrusted-content fencing. It also supports
 
 Use Bash, `git`, `gh`, `yt-dlp`, `ffmpeg`, or a browser workflow for local
 files, repository operations, video downloads/frames, OCR, and JS-only pages.
+
+### Stable fetch paging
+
+A fetch may return `snapshotId` and `nextOffset`. Continue that exact extraction
+without another network request:
+
+```json
+{"url":"https://example.com/article","snapshotId":"<returned-id>","offset":8000,"maxLength":8000}
+```
+
+Repeat the original requested URL, not a redirected URL; equivalent URL
+spellings (host casing, default port, fragment) identify the same extraction.
+Omit extraction controls to inherit them. If you supply `format`, `readable`,
+PDF/caption settings, or X options, they must match the retained extraction.
+Only `offset` and `maxLength` change its paging. Missing, expired, evicted, or mismatched
+snapshots fail explicitly; they never silently refetch. Omit `snapshotId` to
+request a fresh live extraction.
+
+Snapshots are memory-only and scoped to one Pi extension instance: at most
+8 entries and 16 MiB of accounted payload, expiring 15 minutes after creation.
+Reads do not extend expiry. Oversized extractions are not retained. Reload,
+shutdown, or session replacement clears the store. Snapshot paging cannot
+extend the fetcher's extraction/paging cap. Search enrichment and optional batch
+fetches share the same store and report only IDs still retained when their
+response is finalized. A large batch can return pages without IDs after eviction.
+Unshown pages are released. X disconnect/direct-only changes stop future
+browser reads, not access to content already retained in this local instance;
+reload or shutdown clears that evidence along with all other snapshots.
 
 ### X posts, threads, and Articles
 
@@ -308,9 +362,11 @@ respected, and a previously authorized browser retains its existing priority in
 
 Conversation coverage is separate from output truncation. Use `offset`/
 `nextOffset` for long extracted output, not to bypass conversation crawl limits.
-Offset paging refetches live content rather than a saved snapshot, so changing
-posts or reply rankings can change later pages. Offsets and character limits use
-UTF-16 units; use `maxLength` of at least 2 for emoji and other astral characters.
+Use the returned `snapshotId` with the original requested URL for stable paging;
+omitted extraction controls inherit the retained values. An offset without a snapshot ID refetches
+live content, so changing posts or reply rankings can change later pages.
+Offsets and character limits use UTF-16 units; use `maxLength` of at least 2 for
+emoji and other astral characters.
 No media download or paid API is used.
 
 For authenticated access, use your **existing signed-in browser**:
@@ -365,6 +421,48 @@ links use the supplied page or the authorized browser; Article IDs are never
 mistaken for publishing-post IDs. If X hides that page, supply its publishing
 post URL instead.
 
+## Optional search-and-fetch batches
+
+Set `PI_SEARCH_ENABLE_RESEARCH=1` and reload Pi to register `web_research`.
+It executes caller-supplied queries sequentially and optionally fetches result
+URLs. It does not generate queries, judge sources, or synthesize an answer.
+For adaptive research, let Pi alternate `web_search` and `web_fetch`.
+
+```json
+{
+  "question":"How do Bun and Node cancel subprocesses?",
+  "queries":["Bun subprocess cancellation","Node child_process AbortSignal"],
+  "fetchResults":2,
+  "budget":{
+    "maxSteps":4,
+    "maxProviderCalls":2,
+    "maxFetches":2,
+    "timeoutMs":60000,
+    "maxOutputChars":20000
+  }
+}
+```
+
+The batch selects one backend once, with no fallback or fan-out. Domain/date
+filters apply to every query. `maxProviderCalls` limits extension search
+requests, not searches a hosted backend may perform internally. Optional
+`maxEstimatedCostUsd` stops new work based on per-request estimates; it is not
+a guaranteed billing cap and is rejected for backends without an estimate.
+`estimatedCostUsd` includes unconfirmed reservations; `usage.costUsd` contains
+only provider-reported cost. A failed request can still have unknown billing.
+
+### Tool-call migration
+
+The redesigned interface replaces flat search controls with `advanced`:
+`provider`, `executionModel`, `mode`, `social`, `answerMode`, and native controls
+move there. `includeContent`/`contentResults`/`contentMaxLength` become
+`fetch: { "maxResults": 2, "maxLength": 4000 }`. Batch provider/model overrides
+also move to `advanced`, and its budget uses `maxEstimatedCostUsd` instead of
+`maxCostUsd`. Rerun old tool calls using the current schema; no legacy argument
+translation is added. Research is now opt-in, provider answers are opt-in, and
+fallbacks must be configured explicitly. Active chat-model selection no longer
+admits automatic API-key search.
+
 ## Development
 
 ```bash
@@ -375,8 +473,8 @@ bun run check
 Credential-gated live provider checks are separate; see
 [`docs/live-smoke.md`](docs/live-smoke.md). They never run from `bun test`.
 
-The design, provider billing policy, and implementation gates are tracked in
-[`docs/DESIGN.md`](docs/DESIGN.md),
+Architecture, provider billing policy, and remaining validation priorities are
+in [`docs/DESIGN.md`](docs/DESIGN.md),
 [`docs/provider-policy.md`](docs/provider-policy.md), and
 [`docs/implementation-plan.md`](docs/implementation-plan.md).
 

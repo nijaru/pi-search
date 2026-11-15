@@ -114,6 +114,7 @@ describe("OpenAIProvider", () => {
 				title: "TypeScript docs",
 				domain: "typescriptlang.org",
 				excerpt: "Release information.",
+				excerptKind: "provider-text",
 				provider: "openai",
 				searchQuery: request.query,
 				sourceId: "source-1",
@@ -404,6 +405,7 @@ describe("OpenAIProvider", () => {
 			title: "Example image",
 			domain: "cdn.example",
 			excerpt: "Example image",
+			excerptKind: "provider-text",
 			provider: "openai",
 			searchQuery: "example",
 		}]);

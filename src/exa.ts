@@ -4,6 +4,7 @@ import type {
 	ProviderContext,
 	ProviderProfile,
 	ProviderRateLimitInfo,
+	SearchExcerpt,
 	SearchOption,
 	SearchRequest,
 	SearchResponse,
@@ -97,18 +98,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function excerptFromRecord(record: Record<string, unknown>): string | undefined {
+function excerptFromRecord(record: Record<string, unknown>): SearchExcerpt {
 	if (Array.isArray(record.highlights)) {
 		const highlights = record.highlights
 			.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
 			.slice(0, 3);
-		if (highlights.length > 0) return highlights.join("\n").slice(0, 4_000);
+		// Provider highlights are search evidence, not locally verified page quotes.
+		if (highlights.length > 0) return { excerpt: highlights.join("\n").slice(0, 4_000), excerptKind: "provider-excerpt" };
 	}
-	for (const value of [record.text, record.summary]) {
-		const excerpt = optionalString(value, 4_000);
-		if (excerpt !== undefined) return excerpt;
-	}
-	return undefined;
+	const text = optionalString(record.text, 4_000);
+	if (text !== undefined) return { excerpt: text, excerptKind: "provider-excerpt" };
+	const summary = optionalString(record.summary, 4_000);
+	return summary === undefined ? {} : { excerpt: summary, excerptKind: "provider-summary" };
 }
 
 function costFromResponse(value: unknown): number | undefined {
@@ -140,7 +141,7 @@ function normalizeExaResponse(payload: unknown, request: SearchRequest, metadata
 			title: optionalString(value.title, 500),
 			domain: parsed.domain,
 			publishedAt: optionalTimestamp(value.publishedDate),
-			excerpt: excerptFromRecord(value),
+			...excerptFromRecord(value),
 			provider: "exa",
 			searchQuery: normalized.query,
 			sourceId: optionalString(value.id, 500),

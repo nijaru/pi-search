@@ -26,7 +26,7 @@ describe("ExaProvider", () => {
 		expect(configured.profile.estimatedCostUsd).toBe(0.007);
 		expect(seenBody).toMatchObject({ query: "latest TypeScript release", numResults: 1, includeDomains: ["example.com"], startPublishedDate: "2026-01-01T00:00:00.000Z", endPublishedDate: "2026-01-02T23:59:59.999Z", contents: { highlights: true } });
 		expect(result).toMatchObject({ provider: "exa", requestId: "exa-header", usage: { costUsd: 0.007, rateLimits: { windows: [{ limit: 10, remaining: 7, resetAfterMs: 60_000 }] } }, appliedOptions: ["maxResults", "mode", "domains", "dateRange"] });
-		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "A useful excerpt.", sourceId: "result-1" });
+		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "A useful excerpt.", excerptKind: "provider-excerpt", sourceId: "result-1" });
 	});
 
 	it("rejects unsupported social constraints before network access", async () => {
@@ -43,7 +43,7 @@ describe("ExaProvider", () => {
 			{},
 		);
 		expect(result.results).toHaveLength(1);
-		expect(result.results[0]).toMatchObject({ url: "https://example.com/valid", excerpt: "Fallback page text." });
+		expect(result.results[0]).toMatchObject({ url: "https://example.com/valid", excerpt: "Fallback page text.", excerptKind: "provider-excerpt" });
 		expect(result.warnings).toEqual([{ code: "partial-results", message: "Exa discarded 2 malformed result entries" }]);
 	});
 
@@ -52,7 +52,10 @@ describe("ExaProvider", () => {
 			{ url: "https://example.com/text", highlights: ["", "  "], text: "Text excerpt." },
 			{ url: "https://example.com/summary", highlights: [], summary: "Summary excerpt." },
 		] }) }).search({ query: "q", maxResults: 2 }, new AbortController().signal, {});
-		expect(result.results.map((item) => item.excerpt)).toEqual(["Text excerpt.", "Summary excerpt."]);
+		expect(result.results.map((item) => [item.excerpt, item.excerptKind])).toEqual([
+			["Text excerpt.", "provider-excerpt"],
+			["Summary excerpt.", "provider-summary"],
+		]);
 	});
 
 	it("ignores malformed optional billing metadata", async () => {

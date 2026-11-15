@@ -40,7 +40,7 @@ describe("CloudflareProvider", () => {
 			const result = await search(configured, { query: "  q  ", maxResults: 1, answerMode: "evidence" }, controller.signal);
 			expect(calls).toBe(1);
 			expect(result).toMatchObject({ provider: "cloudflare", query: "q", requestId: "cf-body", latencyMs: 612, appliedOptions: ["maxResults"], warnings: [] });
-			expect(result.results[0]).toMatchObject({ provider: "cloudflare", upstreamProvider: upstream, searchQuery: "q", url: "https://example.com/page", domain: "example.com", title: "Example", excerpt: "Useful evidence." });
+			expect(result.results[0]).toMatchObject({ provider: "cloudflare", upstreamProvider: upstream, searchQuery: "q", url: "https://example.com/page", domain: "example.com", title: "Example", excerpt: "Useful evidence.", excerptKind: "provider-text" });
 			expect(result.answer).toBeUndefined();
 			expect(result.usage).toBeUndefined();
 			expect(configured.profile).toEqual({ auth: "direct", costModel: "unknown" });
@@ -51,11 +51,11 @@ describe("CloudflareProvider", () => {
 		const configured = provider({ fetchImpl: async () => response({ ...payload, items: [{ url: "https://EXAMPLE.com/page#part", description: "evidence" }] }) });
 		const searchTool = createWebSearchTool(configured);
 		const context = { modelRegistry: { getAvailable: () => [] } } as never;
-		const result = await searchTool.execute("call", { query: "q", provider: "cloudflare" }, undefined, undefined, context);
+		const result = await searchTool.execute("call", { query: "q", advanced: { provider: "cloudflare" } }, undefined, undefined, context);
 		expect(result.details).toMatchObject({ provider: "cloudflare", upstreamProvider: "exa", results: [{ sourceUrl: "https://EXAMPLE.com/page#part", upstreamProvider: "exa" }] });
 		expect(result.content).toMatchObject([{ type: "text", text: expect.stringContaining("cloudflare/exa") }]);
 		const researchTool = createWebResearchTool(() => configured);
-		const research = await researchTool.execute("call", { question: "q", provider: "cloudflare", budget: { maxSteps: 1, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 5_000, maxOutputChars: 5_000 } }, undefined, undefined, context);
+		const research = await researchTool.execute("call", { question: "q", advanced: { provider: "cloudflare" }, budget: { maxSteps: 1, maxProviderCalls: 1, maxFetches: 0, timeoutMs: 5_000, maxOutputChars: 5_000 } }, undefined, undefined, context);
 		expect(research.details.results[0]).toMatchObject({ provider: "cloudflare", upstreamProvider: "exa" });
 		expect(research.content).toMatchObject([{ type: "text", text: expect.stringContaining("cloudflare/exa") }]);
 	});
@@ -138,7 +138,7 @@ describe("CloudflareProvider", () => {
 			metadata: { query: "reported query", requestId: "cf-body", latencyMs: 0 },
 		}) }), { query: "q", maxResults: 1 });
 		expect(result.results).toHaveLength(1);
-		expect(result.results[0]).toEqual({ url: "https://example.com/page", sourceUrl: "https://EXAMPLE.com/page#fragment", domain: "example.com", title: "t".repeat(500), excerpt: "e".repeat(4_000), provider: "cloudflare", upstreamProvider: "exa", searchQuery: "q" });
+		expect(result.results[0]).toEqual({ url: "https://example.com/page", sourceUrl: "https://EXAMPLE.com/page#fragment", domain: "example.com", title: "t".repeat(500), excerpt: "e".repeat(4_000), excerptKind: "provider-text", provider: "cloudflare", upstreamProvider: "exa", searchQuery: "q" });
 		expect(result.query).toBe("q");
 		expect(result.latencyMs).toBe(0);
 		expect(result.warnings).toEqual([{ code: "partial-results", message: "Cloudflare discarded 6 malformed result entries" }]);

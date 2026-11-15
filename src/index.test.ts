@@ -11,6 +11,7 @@ const envNames = [
 	"PI_SEARCH_ENABLE_BRAVE_ANSWERS", "PI_SEARCH_ENABLE_PARALLEL_RESPONSES",
 	"PI_SEARCH_ALLOW_METERED", "PI_SEARCH_PREFER_FREE", "PI_SEARCH_BRAVE_FREE_ONLY",
 	"PI_SEARCH_CLOUDFLARE_GATEWAY_ID", "PI_SEARCH_CLOUDFLARE_BYOK_ALIAS",
+	"PI_SEARCH_PROVIDER", "PI_SEARCH_MODEL", "PI_SEARCH_FALLBACK_PROVIDER", "PI_SEARCH_ENABLE_RESEARCH",
 ] as const;
 
 const shutdowns: (() => Promise<void>)[] = [];
@@ -29,12 +30,12 @@ async function register() {
 		registerTool(tool: WebSearchTool) {
 			names.push(tool.name);
 			tools.set(tool.name, tool);
-			if (tool.name !== "web_fetch") enums.push(tool.parameters.properties.provider!.enum);
+			if (tool.name !== "web_fetch") enums.push(tool.parameters.properties.advanced.properties.provider.enum);
 		},
 	} as never);
 	shutdowns.push(shutdown);
-	const search = (provider: string, signal?: AbortSignal) => tools.get("web_search")!.execute("test-call", { query: "q", provider } as never, signal, undefined, { modelRegistry: { getAvailable: () => [] } } as never);
-	return { names, commands, enums, search, shutdown, xCommand: xCommand! };
+	const search = (provider: string, signal?: AbortSignal) => tools.get("web_search")!.execute("test-call", { query: "q", advanced: { provider } } as never, signal, undefined, { modelRegistry: { getAvailable: () => [] } } as never);
+	return { names, commands, enums, tools, search, shutdown, xCommand: xCommand! };
 }
 
 describe("extension registration", () => {
@@ -59,13 +60,16 @@ describe("extension registration", () => {
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	it("registers exactly the three public tools", async () => {
+	it("registers search and fetch by default, and the optional batch only when enabled", async () => {
 		const { names, commands } = await register();
-		expect(names).toEqual(["web_search", "web_fetch", "web_research"]);
+		expect(names).toEqual(["web_search", "web_fetch"]);
 		expect(commands).toEqual(["search-x"]);
+		process.env.PI_SEARCH_ENABLE_RESEARCH = "1";
+		expect((await register()).names).toEqual(["web_search", "web_fetch", "web_research"]);
 	});
 
 	it("exposes Cloudflare only with credentials and an explicit valid upstream", async () => {
+		process.env.PI_SEARCH_ENABLE_RESEARCH = "1";
 		process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
 		process.env.CLOUDFLARE_API_TOKEN = "test-token";
 		for (const upstream of ["", "invalid", "exa"]) {
@@ -77,6 +81,7 @@ describe("extension registration", () => {
 	});
 
 	it("exposes DeepSeek only when its env key is nonempty after trimming", async () => {
+		process.env.PI_SEARCH_ENABLE_RESEARCH = "1";
 		for (const value of [undefined, "   ", "test-key"] as const) {
 			if (value === undefined) delete process.env.DEEPSEEK_API_KEY;
 			else process.env.DEEPSEEK_API_KEY = value;
@@ -87,6 +92,7 @@ describe("extension registration", () => {
 	});
 
 	it("exposes command-only direct providers in both schemas without bypassing enable gates or mutating env", async () => {
+		process.env.PI_SEARCH_ENABLE_RESEARCH = "1";
 		await mkdir(join(dir, "pi-search"));
 		const script = join(dir, "credential.cjs");
 		await writeFile(script, 'process.stdout.write("test-key\\n");');
@@ -143,11 +149,27 @@ describe("extension registration", () => {
 		expect(keys).toEqual(["env-test-command", "env-test-command", "env-test-command"]);
 		expect(await readFile(join(dir, "runs"), "utf8")).toBe("1");
 		expect(process.env.EXA_API_KEY).toBe("changed-after-load");
-		await expect(search("brave")).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH", fallbackSafe: false });
+		await expect(search("brave")).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH", fallbackSafe: true });
 		expect(keys).toHaveLength(3);
 		await shutdown();
 		await expect(search("exa")).rejects.toMatchObject({ code: "WEB_SEARCH_CANCELED" });
 		expect(keys).toHaveLength(3);
+	});
+
+	it("permits a named fallback after pre-dispatch credential-command failure without weakening explicit selection", async () => {
+		await mkdir(join(dir, "pi-search"));
+		await writeFile(join(dir, "pi-search", "credentials.json"), JSON.stringify({ EXA_API_KEY: "!exit 7" }));
+		process.env.DEEPSEEK_API_KEY = "test-fallback-key";
+		process.env.PI_SEARCH_PROVIDER = "exa";
+		process.env.PI_SEARCH_FALLBACK_PROVIDER = "deepseek";
+		let calls = 0;
+		globalThis.fetch = (async () => { calls++; return Response.json({ results: [{ url: "https://example.com/", snippet: "Evidence" }] }); }) as unknown as typeof fetch;
+		const { tools, search } = await register();
+		const response = await tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, {} as never);
+		expect(response.details).toMatchObject({ provider: "deepseek", attemptedProviders: ["exa", "deepseek"] });
+		expect(calls).toBe(1);
+		await expect(search("exa")).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH", fallbackSafe: true });
+		expect(calls).toBe(1);
 	});
 
 	it("keeps Cloudflare routing, token, and gateway settings captured at load time", async () => {
@@ -188,6 +210,67 @@ describe("extension registration", () => {
 		const reloaded = await register();
 		await reloaded.search("brave");
 		expect(requests).toBe(2);
+	});
+
+	it("executes registry-backed Codex search independently of the active model and preserves resolved routing/auth", async () => {
+		const models = [
+			{ id: "search-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://catalog.invalid/backend-api/codex" },
+			{ id: "pinned-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://catalog.invalid/backend-api/codex" },
+		];
+		const requests: { url: string; model: string; authorization: string | null }[] = [];
+		globalThis.fetch = (async (url: unknown, init: RequestInit) => {
+			requests.push({ url: String(url), model: JSON.parse(String(init.body)).model, authorization: new Headers(init.headers).get("authorization") });
+			return Response.json({ output: "A provider-generated answer: https://example.com/", results: [{ url: "https://example.com/", snippet: "Provider text" }] });
+		}) as unknown as typeof fetch;
+		const modelRegistry = {
+			getAvailable: () => models,
+			find: (provider: string, id: string) => models.find(model => model.provider === provider && model.id === id),
+			getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "synthesized-must-not-win", baseUrl: "https://resolved.example/backend-api/codex", headers: { authorization: "Bearer explicit-test-token" } }),
+		};
+		const { tools } = await register();
+		for (const active of [undefined, { ...models[1] }, { id: "local", provider: "local", api: "openai-completions", baseUrl: "https://local.invalid" }]) {
+			const result = await tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, { model: active, modelRegistry } as never);
+			expect(result.details).toMatchObject({ provider: "openai-codex", executionModel: "search-model", attemptedProviders: ["openai-codex"], results: [{ excerpt: "Provider text", excerptKind: "provider-text" }] });
+			expect(result.details?.answer).toBeUndefined();
+		}
+		expect(requests).toEqual(Array.from({ length: 3 }, () => ({ url: "https://resolved.example/backend-api/codex/alpha/search", model: "search-model", authorization: "Bearer explicit-test-token" })));
+		process.env.PI_SEARCH_PROVIDER = "openai-codex";
+		process.env.PI_SEARCH_MODEL = "pinned-model";
+		const pinned = await register();
+		await pinned.tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, { modelRegistry } as never);
+		expect(requests.at(-1)?.model).toBe("pinned-model");
+	});
+
+	it("does not use configured direct credentials as an implicit fallback; a named fallback is bounded and visible", async () => {
+		process.env.EXA_API_KEY = "test-exa";
+		const calls: string[] = [];
+		globalThis.fetch = (async (url: unknown) => {
+			calls.push(String(url));
+			return String(url).includes("alpha/search")
+				? new Response("rejected", { status: 401 })
+				: Response.json({ results: [{ url: "https://example.com/", highlights: ["Search evidence"] }] });
+		}) as unknown as typeof fetch;
+		const selected = { id: "search-model", provider: "openai-codex", api: "openai-codex-responses", baseUrl: "https://chatgpt.example/backend-api/codex" };
+		const ctx = { modelRegistry: { getAvailable: () => [selected], find: () => selected, getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-token" }) } } as never;
+		const initial = await register();
+		await expect(initial.tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, ctx)).rejects.toMatchObject({ code: "WEB_SEARCH_AUTH" });
+		expect(calls).toHaveLength(1);
+		process.env.PI_SEARCH_FALLBACK_PROVIDER = "exa";
+		const configured = await register();
+		const result = await configured.tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, ctx);
+		expect(calls).toHaveLength(3);
+		expect(result.details).toMatchObject({ provider: "exa", attemptedProviders: ["openai-codex", "exa"], results: [{ excerptKind: "provider-excerpt" }] });
+		expect(result.details?.warnings).toContainEqual(expect.objectContaining({ code: "provider-fallback" }));
+	});
+
+	it("rejects invalid or unavailable installation preferences before registering tools", async () => {
+		for (const [name, value] of [["PI_SEARCH_PROVIDER", "unknown"], ["PI_SEARCH_PROVIDER", "exa"], ["PI_SEARCH_FALLBACK_PROVIDER", "exa"], ["PI_SEARCH_MODEL", "unqualified"], ["PI_SEARCH_ENABLE_RESEARCH", "true"]]) {
+			process.env[name] = value;
+			let registered = false;
+			await expect(extension({ registerTool() { registered = true; } } as never)).rejects.toThrow();
+			expect(registered).toBe(false);
+			delete process.env[name];
+		}
 	});
 
 	it("fails extension loading before registering tools on invalid user credentials", async () => {

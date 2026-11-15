@@ -14,6 +14,7 @@ import { createProviderError } from "./errors";
 import { readBoundedResponseText } from "./http";
 import { httpSource, objectValue, optionalString, requireApiKey, retryAfterMsFromHeaders, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 
 /**
  * Brave AI Answers — opt-in answer-synthesis provider.
@@ -367,7 +368,8 @@ export class BraveAnswersProvider implements Provider {
 				url: parsed.url,
 				...(citation.title === undefined ? {} : { title: citation.title }),
 				domain: parsed.domain,
-				...(citation.snippet === undefined ? {} : { excerpt: citation.snippet }),
+				// Citation snippets arrive inside generated answer tags, not fetched pages.
+				...searchExcerpt(citation.snippet, "provider-text"),
 				provider: "brave-answers",
 				searchQuery: normalized.query,
 			});

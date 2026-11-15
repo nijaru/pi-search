@@ -144,13 +144,9 @@ export async function executeGroundedSearch(options: GroundedSearchOptions): Pro
 		api: options.api,
 		request: normalized,
 		context: options.context,
-		// The router rejects an explicit provider hint without an executionModel
-		// before dispatch when the active model is incompatible, and the native
-		// alias requires a compatible active model. So a request that reaches an
-		// adapter without an executionModel is either active-compatible (the
-		// normal active-match path) or a router-initiated registry fallback
-		// (DESIGN backend-resolution step 2), where a registry model is already
-		// confirmed available.
+		// The router supplies registry-only context for normal search. With no
+		// model pin, use the adapter's compatible registry candidates, not the
+		// active chat descriptor. Direct adapter callers may still supply one.
 		...(normalized.executionModel === undefined ? { allowRegistryFallback: true } : {}),
 	});
 	if (options.signal.aborted) {

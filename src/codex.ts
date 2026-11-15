@@ -16,6 +16,7 @@ import { executeGroundedSearch } from "./grounding";
 import { httpSource, objectValue, optionalString, type SearchHttpFetch } from "./provider-http";
 import { hasExplicitHeader, modelAuthHeaders, type ModelExecution } from "./model-selection";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 import { trimUrlPunctuation } from "./url-text";
 
 export const CODEX_SEARCH_ENDPOINT = "https://chatgpt.com/backend-api/codex/alpha/search";
@@ -175,7 +176,8 @@ function sourceFromRecord(value: unknown, query: string): SearchResult | undefin
 		url: parsed.url,
 		...(title === undefined ? {} : { title }),
 		domain: parsed.domain,
-		...(excerpt === undefined ? {} : { excerpt }),
+		// Standalone search mixes snippets, descriptions, text, and captions.
+		...searchExcerpt(excerpt, "provider-text"),
 		...(publishedAt === undefined ? {} : { publishedAt }),
 		provider: "openai-codex",
 		searchQuery: query,

@@ -13,6 +13,7 @@ import type {
 import { createProviderError } from "./errors";
 import { httpSource, optionalString, optionalTimestamp, objectValue, postJson, requireApiKey, type SearchHttpFetch } from "./provider-http";
 import { validateSearchRequest } from "./search";
+import { searchExcerpt } from "./search-excerpt";
 
 export const PARALLEL_SEARCH_ENDPOINT = "https://api.parallel.ai/v1/search";
 export const DEFAULT_PARALLEL_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -123,7 +124,7 @@ function normalizeParallelResponse(payload: unknown, request: SearchRequest, met
 			title: optionalString(record.title, 500),
 			domain: parsed.domain,
 			publishedAt: optionalTimestamp(record.publish_date),
-			...(excerpts === undefined ? {} : { excerpt: excerpts.slice(0, 4_000) }),
+			...searchExcerpt(optionalString(excerpts, 4_000), "provider-excerpt"),
 			provider: "parallel",
 			searchQuery: normalized.query,
 		});

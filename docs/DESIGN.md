@@ -1,183 +1,154 @@
 # pi-search design
 
-## Public boundary
+## Ownership and public boundary
 
-The extension exposes exactly three Pi tools:
+Pi's main model owns query planning, source evaluation, follow-up decisions,
+and answer synthesis. The extension retrieves evidence; it does not run a
+hidden planner or rewrite the main conversation's provider payload.
 
-- `web_search` returns a bounded typed provider answer when available plus
-  inspectable evidence and provenance, or evidence alone.
-- `web_fetch` retrieves bounded content from a selected URL.
-- `web_research` runs an explicit, budgeted sequence of searches and optional
-  fetches.
+Two ordinary Pi tools are registered by default:
 
-There is no separate opaque answer tool, hidden planner, unbounded provider
-fan-out, or implicit browser/crawler. Provider answer text remains untrusted
-and must cite normalized sources.
+- `web_search`: bounded source results with explicit text provenance.
+- `web_fetch`: bounded extraction of a selected URL.
 
-## Provider boundary
+`web_research` is an optional sequential query-batch convenience, enabled by
+`PI_SEARCH_ENABLE_RESEARCH=1`. It has no planning or synthesis loop. No other
+public tools are introduced.
 
-Adapters receive an explicit `ProviderContext`. Model-mediated adapters use the
-active Pi model and model registry supplied by that context; they do not read
-Pi auth state globally. Direct providers receive credentials from the
-construction boundary.
+Every retrieved text is untrusted. Search results are not proof that the
+extension read a page, and a citation is not proof that the cited claim is true.
+Provider-generated answers are optional, cited, and labeled separately. The
+normal search tool explicitly requests evidence only. It does not promise to
+avoid backend-internal synthesis or token charges when a provider requires it.
 
-Shipped search adapters:
+Usage, arguments, and migration examples live in [README](../README.md).
+Routing admission and provider capability decisions live in
+[provider-policy](provider-policy.md).
 
-| Adapter | Active/default use | Explicit use | Hard constraints |
-| --- | --- | --- | --- |
-| OpenAI Responses | Active supported OpenAI model | `openai` | Responses API web_search; domain, context, location, live-access, and content-type controls |
-| Codex standalone search | Active supported Codex model | `openai-codex` | Codex `alpha/search`; domain, context, location, live-access, and content-type controls |
-| Gemini grounding | Active Google Gemini model | `gemini` plus optional `executionModel` | No hard domain filter; grounding citations required for typed answers |
-| xAI web grounding | Active xAI Responses model | `xai` plus optional `executionModel` | Web domain filters supported |
-| xAI X grounding | — | `xai-x` plus optional `executionModel` | Handles, date ranges, image/video options; no web-domain filter |
-| Anthropic grounding | Active Anthropic Messages model | `anthropic` plus optional `executionModel` | Allowed or blocked domains (not both), user location; tool-result errors surface |
-| Meta grounding | Active Meta Responses model | `meta` plus optional `executionModel` | Responses-compatible web_search; domain/date/social/context controls unverified and rejected |
-| Exa | Other/local model when metered routing is allowed | `exa` | Semantic retrieval, excerpts, and domains |
-| DeepSeek | Other/local model when metered routing is allowed, after Exa | `deepseek` | Keyword/fresh web index with dates, excerpts, and domain/date query operators with local inclusive-date enforcement; social/media/context controls rejected |
-| Brave | Other/local model in free-only or prefer-free routing; paced by default | `brave` | Keyword/fresh/domain filters |
-| Parallel | — | `parallel` with configured key | Search objective/excerpts on the GA tiers (`auto`→`fast`, `keyword`→`basic`, `fresh`→`advanced`); include/exclude domain policies and lower date bound |
-| Parallel Responses | — | `parallel-responses` behind `PI_SEARCH_ENABLE_PARALLEL_RESPONSES=1` | Grounded answer with `url_citation` spans; `searchContextSize` selects the low/medium/high reasoning tier; no hard filters |
-| Brave Answers | — | `brave-answers` behind `PI_SEARCH_ENABLE_BRAVE_ANSWERS=1` | Streaming chat-completions with inline citations and per-call usage cost; `searchContextSize` and user location only |
-| Official X API | — | `x` with configured bearer token | Bounded recent search with query operators and direct post evidence; dedicated lookup/archive endpoints remain future work |
+## Module boundaries
 
-Explicit provider failures are final. Automatic routing may use one visible
-fallback only after an authentication, rate-limit, or unavailable failure that
-is known not to have produced a billable result; network, timeout, and
-post-dispatch HTTP failures remain final because their effects are uncertain.
-There are no adapter retries or hidden provider changes.
+| Owner | Responsibility |
+| --- | --- |
+| `src/index.ts` | Pi registration, configured adapter registry, lazy credentials, resource shutdown |
+| `src/settings.ts` | Installation backend/model/fallback preferences and optional batch enablement |
+| `src/router.ts` | Pure metadata-based selection, capability and spending admission, execution-context binding |
+| `src/search.ts` | Request validation, deadlines/cancellation, one explicitly configured safe fallback |
+| Provider adapters | Protocol mapping, auth resolution, transport, provider-specific source/usage interpretation |
+| `src/contracts.ts`, `src/search-excerpt.ts`, `src/search-cleanup.ts` | Typed evidence, paired excerpt provenance, normalization/deduplication/citation alignment |
+| `src/search-tool.ts`, `src/research-tool.ts` | Tool schemas, bounded model text, compact display, reported tool usage |
+| `src/fetcher.ts` and extractor modules | Direct retrieval, extraction, extraction bounds, output paging |
+| `src/fetch-snapshots.ts` | Immutable bounded session-instance extraction retention |
 
-## Routing and billing
+One configured adapter registry supplies both dispatch and exposed provider
+hints. There is no separate provider-availability switchboard. Native adapter
+metadata may be registered without resolving credentials or enumerating models
+at startup; a call checks available registry metadata before execution.
 
-Normal `web_search` resolves one primary provider and, for automatic routing,
-at most one visible fallback:
+## Search execution invariants
 
-1. OpenAI Responses web search or Codex standalone `alpha/search` when that is
-   the active compatible model.
-2. For another active model, an authenticated OpenAI/Codex search model
-   available through Pi's model registry is eligible, preserving built-in
-   search without requiring a model switch.
-3. Gemini, xAI, Anthropic, or Meta grounding when that provider is the active
-   model; selecting the model is the user's metered-call decision. Explicit
-   `gemini`, `xai`, `xai-x`, `anthropic`, and `meta` hints may use a compatible
-   Pi-registry model via `executionModel`; `xai-x` remains explicit for
-   X-specific grounding.
-4. Exa for other models when `EXA_API_KEY` exists, metered search is allowed,
-   and its hard constraints are supported. Exa supplies semantic retrieval,
-   highlights, and reported cost. An explicit Exa hint is always intentional.
-   DeepSeek is the cheaper second metered path, used when Exa is absent or
-   after a safe Exa failure; it supplies structured dates and summaries
-   through documented query operators. An explicit DeepSeek hint is always
-   intentional.
-5. In free-only mode, Brave is the automatic direct path when
-   `BRAVE_API_KEY` exists. It uses conservative free-mode admission by default
-   (1 RPS local pacing plus observed quota windows). `PI_SEARCH_PREFER_FREE=1`
-   prefers Brave before metered providers while keeping one metered fallback
-   after a safe Brave failure; `PI_SEARCH_ALLOW_METERED=1` permits automatic
-   Exa, DeepSeek, and deliberately metered Brave.
-6. Parallel and official X API remain explicit until their quality/role
-   evaluation justifies default routing.
+- The active chat model does not choose the normal search backend or execution
+  model. The router binds model-mediated search to registry services without
+  forwarding the active chat descriptor. A configured search model pins the
+  primary only; per-call model overrides and fallback execution stay separate.
+- An explicit `advanced.provider: "native"` deliberately follows the active
+  chat model. This escape hatch is strict and has no fallback.
+- Adapters resolve credentials through the supplied Pi model registry. They
+  preserve resolved `baseUrl`, headers, and provider environment. Explicit
+  authorization values or null deletions win over synthesized bearer headers.
+- OpenAI API Responses and ChatGPT/Codex standalone search are separate
+  adapters. Subscription access does not imply API credit or known free usage.
+- Hard constraints must be supported before dispatch. Automatic selection may
+  skip an incompatible backend; an explicitly configured primary or per-call
+  provider fails rather than silently changing providers or dropping filters.
+- No fallback exists unless named in installation configuration. A fallback
+  is checked for request support, model availability, and quota only if needed;
+  an unused fallback cannot block the primary or a batch. It can execute
+  once after a known-safe primary rejection, never after ambiguous network,
+  timeout, post-dispatch, malformed, or billed failures. Per-call provider
+  overrides do not fall through. There are no retries or provider fan-out.
+- OpenAI streaming requires a terminal completed event, supports LF/CRLF SSE,
+  and bounds response bytes. Completion-only or partial responses do not count
+  as successful search evidence.
 
-A primary failure may use one fallback only for authentication, rate-limit,
-or unavailable failures known not to have produced a billable result.
-Network, timeout, and post-dispatch HTTP failures remain final because their
-effects are uncertain. Explicit provider hints, invalid/unsupported/malformed
-requests, and cancellation remain final. There are no retry loops, paid
-fan-out, or provider comparisons. Provider profile usage and selected execution
-model are surfaced when available. A research cost ceiling is rejected when a provider cannot provide a reliable
-per-call estimate; this prevents a false guarantee
-for native grounding, Exa, and Parallel.
+## Evidence identity and rendering
 
-## Native grounding structure
+A result retains canonical/source URL, title, optional publication date,
+provider/upstream/model identity, query, source ID, score, and usage/request
+metadata when supplied. Canonicalization preserves opaque percent encoding.
+Text and `excerptKind` travel as one typed unit:
 
-Non-streaming grounded-model adapters share `src/grounding.ts` (model
-resolution, auth headers, endpoint joining, usage merging, response
-assembly); each vendor keeps only capabilities, request build, and response
-normalization. New native adapters are one registry row in `src/router.ts`
-plus those three pieces with offline fixtures. OpenAI's streaming Responses
-transport stays bespoke; Meta reuses the OpenAI-shaped normalizer.
+- `provider-excerpt`: provider snippet, highlight, or retrieved text; not a
+  locally verified page quote.
+- `provider-summary`: a provider-generated per-result summary.
+- `provider-text`: text whose extraction-versus-synthesis origin is unspecified.
 
-## Native OpenAI stability contract
+Adapters assign provenance at the field they actually consume. Shared cleanup
+never guesses origin from provider identity. Invalid untrusted excerpt metadata
+is omitted with a warning while eligible source URLs are retained. Deduplication
+and truncation must preserve the text/kind pairing. Whole-answer text has a
+separate `SearchAnswer` contract with citations aligned to retained sources.
 
-The OpenAI and Codex paths are separate adapters with shared normalization:
+Model-visible results are readable, sanitized, and byte-bounded. Structured
+details retain normalized evidence; display shortening does not alter model
+URLs. Fetched content is separate from provider text and identifies its actual
+extraction path, final/original URL, timestamp, bounds, and snapshot when kept.
 
-- OpenAI uses `openai-responses` and the hosted Responses `web_search` tool.
-- Codex uses `openai-codex-responses` and the official standalone `alpha/search`
-  request/response contract.
-- Both resolve credentials and model headers through Pi's registry.
-- Codex derives the ChatGPT account header from OAuth tokens when available.
-- OpenAI streaming accepts LF and CRLF SSE, requires a terminal completed event,
-  rejects incomplete/truncated streams, and bounds body bytes.
-- Both preserve request IDs, retry timing, rate limits, and explicit search
-  controls.
-- Domain filters are enforced again by shared result cleanup.
+## Fetch resource lifecycle
 
-Neither path treats a completion-only or partial response as successful search
-evidence.
+General fetching uses direct HTTP with DNS-pinned transport, SSRF/redirect
+validation, streamed byte limits, one deadline, and cancellation. HTML
+extraction is local. Document conversion runs in a disposable cancellable
+subprocess; PDF page limits use `pdftotext`, and YouTube reads captions through
+bounded `yt-dlp`. No browser, OCR, crawler, or remote converter is implicit.
 
-## Evidence normalization
+X posts/Articles are the reviewed exception: disclosed public FxTwitter reads
+are the zero-configuration default; an existing browser login is reused only
+after explicit connection consent, in an owned temporary tab. Authenticated
+failures never fall back to public extraction. Persistent direct-only policy
+wins over tool arguments. Browser controls are target-local, not the direct
+transport's DNS-pinned network sandbox. Full limits are in README.
 
-Every provider returns:
+The fetcher extracts once, retains only the existing reachable extraction
+range, and slices output afterward. The extension instance owns a memory-only
+snapshot store shared by fetch, search enrichment, and optional batch fetching.
+IDs bind immutable content to the canonical original requested URL and
+normalized extraction controls. Omitted paging controls inherit the retained
+values; explicit controls must match. Paging changes only offset and page
+length and performs no network/browser/DNS work. Invalid, mismatched, expired, or evicted IDs fail
+explicitly rather than silently refetching. Live offsets without an ID remain
+available and are labeled as such.
 
-- source URL and hostname;
-- optional title, excerpt, publication timestamp, score, and source ID;
-- provider identity, executed query, and execution model when available;
-- an optional typed, bounded provider answer with source URL citations and
-  citation positions when the backend supplies them;
-- applied options and explicit unsupported-option warnings; and
-- request ID, latency, and provider usage when available.
+Retention has count/byte limits and non-sliding TTL, with lazy expiration and
+no background timers. Oversized results are not retained. Batch finalization
+releases unshown pages and removes IDs already evicted by its own fetches. Shutdown closes the
+store before draining other resources; late completions cannot repopulate it.
+Snapshots are not persisted or reconstructed after session replacement/reload.
+X access-mode changes govern new external reads, not retained local evidence.
+They do not bypass extraction caps or imply complete upstream X coverage.
 
-Answer text is untrusted provider output, not an authoritative summary. Native
-citation metadata is retained as inspectable source evidence and citations are
-aligned with normalized URLs. Normal tool content is readable and bounded
-rather than raw JSON; the full normalized response remains in tool details and
-is shown by the expanded Pi renderer.
+## Batch limits and cost semantics
 
-## Direct fetching and specialty paths
+The optional batch selects one provider once, executes caller queries in order,
+deduplicates results, and may fetch selected pages. It has no fallback. A
+malformed response may leave a partial batch and permit independent remaining
+queries; authentication/network and other provider failures end search work.
+Completed evidence may still be fetched unless canceled or past its deadline.
 
-The fetch operation uses pinned direct HTTP transport, manual redirect
-validation, DNS/IP SSRF checks, streamed byte limits, one overall deadline,
-cancellation, and local extraction. Fetched content is always untrusted data.
-`web_search` can opt into bounded enrichment of selected result URLs through
-this same fetcher. X URLs are the disclosed exception to direct-only fetching:
-free FxTwitter is the public default, with no per-request approval. A persistent
-`/search-x direct` policy disables this path. An explicitly authorized,
-existing-browser connection takes priority; only an owned temporary tab is
-instrumented. Authenticated failures never fall back to public extraction.
-Browser extraction uses target-local controls, not the direct transport's DNS
-pinning; browser-wide network settings and existing tabs remain unchanged.
-See README's X section for usage and boundaries.
+Step/search-request/fetch counts, time, and output are bounded separately.
+Request counts do not bound hosted-provider internal search actions.
+`maxEstimatedCostUsd` is a planning threshold, not a billing cap. It requires a
+per-request estimate and stops new work when the reconciled planning total
+would exceed it. Failed calls retain unconfirmed reservations. The response's
+`estimatedCostUsd` is separate from `usage.costUsd`, which includes only actual
+provider reports. Cancellation never proves a dispatched request was unbilled.
 
-- PDF URLs are fetched safely, validated by magic header, and passed to pinned
-  local `@firecrawl/anydoc`/`pdf-inspector` conversion for structured Markdown.
-  AnyDoc detects scanned/image-only and encrypted PDFs but does not perform OCR.
-  An explicit `maxPages` request uses bounded local `pdftotext` because AnyDoc
-  has no page-range option; there is no persistent download.
-- YouTube URLs are canonicalized to HTTPS video URLs and passed to bounded
-  local `yt-dlp` captions-only extraction with `--ignore-config` and
-  `--no-playlist`. No media download, frames, or visual analysis.
-- Pinned `@firecrawl/anydoc` converts supported DOC/DOCX, PPT/PPTX, XLS/XLSX,
-  ODT/ODS/ODP, RTF, EPUB, CSV, and PDF bytes locally inside `web_fetch`; it
-  runs in a worker with caller cancellation and remains bounded, untrusted
-  content. It is not a hosted Firecrawl integration, separate public tool, or
-  package rename.
-- Local files, repository work, video frames/downloads, OCR, and general browser
-  automation remain explicit Bash, `git`, `gh`, `ffmpeg`, or browser workflows.
-  The optional X reader is limited to selected X posts/Articles, not arbitrary
-  authenticated page execution.
+## Verification
 
-## Research limits
-
-`web_research` accepts caller-supplied queries, an optional strict provider
-hint, and an optional explicit `executionModel` for model-mediated providers.
-It selects one provider once, runs searches sequentially, optionally fetches
-result URLs in order, counts search/fetch/step limits separately, uses one
-deadline, bounds output, and reports partial failures. It performs no query
-planning, synthesis, retry, or provider fan-out.
-
-## Runtime ownership
-
-`pi-search` is the sole active web extension. `pi-web-access` remains a source
-reference only; its duplicate registration is not part of the runtime. A
-future specialty capability may be evaluated for inclusion or assigned to
-Pi/Bash, but installing a second overlapping web extension is not the default
-solution.
+Offline checks cover model-independent routing, explicit preference/override
+precedence, billing admission, strict constraints, bounded safe fallback,
+registry-resolved routing/auth, provenance through real adapter normalization,
+citation alignment, output bounds, cancellation, batch partial results, and
+snapshot identity/expiry/eviction/shutdown. Registration tests exercise the
+real index → router → adapter → tool path, including enabled/disabled batches.
+Credential-gated live checks remain separate; they verify external contracts,
+not provider quality or latency. See [live-smoke](live-smoke.md).

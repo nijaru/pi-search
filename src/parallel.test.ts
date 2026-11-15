@@ -18,7 +18,7 @@ describe("ParallelProvider", () => {
 	it("skips malformed entries without losing siblings or plan warnings", async () => {
 		const configured = provider({ fetchImpl: async () => response({ ...payload, results: [null, [], 1, { url: "bad" }, ...payload.results] }) });
 		const result = await configured.search({ query: "q", mode: "fresh" }, new AbortController().signal, {});
-		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." }]);
+		expect(result.results).toMatchObject([{ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt.", excerptKind: "provider-excerpt" }]);
 		expect(result.warnings.map((warning) => warning.code)).toEqual(["unsupported-option", "partial-results"]);
 		for (const results of [[null, []], {}]) {
 			await expect(provider({ fetchImpl: async () => response({ results }) }).search({ query: "q" }, new AbortController().signal, {})).rejects.toMatchObject({ kind: "malformed" });
@@ -34,7 +34,7 @@ describe("ParallelProvider", () => {
 		} }).search({ query: "latest TypeScript release", maxResults: 1 }, new AbortController().signal, {});
 		expect(seenBody).toMatchObject({ objective: "latest TypeScript release", search_queries: ["latest TypeScript release"], mode: "fast", advanced_settings: { max_results: 1 } });
 		expect(result).toMatchObject({ provider: "parallel", requestId: "search-1", appliedOptions: ["maxResults", "mode"] });
-		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt." });
+		expect(result.results[0]).toMatchObject({ url: "https://example.com/page", excerpt: "First excerpt.\nSecond excerpt.", excerptKind: "provider-excerpt" });
 	});
 
 	it("maps mode hints onto the current Parallel tier semantics", async () => {

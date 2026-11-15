@@ -61,8 +61,8 @@ describe("X API provider", () => {
 		expect(result).toMatchObject({ provider: "x", requestId: "x-123", usage: { billedUnits: 2, billedUnit: "posts" } });
 		expect(result.usage?.rateLimits?.windows[0]).toMatchObject({ limit: 450, remaining: 449 });
 		expect(result.results).toEqual([
-			{ url: "https://x.com/i/web/status/123", title: "@alice", domain: "x.com", publishedAt: "2025-01-02T03:04:05.000Z", excerpt: "A post about protocols", provider: "x", searchQuery: "protocols", sourceId: "123" },
-			{ url: "https://x.com/i/web/status/456", title: "@bob", domain: "x.com", publishedAt: "2025-01-03T03:04:05.000Z", excerpt: "Another post", provider: "x", searchQuery: "protocols", sourceId: "456" },
+			{ url: "https://x.com/i/web/status/123", title: "@alice", domain: "x.com", publishedAt: "2025-01-02T03:04:05.000Z", excerpt: "A post about protocols", excerptKind: "provider-excerpt", provider: "x", searchQuery: "protocols", sourceId: "123" },
+			{ url: "https://x.com/i/web/status/456", title: "@bob", domain: "x.com", publishedAt: "2025-01-03T03:04:05.000Z", excerpt: "Another post", excerptKind: "provider-excerpt", provider: "x", searchQuery: "protocols", sourceId: "456" },
 		]);
 	});
 

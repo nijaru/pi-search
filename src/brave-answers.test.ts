@@ -60,7 +60,7 @@ describe("BraveAnswersProvider", () => {
 		expect(result.provider).toBe("brave-answers");
 		expect(result.requestId).toBe("req-ba");
 		expect(result.results).toHaveLength(2);
-		expect(result.results[0]).toMatchObject({ url: "https://en.wikipedia.org/wiki/K2", excerpt: "K2 is the second highest mountain" });
+		expect(result.results[0]).toMatchObject({ url: "https://en.wikipedia.org/wiki/K2", excerpt: "K2 is the second highest mountain", excerptKind: "provider-text" });
 		expect(result.answer?.text).toContain("8,611");
 		expect(result.answer?.citations[0]).toMatchObject({ url: "https://en.wikipedia.org/wiki/K2", startIndex: 0, endIndex: 30 });
 		expect(result.usage).toMatchObject({ inputTokens: 1234, outputTokens: 300, searchQueries: 2, costUsd: 0.01567 });
