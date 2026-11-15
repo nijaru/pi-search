@@ -12,8 +12,9 @@ To upgrade an existing install, reinstall an explicit published version
 (`pi install npm:@nijaru/pi-search@<version>`) and restart Pi. Pi leaves an
 exact version pin in its extension settings unchanged during `pi update`.
 
-Version `0.0.10` resolves direct-provider credentials on first use. Version
-`0.0.9` runs configured credential commands during extension loading.
+Version `0.0.13` changes tool arguments and automatic routing. Read
+[Tool-call migration](#tool-call-migration) before upgrading. Direct-provider
+credentials resolve on first use; `0.0.9` ran configured commands during loading.
 
 ## Use
 
@@ -491,7 +492,7 @@ headline, even when ordinary warnings are shortened.
 
 ### Tool-call migration
 
-The redesigned interface replaces flat search controls with `advanced`:
+`0.0.13` replaces flat search controls with `advanced`:
 `provider`, `executionModel`, `mode`, `social`, `answerMode`, and native controls
 move there. `includeContent`/`contentResults`/`contentMaxLength` become
 `fetch: { "maxResults": 2, "maxLength": 4000 }`. Batch provider/model overrides
