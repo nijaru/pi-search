@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { buildDeepSeekRequest, createDeepSeekProvider, DEEPSEEK_MAX_QUERY_LENGTH, type DeepSeekAdapterOptions } from "./deepseek";
+import { executeSearch } from "./search";
 
 const payload = {
 	results: [{ url: "https://example.com/page", title: "Example", snippet: "Short snippet.", summary: "A model-oriented summary.", date: "2026-01-02T00:00:00+00:00", rerank_score: 2.4 }],
@@ -47,6 +48,16 @@ describe("DeepSeekProvider", () => {
 			searchQuery: "latest TypeScript release",
 		});
 		expect(result.results[0]?.score).toBeCloseTo(0.8, 6);
+	});
+
+	it("filters domains before applying maxResults in executeSearch", async () => {
+		const result = await executeSearch(provider({ fetchImpl: async () => response({ results: [
+			{ url: "https://other.example/first" },
+			{ url: "https://excluded.example.com/second" },
+			{ url: "https://allowed.example.com/third" },
+			{ url: "https://allowed.example.com/fourth" },
+		] }) }), { query: "q", maxResults: 1, domains: { include: ["example.com"], exclude: ["excluded.example.com"] } });
+		expect(result.results.map((item) => item.url)).toEqual(["https://allowed.example.com/third"]);
 	});
 
 	it("warns when date operators cannot express time-of-day bounds", async () => {

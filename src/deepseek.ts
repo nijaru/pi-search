@@ -226,7 +226,8 @@ export function normalizeDeepSeekResponse(
 	}
 	return {
 		query: normalized.query,
-		results: dateFiltered.results.slice(0, normalized.maxResults ?? 10),
+		// Shared cleanup applies the result limit after enforcing domain filters and deduping.
+		results: dateFiltered.results,
 		provider: "deepseek",
 		appliedOptions: [],
 		warnings,

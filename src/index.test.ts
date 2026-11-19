@@ -291,6 +291,35 @@ describe("extension registration", () => {
 		expect(urls).toHaveLength(5);
 	});
 
+	it("routes active Meta search through the registry's resolved endpoint and bearer header", async () => {
+		const model = { id: "llama-test", provider: "meta", api: "openai-responses", baseUrl: "https://catalog.invalid/v1" };
+		const requests: unknown[] = [];
+		globalThis.fetch = (async (url: unknown, init: RequestInit) => {
+			const body = JSON.parse(String(init.body));
+			requests.push({ url: String(url), authorization: new Headers(init.headers).get("authorization"), model: body.model, tools: body.tools });
+			return Response.json({ status: "completed", usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 }, output: [
+				{ type: "web_search_call", status: "completed", action: { sources: [{ url: "https://example.com/" }] } },
+			] });
+		}) as unknown as typeof fetch;
+		const modelRegistry = {
+			getAvailable: () => [model],
+			getApiKeyAndHeaders: async () => ({ ok: true as const, baseUrl: "https://resolved.example/meta/v1", headers: { authorization: "Bearer registry-token" } }),
+		};
+		const { tools } = await register();
+		const result = await tools.get("web_search")!.execute("call", { query: "q" }, undefined, undefined, { model, modelRegistry } as never);
+		expect(requests).toEqual([{ url: "https://resolved.example/meta/v1/responses", authorization: "Bearer registry-token", model: model.id, tools: [{ type: "web_search" }] }]);
+		expect(result.details).toMatchObject({ provider: "meta", executionModel: model.id, results: [{ url: "https://example.com/" }] });
+		expect(result.usage).toMatchObject({ totalTokens: 5, cost: { total: 0 } });
+		expect(result.usage?.cost.totalFromProvider).toBeUndefined();
+	});
+
+	it.each([0, 0.007])("reports Exa's billed total of %d USD to Pi", async (costUsd) => {
+		process.env.EXA_API_KEY = "test-key";
+		globalThis.fetch = (async () => Response.json({ costDollars: { total: costUsd }, results: [{ url: "https://example.com/" }] })) as unknown as typeof fetch;
+		const result = await (await register()).search("exa");
+		expect(result.usage?.cost).toMatchObject({ total: costUsd, totalFromProvider: true });
+	});
+
 	it("falls back from unsupported Anthropic subscription auth before making a native paid request", async () => {
 		process.env.BRAVE_API_KEY = "test-key";
 		const selected = { id: "claude-chat", provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com" };

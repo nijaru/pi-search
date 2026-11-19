@@ -62,7 +62,11 @@ export function toolUsage(usage: ProviderUsage | undefined): Usage | undefined {
 		cacheRead: 0,
 		cacheWrite: 0,
 		totalTokens: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: usage.costUsd ?? 0 },
+		cost: {
+			input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+			total: usage.costUsd ?? 0,
+			...(usage.costUsd === undefined ? {} : { totalFromProvider: true }),
+		},
 	};
 }
 

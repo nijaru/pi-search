@@ -122,6 +122,7 @@ export interface ProviderRateLimitInfo {
  * Provider-reported billing and capacity information when available.
  */
 export interface ProviderUsage {
+	/** Provider-reported billed cost in USD, including zero; omit when unknown. Never a local estimate. */
 	readonly costUsd?: number;
 	readonly billedUnits?: number;
 	readonly billedUnit?: string;

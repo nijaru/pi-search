@@ -109,7 +109,7 @@ describe("search boundary", () => {
 		const selection = { providers: [primary, fallback] as const };
 		await expect(executeSearchPlan(selection, { query: "q" })).rejects.toMatchObject({ provider: "exa", requestId: "billed", usage });
 		const result = await createWebSearchTool(() => selection).execute("call", { query: "q" }, undefined, undefined, {} as never);
-		expect(result).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } } });
+		expect(result).toMatchObject({ isError: true, usage: { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1, totalFromProvider: true } } });
 	});
 
 	it("does not duplicate a stable error code when the automatic fallback also fails", async () => {
